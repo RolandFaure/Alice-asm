@@ -1,0 +1,958 @@
+Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+Compiler: /home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-c++ 
+Build flags: -fvisibility-inlines-hidden;-std=c++17;-fmessage-length=0;-march=nocona;-mtune=haswell;-ftree-vectorize;-fPIC;-fstack-protector-strong;-fno-plt;-O2;-ffunction-sections;-pipe;-isystem;/home/rfaure/miniconda3/include
+Id flags:  
+
+The output was:
+1
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: /home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/lib/../lib64/libstdc++.so: undefined reference to `memcpy@GLIBC_2.14'
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: /home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/lib/../lib64/libstdc++.so: undefined reference to `aligned_alloc@GLIBC_2.16'
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: /home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/lib/../lib64/libstdc++.so: undefined reference to `clock_gettime@GLIBC_2.17'
+collect2: error: ld returned 1 exit status
+
+
+Determining size of __uint128 failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_c4516/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_c4516.dir/build.make CMakeFiles/cmTC_c4516.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_c4516.dir/int128_t_USE__uint128.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include  -o CMakeFiles/cmTC_c4516.dir/int128_t_USE__uint128.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/int128_t_USE__uint128.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/int128_t_USE__uint128.c:27:22: error: '__uint128' undeclared here (not in a function); did you mean '__int128'?
+   27 | #define SIZE (sizeof(__uint128))
+      |                      ^~~~~~~~~
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/int128_t_USE__uint128.c:29:12: note: in expansion of macro 'SIZE'
+   29 |   ('0' + ((SIZE / 10000)%10)),
+      |            ^~~~
+gmake[1]: *** [CMakeFiles/cmTC_c4516.dir/build.make:78: CMakeFiles/cmTC_c4516.dir/int128_t_USE__uint128.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_c4516/fast] Error 2
+
+
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/int128_t_USE__uint128.c:
+#include <sys/types.h>
+#include <stdint.h>
+#include <stddef.h>
+
+
+#undef KEY
+#if defined(__i386)
+# define KEY '_','_','i','3','8','6'
+#elif defined(__x86_64)
+# define KEY '_','_','x','8','6','_','6','4'
+#elif defined(__PPC64__)
+# define KEY '_','_','P','P','C','6','4','_','_'
+#elif defined(__ppc64__)
+# define KEY '_','_','p','p','c','6','4','_','_'
+#elif defined(__PPC__)
+# define KEY '_','_','P','P','C','_','_'
+#elif defined(__ppc__)
+# define KEY '_','_','p','p','c','_','_'
+#elif defined(__aarch64__)
+# define KEY '_','_','a','a','r','c','h','6','4','_','_'
+#elif defined(__ARM_ARCH_7A__)
+# define KEY '_','_','A','R','M','_','A','R','C','H','_','7','A','_','_'
+#elif defined(__ARM_ARCH_7S__)
+# define KEY '_','_','A','R','M','_','A','R','C','H','_','7','S','_','_'
+#endif
+
+#define SIZE (sizeof(__uint128))
+static char info_size[] =  {'I', 'N', 'F', 'O', ':', 's','i','z','e','[',
+  ('0' + ((SIZE / 10000)%10)),
+  ('0' + ((SIZE / 1000)%10)),
+  ('0' + ((SIZE / 100)%10)),
+  ('0' + ((SIZE / 10)%10)),
+  ('0' +  (SIZE    % 10)),
+  ']',
+#ifdef KEY
+  ' ','k','e','y','[', KEY, ']',
+#endif
+  '\0'};
+
+#ifdef __CLASSIC_C__
+int main(argc, argv) int argc; char *argv[];
+#else
+int main(int argc, char *argv[])
+#endif
+{
+  int require = 0;
+  require += info_size[argc];
+  (void)argv;
+  return require;
+}
+
+
+Determining if files sys/file.h;sys/ioctl.h;sys/resource.h;sys/socket.h;sys/stat.h;sys/time.h;sys/types.h;features.h;dirent.h;setjmp.h;stddef.h;stdint.h;unistd.h;mach/mach_time.h exist failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_2ee22/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_2ee22.dir/build.make CMakeFiles/cmTC_2ee22.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_2ee22.dir/H5_HAVE_MACH_MACH_TIME_H.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_2ee22.dir/H5_HAVE_MACH_MACH_TIME_H.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_MACH_MACH_TIME_H.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_MACH_MACH_TIME_H.c:15:10: fatal error: mach/mach_time.h: No such file or directory
+   15 | #include <mach/mach_time.h>
+      |          ^~~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_2ee22.dir/build.make:78: CMakeFiles/cmTC_2ee22.dir/H5_HAVE_MACH_MACH_TIME_H.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_2ee22/fast] Error 2
+
+
+Source:
+/* */
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <features.h>
+#include <dirent.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <mach/mach_time.h>
+
+
+int main(void){return 0;}
+
+Determining if files sys/file.h;sys/ioctl.h;sys/resource.h;sys/socket.h;sys/stat.h;sys/time.h;sys/types.h;features.h;dirent.h;setjmp.h;stddef.h;stdint.h;unistd.h;io.h exist failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_e36f8/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_e36f8.dir/build.make CMakeFiles/cmTC_e36f8.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_e36f8.dir/H5_HAVE_IO_H.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_e36f8.dir/H5_HAVE_IO_H.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_IO_H.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_IO_H.c:15:10: fatal error: io.h: No such file or directory
+   15 | #include <io.h>
+      |          ^~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_e36f8.dir/build.make:78: CMakeFiles/cmTC_e36f8.dir/H5_HAVE_IO_H.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_e36f8/fast] Error 2
+
+
+Source:
+/* */
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <features.h>
+#include <dirent.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <io.h>
+
+
+int main(void){return 0;}
+
+Determining if files sys/file.h;sys/ioctl.h;sys/resource.h;sys/socket.h;sys/stat.h;sys/time.h;sys/types.h;features.h;dirent.h;setjmp.h;stddef.h;stdint.h;unistd.h;winsock2.h exist failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_8bea5/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_8bea5.dir/build.make CMakeFiles/cmTC_8bea5.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_8bea5.dir/H5_HAVE_WINSOCK2_H.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_8bea5.dir/H5_HAVE_WINSOCK2_H.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_WINSOCK2_H.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_WINSOCK2_H.c:15:10: fatal error: winsock2.h: No such file or directory
+   15 | #include <winsock2.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_8bea5.dir/build.make:78: CMakeFiles/cmTC_8bea5.dir/H5_HAVE_WINSOCK2_H.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_8bea5/fast] Error 2
+
+
+Source:
+/* */
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <features.h>
+#include <dirent.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <winsock2.h>
+
+
+int main(void){return 0;}
+
+Determining if files sys/file.h;sys/ioctl.h;sys/resource.h;sys/socket.h;sys/stat.h;sys/time.h;sys/types.h;features.h;dirent.h;setjmp.h;stddef.h;stdint.h;unistd.h;sys/timeb.h;globus/common.h exist failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_25124/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_25124.dir/build.make CMakeFiles/cmTC_25124.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_25124.dir/H5_HAVE_GLOBUS_COMMON_H.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_25124.dir/H5_HAVE_GLOBUS_COMMON_H.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_GLOBUS_COMMON_H.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_GLOBUS_COMMON_H.c:16:10: fatal error: globus/common.h: No such file or directory
+   16 | #include <globus/common.h>
+      |          ^~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_25124.dir/build.make:78: CMakeFiles/cmTC_25124.dir/H5_HAVE_GLOBUS_COMMON_H.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_25124/fast] Error 2
+
+
+Source:
+/* */
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <features.h>
+#include <dirent.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/timeb.h>
+#include <globus/common.h>
+
+
+int main(void){return 0;}
+
+Determining if files sys/file.h;sys/ioctl.h;sys/resource.h;sys/socket.h;sys/stat.h;sys/time.h;sys/types.h;features.h;dirent.h;setjmp.h;stddef.h;stdint.h;unistd.h;sys/timeb.h;pdb.h exist failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_e2355/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_e2355.dir/build.make CMakeFiles/cmTC_e2355.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_e2355.dir/H5_HAVE_PDB_H.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_e2355.dir/H5_HAVE_PDB_H.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_PDB_H.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_PDB_H.c:16:10: fatal error: pdb.h: No such file or directory
+   16 | #include <pdb.h>
+      |          ^~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_e2355.dir/build.make:78: CMakeFiles/cmTC_e2355.dir/H5_HAVE_PDB_H.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_e2355/fast] Error 2
+
+
+Source:
+/* */
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <features.h>
+#include <dirent.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/timeb.h>
+#include <pdb.h>
+
+
+int main(void){return 0;}
+
+Determining if files sys/file.h;sys/ioctl.h;sys/resource.h;sys/socket.h;sys/stat.h;sys/time.h;sys/types.h;features.h;dirent.h;setjmp.h;stddef.h;stdint.h;unistd.h;sys/timeb.h;pthread.h;srbclient.h exist failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_43486/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_43486.dir/build.make CMakeFiles/cmTC_43486.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_43486.dir/H5_HAVE_SRBCLIENT_H.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_43486.dir/H5_HAVE_SRBCLIENT_H.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_SRBCLIENT_H.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckIncludeFiles/H5_HAVE_SRBCLIENT_H.c:17:10: fatal error: srbclient.h: No such file or directory
+   17 | #include <srbclient.h>
+      |          ^~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_43486.dir/build.make:78: CMakeFiles/cmTC_43486.dir/H5_HAVE_SRBCLIENT_H.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_43486/fast] Error 2
+
+
+Source:
+/* */
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <features.h>
+#include <dirent.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/timeb.h>
+#include <pthread.h>
+#include <srbclient.h>
+
+
+int main(void){return 0;}
+
+Determining if the function WSAStartup exists in the ws2_32;m;dl failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_69d6b/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_69d6b.dir/build.make CMakeFiles/cmTC_69d6b.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_69d6b.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=WSAStartup -o CMakeFiles/cmTC_69d6b.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_69d6b
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_69d6b.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=WSAStartup -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_69d6b.dir/CheckFunctionExists.c.o -o cmTC_69d6b  -lws2_32 -lm -ldl 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: cannot find -lws2_32: No such file or directory
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_69d6b.dir/build.make:99: cmTC_69d6b] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_69d6b/fast] Error 2
+
+
+
+Determining if the function gethostbyname exists in the wsock32;m;dl failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_58d2e/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_58d2e.dir/build.make CMakeFiles/cmTC_58d2e.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_58d2e.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=gethostbyname -o CMakeFiles/cmTC_58d2e.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_58d2e
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_58d2e.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=gethostbyname -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_58d2e.dir/CheckFunctionExists.c.o -o cmTC_58d2e  -lwsock32 -lm -ldl 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: cannot find -lwsock32: No such file or directory
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_58d2e.dir/build.make:99: cmTC_58d2e] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_58d2e/fast] Error 2
+
+
+
+Determining if the function gethostname exists in the ucb;m;dl failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_18c54/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_18c54.dir/build.make CMakeFiles/cmTC_18c54.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_18c54.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=gethostname -o CMakeFiles/cmTC_18c54.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_18c54
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_18c54.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=gethostname -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_18c54.dir/CheckFunctionExists.c.o -o cmTC_18c54  -lucb -lm -ldl 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: cannot find -lucb: No such file or directory
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_18c54.dir/build.make:99: cmTC_18c54] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_18c54/fast] Error 2
+
+
+
+Determining size of __int64 failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_f338f/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_f338f.dir/build.make CMakeFiles/cmTC_f338f.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_f338f.dir/H5_SIZEOF___INT64.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_f338f.dir/H5_SIZEOF___INT64.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF___INT64.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF___INT64.c:27:22: error: '__int64' undeclared here (not in a function); did you mean '__int64_t'?
+   27 | #define SIZE (sizeof(__int64))
+      |                      ^~~~~~~
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF___INT64.c:29:12: note: in expansion of macro 'SIZE'
+   29 |   ('0' + ((SIZE / 10000)%10)),
+      |            ^~~~
+gmake[1]: *** [CMakeFiles/cmTC_f338f.dir/build.make:78: CMakeFiles/cmTC_f338f.dir/H5_SIZEOF___INT64.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_f338f/fast] Error 2
+
+
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF___INT64.c:
+#include <sys/types.h>
+#include <stdint.h>
+#include <stddef.h>
+
+
+#undef KEY
+#if defined(__i386)
+# define KEY '_','_','i','3','8','6'
+#elif defined(__x86_64)
+# define KEY '_','_','x','8','6','_','6','4'
+#elif defined(__PPC64__)
+# define KEY '_','_','P','P','C','6','4','_','_'
+#elif defined(__ppc64__)
+# define KEY '_','_','p','p','c','6','4','_','_'
+#elif defined(__PPC__)
+# define KEY '_','_','P','P','C','_','_'
+#elif defined(__ppc__)
+# define KEY '_','_','p','p','c','_','_'
+#elif defined(__aarch64__)
+# define KEY '_','_','a','a','r','c','h','6','4','_','_'
+#elif defined(__ARM_ARCH_7A__)
+# define KEY '_','_','A','R','M','_','A','R','C','H','_','7','A','_','_'
+#elif defined(__ARM_ARCH_7S__)
+# define KEY '_','_','A','R','M','_','A','R','C','H','_','7','S','_','_'
+#endif
+
+#define SIZE (sizeof(__int64))
+static char info_size[] =  {'I', 'N', 'F', 'O', ':', 's','i','z','e','[',
+  ('0' + ((SIZE / 10000)%10)),
+  ('0' + ((SIZE / 1000)%10)),
+  ('0' + ((SIZE / 100)%10)),
+  ('0' + ((SIZE / 10)%10)),
+  ('0' +  (SIZE    % 10)),
+  ']',
+#ifdef KEY
+  ' ','k','e','y','[', KEY, ']',
+#endif
+  '\0'};
+
+#ifdef __CLASSIC_C__
+int main(argc, argv) int argc; char *argv[];
+#else
+int main(int argc, char *argv[])
+#endif
+{
+  int require = 0;
+  require += info_size[argc];
+  (void)argv;
+  return require;
+}
+
+
+Determining if the variable CLOCK_MONOTONIC exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_53adf/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_53adf.dir/build.make CMakeFiles/cmTC_53adf.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_53adf.dir/CheckVariableExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_VARIABLE_EXISTS=CLOCK_MONOTONIC -o CMakeFiles/cmTC_53adf.dir/CheckVariableExists.c.o -c /usr/share/cmake/Modules/CheckVariableExists.c
+Linking C executable cmTC_53adf
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_53adf.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_VARIABLE_EXISTS=CLOCK_MONOTONIC -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_53adf.dir/CheckVariableExists.c.o -o cmTC_53adf 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_53adf.dir/CheckVariableExists.c.o: in function `main':
+CheckVariableExists.c:(.text.startup.main+0xb): undefined reference to `CLOCK_MONOTONIC'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_53adf.dir/build.make:99: cmTC_53adf] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_53adf/fast] Error 2
+
+
+
+Performing Other Test HAVE___TM_GMTOFF failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_8fd43/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_8fd43.dir/build.make CMakeFiles/cmTC_8fd43.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_8fd43.dir/HDFTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt    -DHAVE___TM_GMTOFF  -DHAVE_SYS_TIME_H -DHAVE_UNISTD_H -DHAVE_SYS_TYPES_H -DHAVE_SYS_SOCKET_H -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -o CMakeFiles/cmTC_8fd43.dir/HDFTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c: In function 'main':
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c:181:30: error: 'struct tm' has no member named '__tm_gmtoff'; did you mean 'tm_gmtoff'?
+  181 | SIMPLE_TEST(struct tm tm; tm.__tm_gmtoff=0);
+      |                              ^~~~~~~~~~~
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c:12:36: note: in definition of macro 'SIMPLE_TEST'
+   12 | #define SIMPLE_TEST(x) int main(){ x; return 0; }
+      |                                    ^
+gmake[1]: *** [CMakeFiles/cmTC_8fd43.dir/build.make:78: CMakeFiles/cmTC_8fd43.dir/HDFTests.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_8fd43/fast] Error 2
+
+
+Performing Other Test HAVE_TM_ZONE failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_988a2/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_988a2.dir/build.make CMakeFiles/cmTC_988a2.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_988a2.dir/HDFTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt    -DHAVE_TM_ZONE  -DHAVE_SYS_TIME_H -DHAVE_UNISTD_H -DHAVE_SYS_TYPES_H -DHAVE_SYS_SOCKET_H -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -o CMakeFiles/cmTC_988a2.dir/HDFTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c
+Linking C executable cmTC_988a2
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_988a2.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_988a2.dir/HDFTests.c.o -o cmTC_988a2  -lm -ldl 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: /home/rfaure/miniconda3/bin/../x86_64-conda-linux-gnu/sysroot/usr/lib/../lib64/crt1.o: in function `_start':
+(.text+0x20): undefined reference to `main'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_988a2.dir/build.make:99: cmTC_988a2] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_988a2/fast] Error 2
+
+
+Performing Other Test HAVE_STRUCT_TM_TM_ZONE failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_2d3dc/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_2d3dc.dir/build.make CMakeFiles/cmTC_2d3dc.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_2d3dc.dir/HDFTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt    -DHAVE_STRUCT_TM_TM_ZONE  -DHAVE_SYS_TIME_H -DHAVE_UNISTD_H -DHAVE_SYS_TYPES_H -DHAVE_SYS_SOCKET_H -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -o CMakeFiles/cmTC_2d3dc.dir/HDFTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c
+Linking C executable cmTC_2d3dc
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_2d3dc.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_2d3dc.dir/HDFTests.c.o -o cmTC_2d3dc  -lm -ldl 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: /home/rfaure/miniconda3/bin/../x86_64-conda-linux-gnu/sysroot/usr/lib/../lib64/crt1.o: in function `_start':
+(.text+0x20): undefined reference to `main'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_2d3dc.dir/build.make:99: cmTC_2d3dc] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_2d3dc/fast] Error 2
+
+
+Performing Other Test HAVE_STRUCT_VIDEOCONFIG failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_73326/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_73326.dir/build.make CMakeFiles/cmTC_73326.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_73326.dir/HDFTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt    -DHAVE_STRUCT_VIDEOCONFIG  -DHAVE_SYS_TIME_H -DHAVE_UNISTD_H -DHAVE_SYS_TYPES_H -DHAVE_SYS_SOCKET_H -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -o CMakeFiles/cmTC_73326.dir/HDFTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c: In function 'main':
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c:437:32: error: storage size of 'w' isn't known
+  437 | SIMPLE_TEST(struct videoconfig w; w.numtextcols=0);
+      |                                ^
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c:12:36: note: in definition of macro 'SIMPLE_TEST'
+   12 | #define SIMPLE_TEST(x) int main(){ x; return 0; }
+      |                                    ^
+gmake[1]: *** [CMakeFiles/cmTC_73326.dir/build.make:78: CMakeFiles/cmTC_73326.dir/HDFTests.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_73326/fast] Error 2
+
+
+Performing Other Test HAVE_STRUCT_TEXT_INFO failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_3485a/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_3485a.dir/build.make CMakeFiles/cmTC_3485a.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_3485a.dir/HDFTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt    -DHAVE_STRUCT_TEXT_INFO  -DHAVE_SYS_TIME_H -DHAVE_UNISTD_H -DHAVE_SYS_TYPES_H -DHAVE_SYS_SOCKET_H -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -o CMakeFiles/cmTC_3485a.dir/HDFTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c: In function 'main':
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c:443:30: error: storage size of 'w' isn't known
+  443 | SIMPLE_TEST(struct text_info w; w.screenwidth=0);
+      |                              ^
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake_ext_mod/HDFTests.c:12:36: note: in definition of macro 'SIMPLE_TEST'
+   12 | #define SIMPLE_TEST(x) int main(){ x; return 0; }
+      |                                    ^
+gmake[1]: *** [CMakeFiles/cmTC_3485a.dir/build.make:78: CMakeFiles/cmTC_3485a.dir/HDFTests.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_3485a/fast] Error 2
+
+
+Determining if the function _getvideoconfig exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_aa495/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_aa495.dir/build.make CMakeFiles/cmTC_aa495.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_aa495.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=_getvideoconfig -o CMakeFiles/cmTC_aa495.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_aa495
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_aa495.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=_getvideoconfig -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_aa495.dir/CheckFunctionExists.c.o -o cmTC_aa495 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_aa495.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `_getvideoconfig'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_aa495.dir/build.make:99: cmTC_aa495] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_aa495/fast] Error 2
+
+
+
+Determining if the function gettextinfo exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_95fbc/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_95fbc.dir/build.make CMakeFiles/cmTC_95fbc.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_95fbc.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=gettextinfo -o CMakeFiles/cmTC_95fbc.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_95fbc
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_95fbc.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=gettextinfo -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_95fbc.dir/CheckFunctionExists.c.o -o cmTC_95fbc 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_95fbc.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `gettextinfo'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_95fbc.dir/build.make:99: cmTC_95fbc] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_95fbc/fast] Error 2
+
+
+
+Determining if the function _scrsize exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_72327/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_72327.dir/build.make CMakeFiles/cmTC_72327.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_72327.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=_scrsize -o CMakeFiles/cmTC_72327.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_72327
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_72327.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=_scrsize -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_72327.dir/CheckFunctionExists.c.o -o cmTC_72327 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_72327.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `_scrsize'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_72327.dir/build.make:99: cmTC_72327] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_72327/fast] Error 2
+
+
+
+Determining if the function GetConsoleScreenBufferInfo exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_a9ac5/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_a9ac5.dir/build.make CMakeFiles/cmTC_a9ac5.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_a9ac5.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=GetConsoleScreenBufferInfo -o CMakeFiles/cmTC_a9ac5.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_a9ac5
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_a9ac5.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=GetConsoleScreenBufferInfo -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_a9ac5.dir/CheckFunctionExists.c.o -o cmTC_a9ac5 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_a9ac5.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `GetConsoleScreenBufferInfo'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_a9ac5.dir/build.make:99: cmTC_a9ac5] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_a9ac5/fast] Error 2
+
+
+
+Determining if the function llround exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_8c469/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_8c469.dir/build.make CMakeFiles/cmTC_8c469.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_8c469.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=llround -o CMakeFiles/cmTC_8c469.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+<command-line>: warning: conflicting types for built-in function 'llround'; expected 'long long int(double)' [-Wbuiltin-declaration-mismatch]
+/usr/share/cmake/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+/usr/share/cmake/Modules/CheckFunctionExists.c:1:1: note: 'llround' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+Linking C executable cmTC_8c469
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_8c469.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=llround -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_8c469.dir/CheckFunctionExists.c.o -o cmTC_8c469 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_8c469.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `llround'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_8c469.dir/build.make:99: cmTC_8c469] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_8c469/fast] Error 2
+
+
+
+Determining if the function llroundf exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_1d063/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_1d063.dir/build.make CMakeFiles/cmTC_1d063.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_1d063.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=llroundf -o CMakeFiles/cmTC_1d063.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+<command-line>: warning: conflicting types for built-in function 'llroundf'; expected 'long long int(float)' [-Wbuiltin-declaration-mismatch]
+/usr/share/cmake/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+/usr/share/cmake/Modules/CheckFunctionExists.c:1:1: note: 'llroundf' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+Linking C executable cmTC_1d063
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_1d063.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=llroundf -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_1d063.dir/CheckFunctionExists.c.o -o cmTC_1d063 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_1d063.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `llroundf'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_1d063.dir/build.make:99: cmTC_1d063] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_1d063/fast] Error 2
+
+
+
+Determining if the function lround exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_a2557/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_a2557.dir/build.make CMakeFiles/cmTC_a2557.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_a2557.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=lround -o CMakeFiles/cmTC_a2557.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+<command-line>: warning: conflicting types for built-in function 'lround'; expected 'long int(double)' [-Wbuiltin-declaration-mismatch]
+/usr/share/cmake/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+/usr/share/cmake/Modules/CheckFunctionExists.c:1:1: note: 'lround' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+Linking C executable cmTC_a2557
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_a2557.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=lround -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_a2557.dir/CheckFunctionExists.c.o -o cmTC_a2557 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_a2557.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `lround'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_a2557.dir/build.make:99: cmTC_a2557] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_a2557/fast] Error 2
+
+
+
+Determining if the function lroundf exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_4c1fb/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_4c1fb.dir/build.make CMakeFiles/cmTC_4c1fb.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_4c1fb.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=lroundf -o CMakeFiles/cmTC_4c1fb.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+<command-line>: warning: conflicting types for built-in function 'lroundf'; expected 'long int(float)' [-Wbuiltin-declaration-mismatch]
+/usr/share/cmake/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+/usr/share/cmake/Modules/CheckFunctionExists.c:1:1: note: 'lroundf' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+Linking C executable cmTC_4c1fb
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_4c1fb.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=lroundf -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_4c1fb.dir/CheckFunctionExists.c.o -o cmTC_4c1fb 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_4c1fb.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `lroundf'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_4c1fb.dir/build.make:99: cmTC_4c1fb] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_4c1fb/fast] Error 2
+
+
+
+Determining if the function round exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_22ac3/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_22ac3.dir/build.make CMakeFiles/cmTC_22ac3.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_22ac3.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=round -o CMakeFiles/cmTC_22ac3.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+<command-line>: warning: conflicting types for built-in function 'round'; expected 'double(double)' [-Wbuiltin-declaration-mismatch]
+/usr/share/cmake/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+/usr/share/cmake/Modules/CheckFunctionExists.c:1:1: note: 'round' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+Linking C executable cmTC_22ac3
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_22ac3.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=round -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_22ac3.dir/CheckFunctionExists.c.o -o cmTC_22ac3 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_22ac3.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `round'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_22ac3.dir/build.make:99: cmTC_22ac3] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_22ac3/fast] Error 2
+
+
+
+Determining if the function roundf exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_07d21/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_07d21.dir/build.make CMakeFiles/cmTC_07d21.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_07d21.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=roundf -o CMakeFiles/cmTC_07d21.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+<command-line>: warning: conflicting types for built-in function 'roundf'; expected 'float(float)' [-Wbuiltin-declaration-mismatch]
+/usr/share/cmake/Modules/CheckFunctionExists.c:7:3: note: in expansion of macro 'CHECK_FUNCTION_EXISTS'
+    7 |   CHECK_FUNCTION_EXISTS(void);
+      |   ^~~~~~~~~~~~~~~~~~~~~
+/usr/share/cmake/Modules/CheckFunctionExists.c:1:1: note: 'roundf' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | #ifdef CHECK_FUNCTION_EXISTS
+Linking C executable cmTC_07d21
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_07d21.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=roundf -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_07d21.dir/CheckFunctionExists.c.o -o cmTC_07d21 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_07d21.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `roundf'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_07d21.dir/build.make:99: cmTC_07d21] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_07d21/fast] Error 2
+
+
+
+Determining if the function setsysinfo exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_d5a97/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_d5a97.dir/build.make CMakeFiles/cmTC_d5a97.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_d5a97.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=setsysinfo -o CMakeFiles/cmTC_d5a97.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_d5a97
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_d5a97.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=setsysinfo -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_d5a97.dir/CheckFunctionExists.c.o -o cmTC_d5a97 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_d5a97.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `setsysinfo'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_d5a97.dir/build.make:99: cmTC_d5a97] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_d5a97/fast] Error 2
+
+
+
+Determining if the function sigsetjmp exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_764b9/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_764b9.dir/build.make CMakeFiles/cmTC_764b9.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_764b9.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=sigsetjmp -o CMakeFiles/cmTC_764b9.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_764b9
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_764b9.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=sigsetjmp -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_764b9.dir/CheckFunctionExists.c.o -o cmTC_764b9 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_764b9.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xf): undefined reference to `sigsetjmp'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_764b9.dir/build.make:99: cmTC_764b9] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_764b9/fast] Error 2
+
+
+
+Determining if the function clock_gettime exists failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_b0522/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_b0522.dir/build.make CMakeFiles/cmTC_b0522.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_b0522.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=clock_gettime -o CMakeFiles/cmTC_b0522.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_b0522
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_b0522.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=clock_gettime -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_b0522.dir/CheckFunctionExists.c.o -o cmTC_b0522 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: CMakeFiles/cmTC_b0522.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text.startup.main+0xd): undefined reference to `clock_gettime'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_b0522.dir/build.make:99: cmTC_b0522] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_b0522/fast] Error 2
+
+
+
+Determining if the function clock_gettime exists in the posix4 failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_f99b9/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_f99b9.dir/build.make CMakeFiles/cmTC_f99b9.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_f99b9.dir/CheckFunctionExists.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=clock_gettime -o CMakeFiles/cmTC_f99b9.dir/CheckFunctionExists.c.o -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_f99b9
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f99b9.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DCHECK_FUNCTION_EXISTS=clock_gettime -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_f99b9.dir/CheckFunctionExists.c.o -o cmTC_f99b9  -lposix4 
+/home/rfaure/miniconda3/bin/../lib/gcc/x86_64-conda-linux-gnu/11.2.0/../../../../x86_64-conda-linux-gnu/bin/ld: cannot find -lposix4: No such file or directory
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_f99b9.dir/build.make:99: cmTC_f99b9] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_f99b9/fast] Error 2
+
+
+
+Determining size of _Quad failed with the following output:
+Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_349b3/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_349b3.dir/build.make CMakeFiles/cmTC_349b3.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_349b3.dir/H5_SIZEOF__QUAD.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE  -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt  -o CMakeFiles/cmTC_349b3.dir/H5_SIZEOF__QUAD.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF__QUAD.c
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF__QUAD.c:27:22: error: '_Quad' undeclared here (not in a function)
+   27 | #define SIZE (sizeof(_Quad))
+      |                      ^~~~~
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF__QUAD.c:29:12: note: in expansion of macro 'SIZE'
+   29 |   ('0' + ((SIZE / 10000)%10)),
+      |            ^~~~
+gmake[1]: *** [CMakeFiles/cmTC_349b3.dir/build.make:78: CMakeFiles/cmTC_349b3.dir/H5_SIZEOF__QUAD.c.o] Error 1
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_349b3/fast] Error 2
+
+
+/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CheckTypeSize/H5_SIZEOF__QUAD.c:
+#include <sys/types.h>
+#include <stdint.h>
+#include <stddef.h>
+
+
+#undef KEY
+#if defined(__i386)
+# define KEY '_','_','i','3','8','6'
+#elif defined(__x86_64)
+# define KEY '_','_','x','8','6','_','6','4'
+#elif defined(__PPC64__)
+# define KEY '_','_','P','P','C','6','4','_','_'
+#elif defined(__ppc64__)
+# define KEY '_','_','p','p','c','6','4','_','_'
+#elif defined(__PPC__)
+# define KEY '_','_','P','P','C','_','_'
+#elif defined(__ppc__)
+# define KEY '_','_','p','p','c','_','_'
+#elif defined(__aarch64__)
+# define KEY '_','_','a','a','r','c','h','6','4','_','_'
+#elif defined(__ARM_ARCH_7A__)
+# define KEY '_','_','A','R','M','_','A','R','C','H','_','7','A','_','_'
+#elif defined(__ARM_ARCH_7S__)
+# define KEY '_','_','A','R','M','_','A','R','C','H','_','7','S','_','_'
+#endif
+
+#define SIZE (sizeof(_Quad))
+static char info_size[] =  {'I', 'N', 'F', 'O', ':', 's','i','z','e','[',
+  ('0' + ((SIZE / 10000)%10)),
+  ('0' + ((SIZE / 1000)%10)),
+  ('0' + ((SIZE / 100)%10)),
+  ('0' + ((SIZE / 10)%10)),
+  ('0' +  (SIZE    % 10)),
+  ']',
+#ifdef KEY
+  ' ','k','e','y','[', KEY, ']',
+#endif
+  '\0'};
+
+#ifdef __CLASSIC_C__
+int main(argc, argv) int argc; char *argv[];
+#else
+int main(int argc, char *argv[])
+#endif
+{
+  int require = 0;
+  require += info_size[argc];
+  (void)argv;
+  return require;
+}
+
+
+Test H5_LDOUBLE_TO_LONG_SPECIAL Run failed with the following output and exit code:
+ Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_27ec1/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_27ec1.dir/build.make CMakeFiles/cmTC_27ec1.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_27ec1.dir/ConversionTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DH5_LDOUBLE_TO_LONG_SPECIAL_TEST -o CMakeFiles/cmTC_27ec1.dir/ConversionTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake/ConversionTests.c
+Linking C executable cmTC_27ec1
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_27ec1.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DH5_LDOUBLE_TO_LONG_SPECIAL_TEST -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_27ec1.dir/ConversionTests.c.o -o cmTC_27ec1 
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+
+
+Test H5_LONG_TO_LDOUBLE_SPECIAL Run failed with the following output and exit code:
+ Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_8b21a/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_8b21a.dir/build.make CMakeFiles/cmTC_8b21a.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_8b21a.dir/ConversionTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DH5_LONG_TO_LDOUBLE_SPECIAL_TEST -o CMakeFiles/cmTC_8b21a.dir/ConversionTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake/ConversionTests.c
+Linking C executable cmTC_8b21a
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_8b21a.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DH5_LONG_TO_LDOUBLE_SPECIAL_TEST -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_8b21a.dir/ConversionTests.c.o -o cmTC_8b21a 
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+
+
+Test H5_DISABLE_SOME_LDOUBLE_CONV Run failed with the following output and exit code:
+ Change Dir: /home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_df1fd/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_df1fd.dir/build.make CMakeFiles/cmTC_df1fd.dir/build
+gmake[1]: Entering directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_df1fd.dir/ConversionTests.c.o
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DH5_DISABLE_SOME_LDOUBLE_CONV_TEST -o CMakeFiles/cmTC_df1fd.dir/ConversionTests.c.o -c /home/rfaure/Documents/these/MSR/wonderasm/bcalm/gatb-core/gatb-core/thirdparty/hdf5/config/cmake/ConversionTests.c
+Linking C executable cmTC_df1fd
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_df1fd.dir/link.txt --verbose=1
+/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/rfaure/miniconda3/include -msse2 -msse4.2 -mpopcnt -DH5_DISABLE_SOME_LDOUBLE_CONV_TEST -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,-rpath,/home/rfaure/miniconda3/lib -Wl,-rpath-link,/home/rfaure/miniconda3/lib -L/home/rfaure/miniconda3/lib  CMakeFiles/cmTC_df1fd.dir/ConversionTests.c.o -o cmTC_df1fd 
+gmake[1]: Leaving directory '/home/rfaure/Documents/these/MSR/wonderasm/bcalm/build/CMakeFiles/CMakeTmp'
+
+

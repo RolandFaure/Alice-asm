@@ -1,0 +1,115 @@
+{
+	"kind" : "toolchains",
+	"toolchains" : 
+	[
+		{
+			"compiler" : 
+			{
+				"id" : "GNU",
+				"implicit" : 
+				{
+					"includeDirectories" : 
+					[
+						"/home/rfaure/miniconda3/include",
+						"/home/rfaure/miniconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0/include",
+						"/home/rfaure/miniconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0/include-fixed",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/include",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/usr/include"
+					],
+					"linkDirectories" : 
+					[
+						"/home/rfaure/miniconda3/lib",
+						"/home/rfaure/miniconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0",
+						"/home/rfaure/miniconda3/lib/gcc",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/lib64",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/lib64",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/usr/lib64",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/lib",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/lib",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/usr/lib"
+					],
+					"linkFrameworkDirectories" : [],
+					"linkLibraries" : 
+					[
+						"gcc",
+						"gcc_s",
+						"c",
+						"gcc",
+						"gcc_s"
+					]
+				},
+				"path" : "/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-cc",
+				"version" : "11.2.0"
+			},
+			"language" : "C",
+			"sourceFileExtensions" : 
+			[
+				"c",
+				"m"
+			]
+		},
+		{
+			"compiler" : 
+			{
+				"id" : "GNU",
+				"implicit" : 
+				{
+					"includeDirectories" : 
+					[
+						"/home/rfaure/miniconda3/include",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/include/c++/11.2.0",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/include/c++/11.2.0/x86_64-conda-linux-gnu",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/include/c++/11.2.0/backward",
+						"/home/rfaure/miniconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0/include",
+						"/home/rfaure/miniconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0/include-fixed",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/include",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/usr/include"
+					],
+					"linkDirectories" : 
+					[
+						"/home/rfaure/miniconda3/lib",
+						"/home/rfaure/miniconda3/lib/gcc/x86_64-conda-linux-gnu/11.2.0",
+						"/home/rfaure/miniconda3/lib/gcc",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/lib64",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/lib64",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/usr/lib64",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/lib",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/lib",
+						"/home/rfaure/miniconda3/x86_64-conda-linux-gnu/sysroot/usr/lib"
+					],
+					"linkFrameworkDirectories" : [],
+					"linkLibraries" : 
+					[
+						"stdc++",
+						"m",
+						"gcc_s",
+						"gcc",
+						"c",
+						"gcc_s",
+						"gcc"
+					]
+				},
+				"path" : "/home/rfaure/miniconda3/bin/x86_64-conda-linux-gnu-c++",
+				"version" : "11.2.0"
+			},
+			"language" : "CXX",
+			"sourceFileExtensions" : 
+			[
+				"C",
+				"M",
+				"c++",
+				"cc",
+				"cpp",
+				"cxx",
+				"mm",
+				"mpp",
+				"CPP"
+			]
+		}
+	],
+	"version" : 
+	{
+		"major" : 1,
+		"minor" : 0
+	}
+}

@@ -1,0 +1,75 @@
+version: 1
+jobs:
+  build:
+      docker:
+        - image: "debian:stretch"
+      steps:
+        - checkout
+
+        - run:
+            name: Installing SUDO
+            command: 'apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*'
+        - run:
+            name: Installing GCC
+            command: 'apt-get update && apt-get install -y build-essential wget zlib1g zlib1g-dev'
+        - run:
+            name: Installing Git
+            command: 'apt-get update && apt-get install -y git'
+        - run:
+            name: Getting submodules
+            command: |
+                   git submodule init 
+                   git submodule update --remote
+        - run:
+            name: Install CMAKE
+            command: |
+              wget https://cmake.org/files/v3.10/cmake-3.10.2-Linux-x86_64.tar.gz
+              tar -xvzf cmake-3.10.2-Linux-x86_64.tar.gz
+              chmod +x ./cmake-3.10.2-Linux-x86_64/bin/ccmake
+              chmod +x ./cmake-3.10.2-Linux-x86_64/bin/cmake
+              chmod +x ./cmake-3.10.2-Linux-x86_64/bin/cpack
+              chmod +x ./cmake-3.10.2-Linux-x86_64/bin/ctest
+              DIR=$(pwd)
+              ln -s $DIR/cmake-3.10.2-Linux-x86_64/bin/ccmake /usr/bin/ccmake
+              ln -s $DIR/cmake-3.10.2-Linux-x86_64/bin/cmake /usr/bin/cmake
+              ln -s $DIR/cmake-3.10.2-Linux-x86_64/bin/cpack /usr/bin/cpack
+              ln -s $DIR/cmake-3.10.2-Linux-x86_64/bin/ctest /usr/bin/ctest
+        - run:
+            name: Install CPPUnit
+            command: 'apt-get update && sudo apt-get install -y libcppunit-dev'
+        - run:
+            name: Compiling
+            command: 'mkdir build && cd build && cmake .. && make -j 4'
+        - run:
+            name: Making package in case we'll release
+            command: 'cd build && make package && mkdir ../artifacts && mv bcalm-binaries-*.tar.gz ../artifacts && cd ..'
+        - store_artifacts:
+            path: ./artifacts
+    
+  publish-github-release:
+    docker:
+      - image: cibuilds/github:0.10
+    steps:
+      - attach_workspace:
+          at: ./artifacts
+      - run:
+          name: "Publish Release on GitHub"
+          command: |
+            VERSION=$(cat ../VERSION)
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} ./artifacts/
+workflows:
+  version: 2
+  main:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v?\d+\.\d+\.\d+$/
+      - publish-github-release:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v?\d+\.\d+\.\d+$/
