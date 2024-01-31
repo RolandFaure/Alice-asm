@@ -1,4 +1,5 @@
 #include "basic_graph_manipulation.h"
+#include "robin_hood.h"
 
 #include <iostream>
 #include <fstream>
@@ -14,13 +15,16 @@ using std::cout;
 using std::endl;
 using std::string;
 using std::set;
-using std::unordered_map;
+using robin_hood::unordered_map;
 using std::cerr;
 using std::pair;
 using std::ifstream;
 using std::ofstream;
 using std::vector;
 using std::unordered_set;
+using std::make_pair;
+using std::max;
+using std::min;
 
 string reverse_complement(string& seq){
     string rc (seq.size(), 'N');
@@ -581,10 +585,20 @@ struct Path{
     vector<bool> orientations;
 };
 
+/**
+ * @brief Create a gaf from unitig graph object and a set of reads
+ * 
+ * @param unitig_graph 
+ * @param km 
+ * @param reads_file 
+ * @param gaf_out 
+ */
 void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string gaf_out){
     
-    unordered_map<string, string> kmers_to_contigs; //in what contig is the kmer (only unique kmer ofc)
-    unordered_map<string, string> reverse_kmers_to_contigs; //what kmers are in the contig
+    unordered_map<string, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
+    unordered_map<string, pair<string,int>> reverse_kmers_to_contigs; //what kmers are in the contig
+
+    unordered_map<string, int> length_of_contigs;
 
     ifstream input(unitig_graph);
     string line;
@@ -597,15 +611,17 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             string sequence;
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
+            length_of_contigs[name] = sequence.size();
+
             for (int i = 0 ; i <= sequence.size()-km ; i++){
                 string kmer = sequence.substr(i, km);
                 if (kmers_to_contigs.find(kmer) == kmers_to_contigs.end()){
-                    kmers_to_contigs[kmer] = name;
-                    reverse_kmers_to_contigs[reverse_complement(kmer)] = name;
+                    kmers_to_contigs[kmer] = make_pair(name, i);
+                    reverse_kmers_to_contigs[reverse_complement(kmer)] = make_pair(name, sequence.size()-i-km);
                 }
-                else{
-                    kmers_to_contigs[kmer] = "";
-                    reverse_kmers_to_contigs[reverse_complement(kmer)] = "";
+                else{ //should never happen with unitig graph
+                    kmers_to_contigs[kmer] = make_pair("", -1);
+                    reverse_kmers_to_contigs[reverse_complement(kmer)] = make_pair("", -1);
                 }
             }
         }
@@ -629,24 +645,29 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             //go through the sequence and find the kmers
             for (int i = 0 ; i <= (int)line.size()-km ; i++){
                 string kmer = line.substr(i, km);
-                if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end() && kmers_to_contigs[kmer] != ""){
-                    if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer] && p.orientations[p.orientations.size()-1] == true){
+                if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end() && kmers_to_contigs[kmer].second != -1){
+                    if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == true){
                         //same contig, do nothing
                     }
                     else{
-                        p.contigs.push_back(kmers_to_contigs[kmer]);
+                        p.contigs.push_back(kmers_to_contigs[kmer].first);
                         p.orientations.push_back(true);
                     }
-
+                    //skip the next kmers
+                    int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second;
+                    i += max(0, length_of_contig_left - km - 30); // -30 to be sure not to skip the next contig
                 }
-                else if (reverse_kmers_to_contigs.find(kmer) != reverse_kmers_to_contigs.end() && reverse_kmers_to_contigs[kmer] != ""){
-                    if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == reverse_kmers_to_contigs[kmer] && p.orientations[p.orientations.size()-1] == false){
+                else if (reverse_kmers_to_contigs.find(kmer) != reverse_kmers_to_contigs.end() && reverse_kmers_to_contigs[kmer].second != -1){
+                    if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == reverse_kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == false){
                         //same contig, do nothing
                     }
                     else{
-                        p.contigs.push_back(reverse_kmers_to_contigs[kmer]);
+                        p.contigs.push_back(reverse_kmers_to_contigs[kmer].first);
                         p.orientations.push_back(false);
                     }
+                    //skip the next kmers
+                    int length_of_contig_left = length_of_contigs[reverse_kmers_to_contigs[kmer].first] - reverse_kmers_to_contigs[kmer].second;
+                    i += max(0,length_of_contig_left - km - 30); // -30 to be sure not to skip the next contig
                 }
             }
             if (p.contigs.size() > 0){

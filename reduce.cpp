@@ -403,15 +403,6 @@ int main(int argc, char** argv)
         cout << "Convert to fasta bcalm.unitigs.shaved.gfa\n";
         gfa_to_fasta("bcalm.unitigs.shaved.gfa", "bcalm.unitigs.shaved.fasta");
 
-        // merge all contigs
-        // cout << "Merging contigs\n";
-        // string command_merge = "python "+ path_src +"/gfa.py bcalm.unitigs.shaved.gfa bcalm.unitigs.shaved.merged.gfa";
-        // auto merge_ok = system(command_merge.c_str());
-        // if (merge_ok != 0){
-        //     cerr << "ERROR: merge failed\n";
-        //     exit(1);
-        // }
-
         //to merge, simply make a unitig graph from bcalm.unitigs.shaved.gfa and then convert it to gfa
         cout << "Creating shaved unitig graph\n";
         string command_unitig_graph =path_src + "/bcalm/build/bcalm -in bcalm.unitigs.shaved.fasta -kmer-size "+std::to_string(kmer_len)+" -abundance-min 1 -out bcalm.shaved.merged";
