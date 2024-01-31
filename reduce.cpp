@@ -23,7 +23,7 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1";
+string version = "0.1.1";
 string date = "2024-01-31";
 string author = "Roland Faure";
 
