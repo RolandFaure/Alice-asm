@@ -1,6 +1,9 @@
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
 
+#include <nthash/nthash.hpp>
+
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -10,11 +13,13 @@
 #include <vector>
 #include <unordered_set>
 #include <algorithm>
+#include <chrono>
 
 using std::cout;
 using std::endl;
 using std::string;
 using std::set;
+using robin_hood::unordered_flat_map;
 using robin_hood::unordered_map;
 using std::cerr;
 using std::pair;
@@ -164,7 +169,9 @@ void pop_and_shave_homopolymer_errors(string gfa_in, string gfa_out){
             ss >> dont_care >> name >> sequence;
             string depth_string = "  ";
             while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
-                ss >> depth_string;
+                string nds;
+                ss >> nds;
+                depth_string = nds;
             }
 
             if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
@@ -220,9 +227,9 @@ void pop_and_shave_homopolymer_errors(string gfa_in, string gfa_out){
             string contig1 = c.second.first[0];
             string contig2 = c.second.first[1];
 
-        if (contig1 == "167--1" || contig2 == "167--1"){
-                cout << "found 167--1\n";
-            }
+            // if (contig1 == "167--1" || contig2 == "167--1"){
+            //     cout << "found 167--1\n";
+            // }
             bool bubble = false; //either a bubble or a dead end
             //check if there is a dead end or a bubble
             if (linked[contig1].first.size() == 0 || linked[contig1].second.size() == 0 || linked[contig2].first.size() == 0 || linked[contig2].second.size() == 0){
@@ -251,26 +258,17 @@ void pop_and_shave_homopolymer_errors(string gfa_in, string gfa_out){
             ss = std::stringstream(line);
             ss >> dont_care >> dont_care >> seq2;
 
-            int reverse1 = 1; //no reverse complement
             if (std::find(linked[contig1].second.begin(), linked[contig1].second.end(), contig) != linked[contig1].second.end()){
                 seq1 = reverse_complement(seq1);
-                reverse1 = -1;
             }
             int reverse2 = 1; //no reverse complement
             if (std::find(linked[contig2].second.begin(), linked[contig2].second.end(), contig) != linked[contig2].second.end()){
                 seq2 = reverse_complement(seq2);
-                reverse2 = -1;
             }
 
             //now compare the two sequences
             int idx_1 = 0;
-            if (reverse1 == -1){
-                idx_1 = seq1.size() - 1;
-            }
             int idx_2 = 0;
-            if (reverse2 == -1){
-                idx_2 = seq2.size() - 1;
-            }
             bool identical = true;
             while (idx_1 < seq1.size() && idx_2 < seq2.size()){
                 if (seq1[idx_1] != seq2[idx_2]){
@@ -284,12 +282,12 @@ void pop_and_shave_homopolymer_errors(string gfa_in, string gfa_out){
                 }
                   
                 char base = seq1[idx_1];
-                while (idx_1 < seq1.size() && seq1[idx_1] == base){
-                    idx_1+=reverse1;
+                while (idx_1 < seq1.size() && idx_1 >= 0 && seq1[idx_1] == base){
+                    idx_1++;
                 }
                 base = seq2[idx_2];
-                while (idx_2 < seq2.size() && seq2[idx_2] == base){
-                    idx_2+=reverse2;
+                while (idx_2 < seq2.size() && idx_2 >= 0 && seq2[idx_2] == base){
+                    idx_2++;
                 }
             }
 
@@ -356,26 +354,16 @@ void pop_and_shave_homopolymer_errors(string gfa_in, string gfa_out){
             ss = std::stringstream(line);
             ss >> dont_care >> dont_care >> seq2;
 
-            int reverse1 = 1; //no reverse complement
             if (std::find(linked[contig1].second.begin(), linked[contig1].second.end(), contig) != linked[contig1].second.end()){
                 seq1 = reverse_complement(seq1);
-                reverse1 = -1;
             }
-            int reverse2 = 1; //no reverse complement
             if (std::find(linked[contig2].second.begin(), linked[contig2].second.end(), contig) != linked[contig2].second.end()){
                 seq2 = reverse_complement(seq2);
-                reverse2 = -1;
             }
 
             //now compare the two sequences
             int idx_1 = 0;
-            if (reverse1 == -1){
-                idx_1 = seq1.size() - 1;
-            }
             int idx_2 = 0;
-            if (reverse2 == -1){
-                idx_2 = seq2.size() - 1;
-            }
             bool identical = true;
             while (idx_1 < seq1.size() && idx_2 < seq2.size()){
                 if (seq1[idx_1] != seq2[idx_2]){
@@ -390,11 +378,11 @@ void pop_and_shave_homopolymer_errors(string gfa_in, string gfa_out){
                   
                 char base = seq1[idx_1];
                 while (idx_1 < seq1.size() && seq1[idx_1] == base){
-                    idx_1+=reverse1;
+                    idx_1++;
                 }
                 base = seq2[idx_2];
                 while (idx_2 < seq2.size() && seq2[idx_2] == base){
-                    idx_2+=reverse2;
+                    idx_2++;
                 }
             }
 
@@ -534,7 +522,7 @@ void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overl
                 cerr << "ERROR: no overlap found between " << name1 << " and " << name2 << "\n";
                 exit(1);
             }
-            cout << "overlap between " << name1 << " and " << name2 << " is " << overlap << "\n";
+            // cout << "overlap between " << name1 << " and " << name2 << " is " << overlap << "\n";
             out << "L\t" << name1 << "\t" << orientation1 << "\t" << name2 << "\t" << orientation2 << "\t" << overlap << "M\n";
 
         }
@@ -586,19 +574,18 @@ struct Path{
 };
 
 /**
- * @brief Create a gaf from unitig graph object and a set of reads
+ * @brief Create a gaf from unitig graph object and a set of reads. Also compute the coverage of the contigs
  * 
  * @param unitig_graph 
  * @param km 
  * @param reads_file 
- * @param gaf_out 
+ * @param gaf_out
+ * @param coverages
  */
-void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string gaf_out){
+void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string gaf_out, robin_hood::unordered_map<std::string, float>& coverages){
     
-    unordered_map<string, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
-    unordered_map<string, pair<string,int>> reverse_kmers_to_contigs; //what kmers are in the contig
-
-    unordered_map<string, int> length_of_contigs;
+    unordered_flat_map<unsigned long, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
+    unordered_flat_map<string, int> length_of_contigs;
 
     ifstream input(unitig_graph);
     string line;
@@ -613,15 +600,13 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             ss >> dont_care >> name >> sequence;
             length_of_contigs[name] = sequence.size();
 
-            for (int i = 0 ; i <= sequence.size()-km ; i++){
-                string kmer = sequence.substr(i, km);
-                if (kmers_to_contigs.find(kmer) == kmers_to_contigs.end()){
-                    kmers_to_contigs[kmer] = make_pair(name, i);
-                    reverse_kmers_to_contigs[reverse_complement(kmer)] = make_pair(name, sequence.size()-i-km);
-                }
-                else{ //should never happen with unitig graph
-                    kmers_to_contigs[kmer] = make_pair("", -1);
-                    reverse_kmers_to_contigs[reverse_complement(kmer)] = make_pair("", -1);
+            nthash::NtHash nth(sequence, 1, km);
+            int pos = 0;
+            while (nth.roll()) {   
+                kmers_to_contigs[nth.get_forward_hash()] = make_pair(name, pos);
+                pos++;
+                if (pos+km > line.size()){
+                    break; //or else it will roll to the beginning of the sequence
                 }
             }
         }
@@ -629,47 +614,93 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     input.close();
 
     //now go through the reads and find the paths
-    unordered_map <string, Path> paths;
+    unordered_flat_map <string, Path> paths;
     ifstream input2(reads_file);
     string name;
     bool nextline = false;
+    int nb_reads = 0;
+    auto time_now = std::chrono::system_clock::now();
     while (std::getline(input2, line))
     {
+        if (nb_reads%1000==0){
+            auto time_now2 = std::chrono::system_clock::now();
+            cout << "aligned " << nb_reads << " on the graph, taking on average " << std::chrono::duration_cast<std::chrono::microseconds>(time_now2 - time_now).count() / (nb_reads+1) << " us per read\r";
+        }
+        nb_reads++;
+
         if (line[0] == '@' || line[0] == '>')
         {
             name = line.substr(1, line.size()-1);
             nextline = true;
         }
         else if (nextline){
+            // if (name.substr(0, name.find_first_of(' ')) != "SRR21295163.5251"){
+            //     // cout << "skippple name " << name.substr(0, name.find_first_of(' ')) << "\n";
+            //     continue;
+            // }
             Path p;
             //go through the sequence and find the kmers
-            for (int i = 0 ; i <= (int)line.size()-km ; i++){
-                string kmer = line.substr(i, km);
-                if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end() && kmers_to_contigs[kmer].second != -1){
-                    if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == true){
-                        //same contig, do nothing
-                    }
-                    else{
-                        p.contigs.push_back(kmers_to_contigs[kmer].first);
-                        p.orientations.push_back(true);
-                    }
-                    //skip the next kmers
-                    int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second;
-                    i += max(0, length_of_contig_left - km - 30); // -30 to be sure not to skip the next contig
-                }
-                else if (reverse_kmers_to_contigs.find(kmer) != reverse_kmers_to_contigs.end() && reverse_kmers_to_contigs[kmer].second != -1){
-                    if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == reverse_kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == false){
-                        //same contig, do nothing
-                    }
-                    else{
-                        p.contigs.push_back(reverse_kmers_to_contigs[kmer].first);
-                        p.orientations.push_back(false);
-                    }
-                    //skip the next kmers
-                    int length_of_contig_left = length_of_contigs[reverse_kmers_to_contigs[kmer].first] - reverse_kmers_to_contigs[kmer].second;
-                    i += max(0,length_of_contig_left - km - 30); // -30 to be sure not to skip the next contig
-                }
+            if (line.size() < km){
+                continue;
             }
+            nthash::NtHash nth(line, 1, km);
+            int pos_to_look_at = 0;
+            int pos_nth = 0;
+            while (nth.roll()) {
+                if (pos_nth+km > line.size()){
+                    break; //or else it will roll to the beginning of the sequence
+                }
+                if (pos_nth == pos_to_look_at){
+                    
+                    unsigned long kmer = nth.get_forward_hash();  
+                    // cout << "looking at pos " << pos_to_look_at << " and found " << (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()) << " and " << (kmers_to_contigs.find(nth.get_reverse_hash()) != kmers_to_contigs.end()) << "\n";
+
+                    if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){ //foward kmer
+                        if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == true){
+                            //same contig, do nothing
+                        }
+                        else{
+                            string contig = kmers_to_contigs[kmer].first;
+                            p.contigs.push_back(contig);
+                            p.orientations.push_back(true);
+                            if (coverages.find(contig) == coverages.end()){
+                                coverages[contig] = 0;
+                            }
+                            coverages[contig]+= min(1.0, (line.size()- pos_nth) / (double)length_of_contigs[contig]);
+                        }
+                        //skip the next kmers
+                        int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second - km;
+                        if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
+                            pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
+                        }
+                        // cout << "found in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second <<" " << pos_nth << "\n";
+                    }
+                    else if (kmers_to_contigs.find(nth.get_reverse_hash()) != kmers_to_contigs.end()){ //reverse kmer
+                        if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[nth.get_reverse_hash()].first && p.orientations[p.orientations.size()-1] == false){
+                            //same contig, do nothing
+                        }
+                        else{
+                            string contig = kmers_to_contigs[nth.get_reverse_hash()].first;
+                            p.contigs.push_back(contig);
+                            p.orientations.push_back(false);
+                            if (coverages.find(contig) == coverages.end()){
+                                coverages[contig] = 0;
+                            }
+                            coverages[contig]+= min(1.0, (line.size()- pos_nth) / (double)length_of_contigs[contig]);
+                        }
+                        //skip the next kmers
+                        int length_of_contig_left = kmers_to_contigs[nth.get_reverse_hash()].second;
+                        if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
+                            pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
+                        }
+                        // cout << "found in " << kmers_to_contigs[nth.get_reverse_hash()].first << " at pos " << kmers_to_contigs[nth.get_reverse_hash()].second << " " << pos_nth<< "\n";
+                    }
+                    pos_to_look_at++;
+                }
+
+                pos_nth++;
+            }
+
             if (p.contigs.size() > 0){
                 paths[name] = p;
             }
@@ -694,3 +725,92 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     }
 
 }
+
+
+void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm_src){
+        
+        //convert gfa_in to fasta
+        cout << "Convert to fasta bcalm.unitigs.shaved.gfa\n";
+        string tmp_fasta = "tmp_324.fasta";
+        gfa_to_fasta(gfa_in, tmp_fasta);
+
+        //to merge, simply make a unitig graph from bcalm.unitigs.shaved.gfa and then convert it to gfa
+        cout << "Creating shaved unitig graph\n";
+        string command_unitig_graph = path_to_bcalm_src + "/bcalm/build/bcalm -in " + tmp_fasta + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out tmp_324 > bcalm.log 2>&1";
+        auto unitig_graph_ok = system(command_unitig_graph.c_str());
+        cout << "launching unitig graph\n" << command_unitig_graph << endl;
+        if (unitig_graph_ok != 0){
+            cerr << "ERROR: unitig graph failed in merge_adjacent_contigs_BCALM\n";
+            cout << command_unitig_graph << endl;
+            exit(1);
+        }
+
+        //convert to gfa
+        cout << "Launching convertToGFA\n";
+        string convert_command2 = path_to_bcalm_src + "/bcalm/scripts/convertToGFA.py tmp_324.unitigs.fa " + gfa_out + " " + std::to_string(k);
+        system(convert_command2.c_str());
+
+        //remove tmp files
+        string remove_tmp_files = "rm tmp_324*";
+        system(remove_tmp_files.c_str());
+}
+
+void gfa_to_fasta(string gfa, string fasta){   
+        ifstream input(gfa);
+        ofstream out(fasta);
+    
+        string line;
+        while (std::getline(input, line))
+        {
+            if (line[0] == 'S')
+            {
+                string name;
+                string dont_care;
+                string sequence;
+                std::stringstream ss(line);
+                ss >> dont_care >> name >> sequence;
+                
+                out << ">" << name << "\n";
+                out << sequence << "\n";
+            }
+        }
+}
+
+/**
+ * @brief Given a gfa file and coverage of contigs, append the dp:f: tag to the S lines of the gfa file, suppressing other dp tags or kc tags
+ * 
+ * @param gfa 
+ * @param coverages 
+ */
+void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::string, float>& coverages){
+
+    ifstream input(gfa);
+    ofstream out(gfa + ".tmp");
+    string line;
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            float coverage = 0;
+            if (coverages.find(name) != coverages.end()){
+                coverage = coverages[name];
+            }
+            out << "S\t" << name << "\t" << sequence << "\tDP:f:" << coverage << "\tLN:i:" << sequence.size() << "\n";
+        }
+        else{
+            out << line << "\n";
+        }
+    }
+    out.close();
+
+    //move the sorted file to the original file
+    std::string command = "mv " + gfa + ".tmp " + gfa;
+    system(command.c_str());
+
+}
+

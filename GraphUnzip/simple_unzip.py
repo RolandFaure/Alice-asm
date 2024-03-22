@@ -126,9 +126,9 @@ def simple_unzip(segments, names, gafFile) :
                 nbOfDeadEndsNow += 1
 
     #if too many dead ends where created, it means that the graph cannot be untangled properly
-    if nbOfDeadEndsNow > len(segments)/2 and nbOfDeadEndsNow > nbOfDeadEnds * 2 :
-        print("WARNING: the graph cannot be untangled properly. That is probably because the reads are too short. The result remains valid, albeit less contiguous.")
-        return old_segments
+    # if nbOfDeadEndsNow > len(segments)/2 and nbOfDeadEndsNow > nbOfDeadEnds * 2 :
+    #     print("WARNING: the graph cannot be untangled properly. That is probably because the reads are too short. The result remains valid, albeit less contiguous.")
+    #     return old_segments
 
     on_which_paths_is_this_contig = {}
     for s in segments :
@@ -247,13 +247,13 @@ def simple_unzip(segments, names, gafFile) :
                         pair_to_paths[pair].append(p)
 
 
-                # if segment.names == ['1657--1'] :
+                # if segment.names == ['460'] :
                 #     print("Looking at segment ", segment.names, " ", pairs, " ", [(segment.links[0][i[0]].names, segment.links[1][i[1]].names) for i in pairs])
-                    # print("qldjl present on ",[paths[i[0]] for i in on_which_paths_is_this_contig[segment]])
-                    # for i in on_which_paths_is_this_contig[segment] :
-                    #     print("idc : ", paths[i[0]])
+                #     print("qldjl present on ",[paths[i[0]] for i in on_which_paths_is_this_contig[segment]])
+                #     for i in on_which_paths_is_this_contig[segment] :
+                #         print("idc : ", paths[i[0]])
 
-                # if segment.names == ['5101--1'] :
+                # if segment.names == ['130'] :
                 #     print("Pairs off ccncnc : ", segment.names, " ", pairs)
 
                 #test if the pairs are enough to support a duplication

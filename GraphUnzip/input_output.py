@@ -267,7 +267,9 @@ def get_contig_GFA(gfaFile, contig, contigOffset):
         if len(sline) >= 3 and sline[0] == 'S' and (contig in sline[1]):
             extra_tags = ''
             depth = ''
-            tags = sline[3].split()
+            tags = ''
+            if len(sline) > 3 :
+                tags = sline[3].split()
             for f in tags :
                 if 'dp' in f or 'DP' in f or 'KC' in f or 'RC' in f:
                     depth = f
@@ -469,7 +471,7 @@ def export_to_GFA(listOfSegments, copies, gfaFile="", exportFile="results/newAss
                 trimmed_ends = segment.get_trim()
                 sequence = sequence[trimmed_ends[0]:len(sequence)-trimmed_ends[0]-trimmed_ends[1]]
                     
-                if fullDepth == 0 or len(sequence) == 0:
+                if len(sequence) == 0:
                     f.write(sequence + "\n")
                 else :
                     newdepth = str(fullDepth/len(sequence))

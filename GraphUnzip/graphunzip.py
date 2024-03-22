@@ -314,8 +314,8 @@ def main():
         someLength0 = 0
         for s in segments :
             if s.depth == 0:
-                if reliableCoverage :
-                    print("WARNING: contig ", s.names, " has no readable coverage information or coverage=0. If this is a widespread issue, please use --conservative mode")
+                # if reliableCoverage :
+                #     print("WARNING: contig ", s.names, " has no readable coverage information or coverage=0. If this is a widespread issue, please use --conservative mode")
                 someDepth0 += 1
             if s.length == 0 :
                 s.length1()
@@ -392,7 +392,7 @@ def main():
 
             segments = simple_unzip(segments, names, lrFile)
 
-            if merge or True:
+            if merge :
                 print("Merging contigs that can be merged...")
                 merge_adjacent_contigs(segments)
 
