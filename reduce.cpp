@@ -26,8 +26,8 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1.1";
-string date = "2024-01-31";
+string version = "0.1.2";
+string date = "2024-03-22";
 string author = "Roland Faure";
 
 /**
@@ -161,58 +161,58 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
             std::string kmer = string(km, 'N');
             string rkmer;
             while (nth.roll()) {        
-                // if ( pos < line.size() - k && nth.hashes()[0] % compression == 0){
-                //     // cout << "hash of " << line.substr(pos, k) << " is " << nth.hashes()[0] << "\n";
-                //     // exit(1);
-                //     positions_sampled.push_back(pos+context_length);
-                //     kmer = kmer.substr(1,kmer.size()-1) + line[pos+context_length];
-                //     rkmer = reverse_complement(kmer); 
+                if ( pos < line.size() - k && nth.hashes()[0] % compression == 0){
+                    // cout << "hash of " << line.substr(pos, k) << " is " << nth.hashes()[0] << "\n";
+                    // exit(1);
+                    positions_sampled.push_back(pos+context_length);
+                    kmer = kmer.substr(1,kmer.size()-1) + line[pos+context_length];
+                    rkmer = reverse_complement(kmer); 
 
-                //     if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
+                    if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
                         
-                //         string canonical_kmer = min(kmer, rkmer);
+                        string canonical_kmer = min(kmer, rkmer);
 
-                //         if (kmer_count.find(canonical_kmer) == kmer_count.end()){
-                //             kmer_count[canonical_kmer] = 0;
-                //             kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
-                //             kmers[rkmer] = {"",""};
-                //         }
+                        if (kmer_count.find(canonical_kmer) == kmer_count.end()){
+                            kmer_count[canonical_kmer] = 0;
+                            kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
+                            kmers[rkmer] = {"",""};
+                        }
 
-                //         kmer_count[canonical_kmer]++;
-                //         if (kmer_count[canonical_kmer] == 1){
-                //             string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                //             string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                //             kmers[kmer] = {central_seq, full_seq};
-                //             //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
-                //             // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                //             // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                //             kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
-                //         }
-                //         else if (kmer_count[canonical_kmer] > 1){
+                        kmer_count[canonical_kmer]++;
+                        if (kmer_count[canonical_kmer] == 1){
+                            string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
+                            string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                            kmers[kmer] = {central_seq, full_seq};
+                            //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
+                            // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
+                            // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
+                            kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
+                        }
+                        else if (kmer_count[canonical_kmer] > 1){
 
-                //             if (!confirmed_kmers[canonical_kmer]){
-                //                 string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                //                 if (kmers[kmer].first != central_seq){
-                //                     string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                //                     kmers[kmer].first = central_seq;
-                //                     kmers[kmer].second = full_seq;
-                //                     // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                //                     // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                //                     kmers[rkmer].first = reverse_complement(central_seq);
-                //                     kmers[rkmer].second = reverse_complement(full_seq);
-                //                 }
-                //                 else{
-                //                     confirmed_kmers[canonical_kmer] = true;
-                //                 }
-                //             }
-                //         }
-                //     }
-                // }                
+                            if (!confirmed_kmers[canonical_kmer]){
+                                string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
+                                if (kmers[kmer].first != central_seq){
+                                    string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                    kmers[kmer].first = central_seq;
+                                    kmers[kmer].second = full_seq;
+                                    // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
+                                    // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
+                                    kmers[rkmer].first = reverse_complement(central_seq);
+                                    kmers[rkmer].second = reverse_complement(full_seq);
+                                }
+                                else{
+                                    confirmed_kmers[canonical_kmer] = true;
+                                }
+                            }
+                        }
+                    }
+                }                
                 
-                // pos++;
-                // if (pos+k > line.size()){
-                //     break; //or else it will roll to the beginning of the sequence
-                // }
+                pos++;
+                if (pos+k > line.size()){
+                    break; //or else it will roll to the beginning of the sequence
+                }
             }
         }
     }
@@ -532,8 +532,6 @@ int main(int argc, char** argv)
     cout << "Decompressing\n";
     string decompressed_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
     expand("bcalm.unitigs.shaved.merged.unzipped.gfa", decompressed_file, km, values_of_k[values_of_k.size()-1]-1, kmers);
-    cout << "ljdfm" << endl;
-    exit(0);
 
     //test pop_and_shave_homopolymer_errors
     string pop_and_shave_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.pop_and_shaved.gfa";
