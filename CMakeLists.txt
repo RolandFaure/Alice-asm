@@ -19,8 +19,8 @@ set(TARGET_SRC
 
 file(GLOB SOURCE "reduce.cpp" "basic_graph_manipulation.cpp")
 add_executable(aliceasm ${SOURCE})
-target_include_directories(aliceasm PRIVATE ntHash/build/include)
-target_link_libraries(aliceasm PRIVATE ${CMAKE_SOURCE_DIR}/ntHash/build/lib/libnthash.a)
+# target_include_directories(aliceasm PRIVATE ntHash/build/include)
+# target_link_libraries(aliceasm PRIVATE ${CMAKE_SOURCE_DIR}/ntHash/build/lib/libnthash.a)
 target_compile_options (aliceasm PRIVATE -g)
 target_compile_options (aliceasm PRIVATE -lm)
 target_compile_options (aliceasm PRIVATE -std=c++17)

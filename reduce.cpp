@@ -10,8 +10,6 @@
 #include <chrono>
 #include <thread>
 
-#include <nthash/nthash.hpp>
-
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
 
@@ -26,12 +24,35 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1.2";
-string date = "2024-03-22";
+string version = "0.1.3";
+string date = "2024-03-26";
 string author = "Roland Faure";
 
+
+//rol(x,k) := x << k | x >> (64-k)
+void rol(uint64_t &x, int k){
+    x = (x << k) | (x >> (64-k));
+}
+void ror(uint64_t &x, int k){
+    x = (x >> k) | (x << (64-k));
+}
+
+//f(s[i+1,i+k]) = rol(f(s[i,i+k-1]),1) ^ rol(h(s[i]),k)  ^ h(s[i+k])
+void roll_forward(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
+    rol(hash, 1);
+    rol(old_char, k);
+    hash = hash ^ old_char ^ new_char;
+}
+//r(s[i+1,i+k]) = ror(r(s[i,i+k-1]),1) ^ ror(h(~s[i]),1) ^ rol(h(~s[i+k]),k-1)
+void roll_reverse(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
+    ror(hash, 1);
+    ror(old_char, 1);
+    rol(new_char, k-1);
+    hash = hash ^ old_char ^ new_char;
+}
+
 /**
- * @brief 
+ * @brief reduce the input function, but manually coding the nthash
  * 
  * @param input_file 
  * @param output_file 
@@ -54,15 +75,21 @@ void reduce(string input_file, string output_file, int context_length, int compr
 
     std::ofstream out(output_file);
 
-    int k = 2*context_length + 1;
-    string seed = string(context_length, '1') + "0" + string(context_length, '1');
-    vector<string> seeds = {seed};
+    //go through the fasta file and compute the hash of all the kmer using homecoded ntHash
+    auto hash_A = 0x3c8bfbb395c60474;
+    auto hash_C = 0x3193c18562a02b4c;
+    auto hash_G = 0x20323ed082572324;
+    auto hash_T = 0x295549f54be24456;
 
-    //go through the fasta file and compute the hash of all the kmer using ntHash
+    unordered_map<char, uint64_t> char_to_hash = {{'A', hash_A}, {'C', hash_C}, {'G', hash_G}, {'T', hash_T}};
+    unordered_map<char, uint64_t> char_to_hash_reverse = {{'A', hash_T}, {'C', hash_G}, {'G', hash_C}, {'T', hash_A}};
+
     std::string line;
 
     long identical = 0;
     long different = 0;
+
+    int k = 2*context_length + 1;
 
     int seq_num = 0;
     while (std::getline(input, line))
@@ -76,20 +103,25 @@ void reduce(string input_file, string output_file, int context_length, int compr
             seq_num++;
         }
         else{
+            //let's launch the foward and reverse rolling hash
+            uint64_t seed = 0;
+            uint64_t hash_foward = seed;
+            uint64_t hash_reverse = seed;
 
-            nthash::SeedNtHash nth(line, seeds, 1, k);
-            vector<int> positions_sampled (0);
-            int pos = 0;
-            std::string kmer = string(km, 'N');
-            string rkmer;
-            while (nth.roll()) {        
-                // cout << "hash of " << line.substr(pos, k) << " is " << nth.hashes()[0] << "\n";
-                if ( pos < line.size() - k && nth.hashes()[0] % compression == 0){
-                    out << line[pos+context_length];
+            for (auto pos = 0 ; pos < line.size() ; pos++){
+                if (pos>=k-1){
+                    //roll the hash
+                    roll_forward(hash_foward, char_to_hash[line[pos]], char_to_hash[line[pos-k]], k);
+                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], char_to_hash_reverse[line[pos-k]], k);
+                    // cout << "hash_foward " << line.substr(pos-km+1,km) << " " << hash_foward << " hash_reverse " << hash_reverse << " " << line[pos-context_length] << endl;
+
+                    if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
+                        out << line[pos-context_length];
+                    }
                 }
-                pos++;
-                if (pos+k > line.size()){
-                    break; //or else it will roll to the beginning of the sequence
+                else{
+                    roll_forward(hash_foward, char_to_hash[line[pos]], 0, k);
+                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], 0, k);
                 }
             }
             out << "\n";
@@ -98,7 +130,6 @@ void reduce(string input_file, string output_file, int context_length, int compr
     input.close();
     out.close();
 }
-
 
 /**
  * @brief 
@@ -138,8 +169,14 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
     unordered_map<string, bool> confirmed_kmers;
 
     int k = 2*context_length + 1;
-    string seed = string(context_length, '1') + "0" + string(context_length, '1');
-    vector<string> seeds = {seed};
+    //go through the fasta file and compute the hash of all the kmer using homecoded ntHash
+    auto hash_A = 0x3c8bfbb395c60474;
+    auto hash_C = 0x3193c18562a02b4c;
+    auto hash_G = 0x20323ed082572324;
+    auto hash_T = 0x295549f54be24456;
+
+    unordered_map<char, uint64_t> char_to_hash = {{'A', hash_A}, {'C', hash_C}, {'G', hash_G}, {'T', hash_T}};
+    unordered_map<char, uint64_t> char_to_hash_reverse = {{'A', hash_T}, {'C', hash_G}, {'G', hash_C}, {'T', hash_A}};
 
     //go through the fasta file and compute the hash of all the kmer using ntHash
     int seq_num = 0;
@@ -155,64 +192,70 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
         }
         else{
 
-            nthash::SeedNtHash nth(line, seeds, 1, k);
             vector<int> positions_sampled (0);
             int pos = 0;
             std::string kmer = string(km, 'N');
             string rkmer;
-            while (nth.roll()) {        
-                if ( pos < line.size() - k && nth.hashes()[0] % compression == 0){
-                    // cout << "hash of " << line.substr(pos, k) << " is " << nth.hashes()[0] << "\n";
-                    // exit(1);
-                    positions_sampled.push_back(pos+context_length);
-                    kmer = kmer.substr(1,kmer.size()-1) + line[pos+context_length];
-                    rkmer = reverse_complement(kmer); 
+            uint64_t seed = 0;
+            uint64_t hash_foward = seed;
+            uint64_t hash_reverse = seed;
+            for (auto pos = 0 ; pos < line.size() ; pos++){
+                if (pos>= 2*context_length ){
+                    //roll the hash
+                    roll_forward(hash_foward, char_to_hash[line[pos]], char_to_hash[line[pos-k]], k);
+                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], char_to_hash_reverse[line[pos-k]], k);
 
-                    if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
+                    if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
                         
-                        string canonical_kmer = min(kmer, rkmer);
+                        positions_sampled.push_back(pos-context_length);
+                        kmer = kmer.substr(1,kmer.size()-1) + line[pos-context_length];
+                        rkmer = reverse_complement(kmer); 
 
-                        if (kmer_count.find(canonical_kmer) == kmer_count.end()){
-                            kmer_count[canonical_kmer] = 0;
-                            kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
-                            kmers[rkmer] = {"",""};
-                        }
+                        if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
+                            
+                            string canonical_kmer = min(kmer, rkmer);
 
-                        kmer_count[canonical_kmer]++;
-                        if (kmer_count[canonical_kmer] == 1){
-                            string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                            string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                            kmers[kmer] = {central_seq, full_seq};
-                            //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
-                            // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                            // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                            kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
-                        }
-                        else if (kmer_count[canonical_kmer] > 1){
+                            if (kmer_count.find(canonical_kmer) == kmer_count.end()){
+                                kmer_count[canonical_kmer] = 0;
+                                kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
+                                kmers[rkmer] = {"",""};
+                            }
 
-                            if (!confirmed_kmers[canonical_kmer]){
+                            kmer_count[canonical_kmer]++;
+                            if (kmer_count[canonical_kmer] == 1){
                                 string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                                if (kmers[kmer].first != central_seq){
-                                    string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                                    kmers[kmer].first = central_seq;
-                                    kmers[kmer].second = full_seq;
-                                    // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                                    // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                                    kmers[rkmer].first = reverse_complement(central_seq);
-                                    kmers[rkmer].second = reverse_complement(full_seq);
-                                }
-                                else{
-                                    confirmed_kmers[canonical_kmer] = true;
+                                string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                kmers[kmer] = {central_seq, full_seq};
+                                //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
+                                // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
+                                // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
+                                kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
+                            }
+                            else if (kmer_count[canonical_kmer] > 1){
+
+                                if (!confirmed_kmers[canonical_kmer]){
+                                    string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
+                                    if (kmers[kmer].first != central_seq){
+                                        string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                        kmers[kmer].first = central_seq;
+                                        kmers[kmer].second = full_seq;
+                                        // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
+                                        // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
+                                        kmers[rkmer].first = reverse_complement(central_seq);
+                                        kmers[rkmer].second = reverse_complement(full_seq);
+                                    }
+                                    else{
+                                        confirmed_kmers[canonical_kmer] = true;
+                                    }
                                 }
                             }
                         }
-                    }
-                }                
-                
-                pos++;
-                if (pos+k > line.size()){
-                    break; //or else it will roll to the beginning of the sequence
+                    }                                    
                 }
+                else{
+                    roll_forward(hash_foward, char_to_hash[line[pos]], 0, k);
+                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], 0, k);
+                }       
             }
         }
     }
@@ -430,8 +473,17 @@ int main(int argc, char** argv)
     // exit(0);
 
     unordered_map<string, pair<string,string>> kmers;
+    //time the next function
     reduce(input_file, compressed_file, context_length, compression, km, kmers);
     cout << "finished reducing\n";
+
+    // start = std::chrono::high_resolution_clock::now();
+    // go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers);
+    // end = std::chrono::high_resolution_clock::now();
+    // elapsed_seconds = end-start;
+    // cout << "Time to decompress: " << elapsed_seconds.count() << "s\n";
+    // cout << "finished decompressing\n";
+    // exit(0);
 
     //iterative k to have good contiguity
     for (auto kmer_len: values_of_k){
@@ -528,6 +580,7 @@ int main(int argc, char** argv)
     //now let's parse the gfa file and decompress it
     kmers = unordered_map<string, pair<string,string>>();
     cout << "Going through the reads again\n";
+    //time the next function
     go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers);
     cout << "Decompressing\n";
     string decompressed_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
