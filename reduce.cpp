@@ -24,35 +24,13 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1.3";
-string date = "2024-03-26";
+string version = "0.1.4";
+string date = "2024-03-27";
 string author = "Roland Faure";
 
 
-//rol(x,k) := x << k | x >> (64-k)
-void rol(uint64_t &x, int k){
-    x = (x << k) | (x >> (64-k));
-}
-void ror(uint64_t &x, int k){
-    x = (x >> k) | (x << (64-k));
-}
-
-//f(s[i+1,i+k]) = rol(f(s[i,i+k-1]),1) ^ rol(h(s[i]),k)  ^ h(s[i+k])
-void roll_forward(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
-    rol(hash, 1);
-    rol(old_char, k);
-    hash = hash ^ old_char ^ new_char;
-}
-//r(s[i+1,i+k]) = ror(r(s[i,i+k-1]),1) ^ ror(h(~s[i]),1) ^ rol(h(~s[i+k]),k-1)
-void roll_reverse(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
-    ror(hash, 1);
-    ror(old_char, 1);
-    rol(new_char, k-1);
-    hash = hash ^ old_char ^ new_char;
-}
-
 /**
- * @brief reduce the input function, but manually coding the nthash
+ * @brief MSR the input sequencing
  * 
  * @param input_file 
  * @param output_file 
@@ -75,15 +53,6 @@ void reduce(string input_file, string output_file, int context_length, int compr
 
     std::ofstream out(output_file);
 
-    //go through the fasta file and compute the hash of all the kmer using homecoded ntHash
-    auto hash_A = 0x3c8bfbb395c60474;
-    auto hash_C = 0x3193c18562a02b4c;
-    auto hash_G = 0x20323ed082572324;
-    auto hash_T = 0x295549f54be24456;
-
-    unordered_map<char, uint64_t> char_to_hash = {{'A', hash_A}, {'C', hash_C}, {'G', hash_G}, {'T', hash_T}};
-    unordered_map<char, uint64_t> char_to_hash_reverse = {{'A', hash_T}, {'C', hash_G}, {'G', hash_C}, {'T', hash_A}};
-
     std::string line;
 
     long identical = 0;
@@ -104,24 +73,15 @@ void reduce(string input_file, string output_file, int context_length, int compr
         }
         else{
             //let's launch the foward and reverse rolling hash
-            uint64_t seed = 0;
-            uint64_t hash_foward = seed;
-            uint64_t hash_reverse = seed;
+            uint64_t hash_foward = 0;
+            uint64_t hash_reverse = 0;
+            size_t pos = 0;
 
-            for (auto pos = 0 ; pos < line.size() ; pos++){
-                if (pos>=k-1){
-                    //roll the hash
-                    roll_forward(hash_foward, char_to_hash[line[pos]], char_to_hash[line[pos-k]], k);
-                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], char_to_hash_reverse[line[pos-k]], k);
-                    // cout << "hash_foward " << line.substr(pos-km+1,km) << " " << hash_foward << " hash_reverse " << hash_reverse << " " << line[pos-context_length] << endl;
-
+            while (roll(hash_foward, hash_reverse, k, line, pos)){
+                if (pos>=k){
                     if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
-                        out << line[pos-context_length];
+                        out << line[pos-context_length-1];
                     }
-                }
-                else{
-                    roll_forward(hash_foward, char_to_hash[line[pos]], 0, k);
-                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], 0, k);
                 }
             }
             out << "\n";
@@ -130,6 +90,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
     input.close();
     out.close();
 }
+
 
 /**
  * @brief 
@@ -169,16 +130,8 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
     unordered_map<string, bool> confirmed_kmers;
 
     int k = 2*context_length + 1;
+
     //go through the fasta file and compute the hash of all the kmer using homecoded ntHash
-    auto hash_A = 0x3c8bfbb395c60474;
-    auto hash_C = 0x3193c18562a02b4c;
-    auto hash_G = 0x20323ed082572324;
-    auto hash_T = 0x295549f54be24456;
-
-    unordered_map<char, uint64_t> char_to_hash = {{'A', hash_A}, {'C', hash_C}, {'G', hash_G}, {'T', hash_T}};
-    unordered_map<char, uint64_t> char_to_hash_reverse = {{'A', hash_T}, {'C', hash_G}, {'G', hash_C}, {'T', hash_A}};
-
-    //go through the fasta file and compute the hash of all the kmer using ntHash
     int seq_num = 0;
     while (std::getline(input, line))
     {
@@ -193,22 +146,19 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
         else{
 
             vector<int> positions_sampled (0);
-            int pos = 0;
+            size_t pos = 0;
             std::string kmer = string(km, 'N');
             string rkmer;
             uint64_t seed = 0;
             uint64_t hash_foward = seed;
             uint64_t hash_reverse = seed;
-            for (auto pos = 0 ; pos < line.size() ; pos++){
-                if (pos>= 2*context_length ){
-                    //roll the hash
-                    roll_forward(hash_foward, char_to_hash[line[pos]], char_to_hash[line[pos-k]], k);
-                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], char_to_hash_reverse[line[pos-k]], k);
+            while (roll(hash_foward, hash_reverse, k, line, pos)){
+                if (pos>=k){
 
                     if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
                         
-                        positions_sampled.push_back(pos-context_length);
-                        kmer = kmer.substr(1,kmer.size()-1) + line[pos-context_length];
+                        positions_sampled.push_back(pos-context_length-1);
+                        kmer = kmer.substr(1,kmer.size()-1) + line[pos-context_length-1];
                         rkmer = reverse_complement(kmer); 
 
                         if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
@@ -250,12 +200,8 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                                 }
                             }
                         }
-                    }                                    
-                }
-                else{
-                    roll_forward(hash_foward, char_to_hash[line[pos]], 0, k);
-                    roll_reverse(hash_reverse, char_to_hash_reverse[line[pos]], 0, k);
-                }       
+                    }                              
+                }     
             }
         }
     }
@@ -465,15 +411,8 @@ int main(int argc, char** argv)
     }
 
     string compressed_file = input_file + ".compressed";
-
-    // string gaf_file2 = "bcalm.unitigs.shaved.merged.unzipped.gaf";
-    // unordered_map<string,float> coverages2;
-    // create_gaf_from_unitig_graph("bcalm.unitigs.shaved.merged.gfa", 71, compressed_file, gaf_file2, coverages2);
-    // cout << "EXXXI" << endl;
-    // exit(0);
-
+    
     unordered_map<string, pair<string,string>> kmers;
-    //time the next function
     reduce(input_file, compressed_file, context_length, compression, km, kmers);
     cout << "finished reducing\n";
 

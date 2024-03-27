@@ -1,9 +1,6 @@
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
 
-#include <nthash/nthash.hpp>
-
-
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -584,7 +581,7 @@ struct Path{
  */
 void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string gaf_out, robin_hood::unordered_map<std::string, float>& coverages){
     
-    unordered_flat_map<unsigned long, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
+    unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
     unordered_flat_map<string, int> length_of_contigs;
 
     ifstream input(unitig_graph);
@@ -600,13 +597,13 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             ss >> dont_care >> name >> sequence;
             length_of_contigs[name] = sequence.size();
 
-            nthash::NtHash nth(sequence, 1, km);
-            int pos = 0;
-            while (nth.roll()) {   
-                kmers_to_contigs[nth.get_forward_hash()] = make_pair(name, pos);
-                pos++;
-                if (pos+km > line.size()){
-                    break; //or else it will roll to the beginning of the sequence
+            uint64_t hash_foward = -1;
+            size_t pos = 0;
+            // (uint64_t &foward_hash, int k, std::string &seq, size_t &pos )
+            while (roll_f(hash_foward, km, sequence, pos)){
+                
+                if (pos>=km){
+                    kmers_to_contigs[hash_foward] = make_pair(name, pos-km);
                 }
             }
         }
@@ -627,6 +624,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             cout << "aligned " << nb_reads << " on the graph, taking on average " << std::chrono::duration_cast<std::chrono::microseconds>(time_now2 - time_now).count() / (nb_reads+1) << " us per read\r";
         }
         nb_reads++;
+        // cout << "mljqdklmjm " << line << endl;
 
         if (line[0] == '@' || line[0] == '>')
         {
@@ -643,17 +641,28 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             if (line.size() < km){
                 continue;
             }
-            nthash::NtHash nth(line, 1, km);
+
+            uint64_t hash_foward = 0;
+            uint64_t hash_reverse = 0;
+
             int pos_to_look_at = 0;
-            int pos_nth = 0;
-            while (nth.roll()) {
-                if (pos_nth+km > line.size()){
-                    break; //or else it will roll to the beginning of the sequence
-                }
-                if (pos_nth == pos_to_look_at){
-                    
-                    unsigned long kmer = nth.get_forward_hash();  
-                    // cout << "looking at pos " << pos_to_look_at << " and found " << (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()) << " and " << (kmers_to_contigs.find(nth.get_reverse_hash()) != kmers_to_contigs.end()) << "\n";
+            size_t pos = 0;
+            while(roll(hash_foward, hash_reverse, km, line, pos)){
+                if (pos-km == pos_to_look_at){
+
+                    unsigned long kmer = hash_foward; 
+                    if (name.substr(0, 16) == "SRR21295163.9343"){
+                        cout << "looking at pos " << pos_to_look_at << " " << hash_foward << " " << line.substr(pos-km, km) << " and found " << (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()) << " and " << (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end());
+                        if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){
+                            cout << " in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second << "\n";
+                        }
+                        else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){
+                            cout << " in " << kmers_to_contigs[hash_reverse].first << " at pos " << kmers_to_contigs[hash_reverse].second << "\n";
+                        }
+                        else{
+                            cout << "\n";
+                        }
+                    }
 
                     if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){ //foward kmer
                         if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == true){
@@ -666,7 +675,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                             if (coverages.find(contig) == coverages.end()){
                                 coverages[contig] = 0;
                             }
-                            coverages[contig]+= min(1.0, (line.size()- pos_nth) / (double)length_of_contigs[contig]);
+                            coverages[contig]+= min(1.0, (line.size()- pos + km) / (double)length_of_contigs[contig]);
                         }
                         //skip the next kmers
                         int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second - km;
@@ -675,21 +684,21 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         }
                         // cout << "found in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second <<" " << pos_nth << "\n";
                     }
-                    else if (kmers_to_contigs.find(nth.get_reverse_hash()) != kmers_to_contigs.end()){ //reverse kmer
-                        if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[nth.get_reverse_hash()].first && p.orientations[p.orientations.size()-1] == false){
+                    else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){ //reverse kmer
+                        if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[hash_reverse].first && p.orientations[p.orientations.size()-1] == false){
                             //same contig, do nothing
                         }
                         else{
-                            string contig = kmers_to_contigs[nth.get_reverse_hash()].first;
+                            string contig = kmers_to_contigs[hash_reverse].first;
                             p.contigs.push_back(contig);
                             p.orientations.push_back(false);
                             if (coverages.find(contig) == coverages.end()){
                                 coverages[contig] = 0;
                             }
-                            coverages[contig]+= min(1.0, (line.size()- pos_nth) / (double)length_of_contigs[contig]);
+                            coverages[contig]+= min(1.0, (line.size()- pos + km) / (double)length_of_contigs[contig]);
                         }
                         //skip the next kmers
-                        int length_of_contig_left = kmers_to_contigs[nth.get_reverse_hash()].second;
+                        int length_of_contig_left = kmers_to_contigs[hash_reverse].second;
                         if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
                             pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
                         }
@@ -697,8 +706,6 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                     }
                     pos_to_look_at++;
                 }
-
-                pos_nth++;
             }
 
             if (p.contigs.size() > 0){
@@ -725,6 +732,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     }
 
 }
+
 
 
 void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm_src){
