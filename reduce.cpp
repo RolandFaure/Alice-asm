@@ -9,9 +9,12 @@
 #include <unordered_set>
 #include <chrono>
 #include <thread>
+#include <omp.h> //for efficient parallelization
+
 
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
+#include "clipp.h"
 
 using std::cout;
 using std::endl;
@@ -24,10 +27,9 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1.4";
-string date = "2024-03-27";
+string version = "0.1.8";
+string date = "2024-04-03";
 string author = "Roland Faure";
-
 
 /**
  * @brief MSR the input sequencing
@@ -40,55 +42,87 @@ string author = "Roland Faure";
  * @param min_abundance 
  * @param kmers maps a kmer to the uncompressed seq
  **/
-void reduce(string input_file, string output_file, int context_length, int compression, int km, unordered_map<string, pair<string,string> > &kmers) {
+void reduce(string input_file, string output_file, int context_length, int compression, int num_threads) {
 
-    std::ifstream input(input_file);
+    int k = 2*context_length + 1;
+
+    std::ifstream input(input_file,std::ios::binary | std::ios::ate);
     if (!input.is_open())
     {
         std::cout << "Could not open file " << input_file << std::endl;
         exit(1);
     }
-    unordered_map<string, int> kmer_count;
-    unordered_map<string, bool> confirmed_kmers;
 
+    std::streamoff file_size = input.tellg();
+    unsigned long long size_of_chunk = 100000000;
+    input.close();
+
+    //clear the output file
     std::ofstream out(output_file);
+    out.close();
 
-    std::string line;
+    unsigned long long int seq_num = 0;
+    //parallelize on num_threads threads
+    omp_set_num_threads(num_threads);
+    #pragma omp parallel for
+    for (int chunk = 0 ; chunk <= file_size/size_of_chunk ; chunk++){
 
-    long identical = 0;
-    long different = 0;
+        std::ifstream input(input_file);
+        input.seekg(chunk*size_of_chunk);
+    
+        string output_file_chunk = output_file + "_"+ std::to_string(chunk);
+        std::ofstream out(output_file_chunk);
+        std::string line;
+        bool next_line_is_seq = false;
 
-    int k = 2*context_length + 1;
-
-    int seq_num = 0;
-    while (std::getline(input, line))
-    {
-        if (line[0] == '>')
+        while (std::getline(input, line))
         {
-            out << line << "\n";
-            if (seq_num % 100 == 0){
-                cout << "Compressing read " << seq_num << "\r";
-            }
-            seq_num++;
-        }
-        else{
-            //let's launch the foward and reverse rolling hash
-            uint64_t hash_foward = 0;
-            uint64_t hash_reverse = 0;
-            size_t pos = 0;
-
-            while (roll(hash_foward, hash_reverse, k, line, pos)){
-                if (pos>=k){
-                    if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
-                        out << line[pos-context_length-1];
+            if (line[0] == '>')
+            {
+                out << line << "\n";
+                if (seq_num % 1000 == 0){
+                    #pragma omp critical
+                    {
+                        cout << "Compressing read " << seq_num << "\r" << std::flush;
                     }
                 }
+                seq_num++;
+                next_line_is_seq = true;
             }
-            out << "\n";
+            else if (next_line_is_seq){
+                //let's launch the foward and reverse rolling hash
+                uint64_t hash_foward = 0;
+                uint64_t hash_reverse = 0;
+                size_t pos_end = 0;
+                long pos_begin = -k;
+
+                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, true)){
+                    if (pos_begin>=0){
+                        if (hash_foward<hash_reverse && hash_foward % compression == 0){
+                            out << "ACGT"[(hash_foward/compression)%4];
+                        }
+                        else if (hash_foward>=hash_reverse && hash_reverse % compression == 0){
+                            out << "TGCA"[(hash_reverse/compression)%4];
+                        }
+                    }
+                }
+                out << "\n";
+            }
+            //if we went beyond chunk+1 * size_of_chunk, we can stop
+            if (input.tellg() > (chunk+1)*size_of_chunk){
+                break;
+            }
+        }
+        input.close();
+        out.close();
+
+        //append the chunk to the final output
+        #pragma omp critical
+        {
+            system(("cat " + output_file_chunk + " >> " + output_file).c_str());
+            system(("rm " + output_file_chunk).c_str());
         }
     }
-    input.close();
-    out.close();
 }
 
 
@@ -102,13 +136,13 @@ void reduce(string input_file, string output_file, int context_length, int compr
  * @param km size of the kmer used to do the expansion
  * @param kmers Associates a compressed sequence to its central uncompressed part and its full uncompressed part
  */
-void go_through_the_reads_again(string reads_file, string assemblyFile, int context_length, int compression, int km, unordered_map<string, pair<string,string>>& kmers){
+void go_through_the_reads_again(string reads_file, string assemblyFile, int context_length, int compression, int km, unordered_map<string, pair<string,string>>& kmers, int num_threads){
 
     unordered_set<string> kmers_in_assembly;
 
-    ifstream input(assemblyFile);
+    ifstream input_asm(assemblyFile);
     string line;
-    while (std::getline(input, line))
+    while (std::getline(input_asm, line))
     {
         if (line[0] == 'S')
         {
@@ -123,87 +157,123 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
             }
         }
     }
-    input.close();
+    input_asm.close();
 
-    input.open(reads_file);
     unordered_map<string, int> kmer_count;
     unordered_map<string, bool> confirmed_kmers;
 
     int k = 2*context_length + 1;
 
+    ifstream input2(reads_file, std::ios::binary | std::ios::ate);
+    std::streamoff file_size = input2.tellg();
+    unsigned long long int size_of_chunk = 100000000;
+    input2.close();
+
     //go through the fasta file and compute the hash of all the kmer using homecoded ntHash
     int seq_num = 0;
-    while (std::getline(input, line))
-    {
-        if (line[0] == '>')
-        {
-            if (seq_num % 100 == 0){
-                cout << "Compressing read " << seq_num << "\r";
-                // cout << "nanaaaammmmma " << line << endl;
+    omp_set_num_threads(num_threads);
+    #pragma omp parallel for
+    for (int chunk = 0 ; chunk <= file_size/size_of_chunk ; chunk++){
+
+        std::ifstream input(reads_file);
+        input.seekg(chunk*size_of_chunk);
+    
+        std::string line;
+        bool next_line_is_seq = false;
+
+        while (std::getline(input, line)){
+
+            if (line[0] == '>')
+            {
+                if (seq_num % 1000 == 0){
+                    #pragma omp critical
+                    {
+                        cout << "Compressing read " << seq_num << "\r" << std::flush;
+                    }
+                    // cout << "nanaaaammmmma " << line << endl;
+                }
+                seq_num++;
+                next_line_is_seq = true;
             }
-            seq_num++;
-        }
-        else{
+            else if (next_line_is_seq){
+                //let's launch the foward and reverse rolling hash
+                uint64_t hash_foward = 0;
+                uint64_t hash_reverse = 0;
+                size_t pos_end = 0;
+                long pos_begin = -k;
 
-            vector<int> positions_sampled (0);
-            size_t pos = 0;
-            std::string kmer = string(km, 'N');
-            string rkmer;
-            uint64_t seed = 0;
-            uint64_t hash_foward = seed;
-            uint64_t hash_reverse = seed;
-            while (roll(hash_foward, hash_reverse, k, line, pos)){
-                if (pos>=k){
+                vector<int> positions_sampled (0);
+                std::string kmer = string(km, 'N');
+                string rkmer;
+                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, true)){
+                    if (pos_begin>=0){
 
-                    if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
+                        if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
+
+                            if (hash_foward<hash_reverse){
+                                kmer = kmer.substr(1,kmer.size()-1) + "ACGT"[(hash_foward/compression)%4];
+                            }
+                            else{
+                                kmer = kmer.substr(1,kmer.size()-1) + "TGCA"[(hash_reverse/compression)%4];
+                            }
                         
-                        positions_sampled.push_back(pos-context_length-1);
-                        kmer = kmer.substr(1,kmer.size()-1) + line[pos-context_length-1];
-                        rkmer = reverse_complement(kmer); 
+                            positions_sampled.push_back(pos_begin);
+                            rkmer = reverse_complement(kmer); 
 
-                        if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
-                            
-                            string canonical_kmer = min(kmer, rkmer);
+                            if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
+                                
+                                string canonical_kmer = min(kmer, rkmer);
 
-                            if (kmer_count.find(canonical_kmer) == kmer_count.end()){
-                                kmer_count[canonical_kmer] = 0;
-                                kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
-                                kmers[rkmer] = {"",""};
-                            }
+                                #pragma omp critical
+                                {
+                                    if (kmer_count.find(canonical_kmer) == kmer_count.end()){
+                                        kmer_count[canonical_kmer] = 0;
+                                        kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
+                                        kmers[rkmer] = {"",""};
+                                    }
 
-                            kmer_count[canonical_kmer]++;
-                            if (kmer_count[canonical_kmer] == 1){
-                                string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                                string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                                kmers[kmer] = {central_seq, full_seq};
-                                //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
-                                // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                                // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                                kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
-                            }
-                            else if (kmer_count[canonical_kmer] > 1){
-
-                                if (!confirmed_kmers[canonical_kmer]){
-                                    string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                                    if (kmers[kmer].first != central_seq){
+                                    kmer_count[canonical_kmer]++;
+                                    if (kmer_count[canonical_kmer] == 1){
+                                        string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
                                         string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                                        kmers[kmer].first = central_seq;
-                                        kmers[kmer].second = full_seq;
+                                        kmers[kmer] = {central_seq, full_seq};
+                                        //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
                                         // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
                                         // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                                        kmers[rkmer].first = reverse_complement(central_seq);
-                                        kmers[rkmer].second = reverse_complement(full_seq);
+                                        kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
                                     }
-                                    else{
-                                        confirmed_kmers[canonical_kmer] = true;
+                                    else if (kmer_count[canonical_kmer] > 1){
+
+                                        if (!confirmed_kmers[canonical_kmer]){
+                                            string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
+                                            if (kmers[kmer].first != central_seq){
+                                                string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                                kmers[kmer].first = central_seq;
+                                                kmers[kmer].second = full_seq;
+                                                // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
+                                                // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
+                                                kmers[rkmer].first = reverse_complement(central_seq);
+                                                kmers[rkmer].second = reverse_complement(full_seq);
+                                            }
+                                            else{
+                                                confirmed_kmers[canonical_kmer] = true;
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }                              
-                }     
+                    }
+                    
+                }
+                //if we went beyond chunk+1 * size_of_chunk, we can stop
+                if (input.tellg() > (chunk+1)*size_of_chunk){
+                    break;
+                }
             }
         }
+        input.close();
+
     }
 }
 
@@ -377,24 +447,73 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, u
     }
 }
 
-
 int main(int argc, char** argv)
 {
 
-    if (argc != 5)
-    {
-        std::cout << "Usage: " << argv[0] << " <input_file> <output_file> <context_length> <compression>" << std::endl;
-        return 1;
+    //use clipp to parse the command line
+    bool help = false;
+    string input_file, output_file;
+    string path_to_bcalm = "bcalm";
+    string path_to_minimap = "minimap2";
+    int min_abundance = 10;
+    int order = 201;
+    int compression = 20;
+    int num_threads = 1;
+    auto cli = (
+        clipp::required("-r", "--reads").doc("input file (fasta/q)") & clipp::opt_value("i", input_file),
+        clipp::required("-o", "--output").doc("output file (gfa)") & clipp::opt_value("o", output_file),
+        clipp::option("-t", "--threads").doc("number of threads [1]") & clipp::opt_value("t", num_threads),
+        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [10]") & clipp::opt_value("m", min_abundance),
+        clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
+        clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
+        clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
+        clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap),
+        clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
+
+    );
+
+
+    if(!clipp::parse(argc, argv, cli)) {
+        cout << "Could not parse the arguments" << endl;
+        cout << clipp::make_man_page(cli, argv[0]);
+        exit(1);
     }
+
+    if (order % 2 == 0){
+        cerr << "ERROR: order must be odd\n";
+        exit(1);
+    }
+    int context_length = (order-1)/2;
 
     string path_src = argv[0];
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /reduce
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
-    string input_file = argv[1];
-    string output_file = argv[2];
-    int context_length = atoi(argv[3]);
-    int compression = atoi(argv[4]);
-    int min_abundance = 10;
+
+    //check if the path to bcalm is correct
+    string command_bcalm = path_to_bcalm + " --help 2> /dev/null > /dev/null";
+    auto bcalm_ok = system(command_bcalm.c_str());
+    if (bcalm_ok != 0){
+        cerr << "ERROR: bcalm not found using command line " << command_bcalm << "\n";
+        cerr << "Please specify a valid path using --bcalm\n" << endl;
+        exit(1);
+    }
+    //check if the path to minimap is correct
+    string command = path_to_minimap + " --help 2> /dev/null > /dev/null";
+    auto ok = system(command.c_str());
+    if (ok != 0){
+        cerr << "ERROR: minimap2 not found using command line " << command << "\n";
+        cerr << "Please specify a valid path using --minimap2\n" << endl;
+        exit(1);
+    }
+
+    std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
+
+    // string decompressed_file2 = "bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
+    // //test pop_and_shave_homopolymer_errors
+    // string pop_and_shave_file2 = "bcalm.unitigs.shaved.merged.unzipped.decompressed.pop_and_shaved.gfa";
+    // remove_homopolymer_errors(decompressed_file2, pop_and_shave_file2, path_to_minimap);
+    // exit(0);
+
     int km = 31; //size of the kmer used to do the expansion. Must be >21
     vector<int> values_of_k = {31,41,71}; //size of the kmer used to build the graph (max >= km)
 
@@ -410,10 +529,10 @@ int main(int argc, char** argv)
         input_file = fasta_file;
     }
 
-    string compressed_file = input_file + ".compressed";
+    string compressed_file = "compressed.fa";
     
-    unordered_map<string, pair<string,string>> kmers;
-    reduce(input_file, compressed_file, context_length, compression, km, kmers);
+    reduce(input_file, compressed_file, context_length, compression, num_threads);
+    // reduce2(input_file, compressed_file, context_length, compression, km, kmers);
     cout << "finished reducing\n";
 
     // start = std::chrono::high_resolution_clock::now();
@@ -428,7 +547,7 @@ int main(int argc, char** argv)
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "Launching bcalm with k=" << kmer_len << "\n";
-        string bcalm_command = path_src + "/bcalm/build/bcalm -in " + compressed_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min " 
+        string bcalm_command = path_to_bcalm + " -in " + compressed_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min " 
             + std::to_string(min_abundance) + " -out bcalm > bcalm.log 2>&1";
         auto bcalm_ok = system(bcalm_command.c_str());
         if (bcalm_ok != 0){
@@ -439,64 +558,26 @@ int main(int argc, char** argv)
 
         // convert to gfa
         cout << "Launching convertToGFA\n";
-        string convert_command = path_src + "/bcalm/scripts/convertToGFA.py bcalm.unitigs.fa bcalm.unitigs.gfa " + std::to_string(kmer_len);
+        string convert_command = path_convertToGFA + " bcalm.unitigs.fa bcalm.unitigs.gfa " + std::to_string(kmer_len);
         system(convert_command.c_str());
 
         // shave the resulting graph
         cout << "Launching shave\n";
-        shave("bcalm.unitigs.gfa", "bcalm.unitigs.shaved.gfa", 2*km-1);
+        shave("bcalm.unitigs.gfa", "bcalm.unitigs.shaved.gfa", 2*kmer_len-1);
 
         //merge the adjacent contigs
         cout << "Launching merge_adjacent_contigs_BCALM\n";
         string merged_gfa = "bcalm.unitigs.shaved.merged.gfa";
-        merge_adjacent_contigs_BCALM("bcalm.unitigs.shaved.gfa", merged_gfa, kmer_len, path_src);
-
-        // //convert bcaml.unitigs.shaved.gfa to fasta
-        // cout << "Convert to fasta bcalm.unitigs.shaved.gfa\n";
-        // gfa_to_fasta("bcalm.unitigs.shaved.gfa", "bcalm.unitigs.shaved.fasta");
-
-        // //to merge, simply make a unitig graph from bcalm.unitigs.shaved.gfa and then convert it to gfa
-        // cout << "Creating shaved unitig graph\n";
-        // string command_unitig_graph =path_src + "/bcalm/build/bcalm -in bcalm.unitigs.shaved.fasta -kmer-size "+std::to_string(kmer_len)+" -abundance-min 1 -out bcalm.shaved.merged";
-        // auto unitig_graph_ok = system(command_unitig_graph.c_str());
-        // if (unitig_graph_ok != 0){
-        //     cerr << "ERROR: unitig graph failed\n";
-        //     cout << command_unitig_graph << endl;
-        //     exit(1);
-        // }
-
-        // //convert to gfa
-        // cout << "Launching convertToGFA\n";
-        // string convert_command2 = path_src + "/bcalm/scripts/convertToGFA.py bcalm.shaved.merged.unitigs.fa bcalm.unitigs.shaved.merged.gfa " + std::to_string(kmer_len);
-        // system(convert_command2.c_str());
-
-        //sort the gfa to have S lines before L lines
-        sort_GFA("bcalm.unitigs.shaved.merged.gfa");
-
-        //untangle the graph to improve contiguity
-        cout << "Creating GAF file\n";
-        string gaf_file = "bcalm.unitigs.shaved.merged.unzipped.gaf";
-        unordered_map<string,float> coverages;
-        create_gaf_from_unitig_graph("bcalm.unitigs.shaved.merged.gfa", kmer_len, compressed_file, gaf_file, coverages);
-        add_coverages_to_graph("bcalm.unitigs.shaved.merged.gfa", coverages);
-        
-        cout << "Untangling GFA\n";
-        string command_unzip = "python " + path_src + "/GraphUnzip/graphunzip.py unzip -R -l bcalm.unitigs.shaved.merged.unzipped.gaf -g bcalm.unitigs.shaved.merged.gfa -o bcalm.unitigs.shaved.merged.unzipped.gfa";
-        cout << "command is " << command_unzip << endl;
-        auto unzip_ok = system(command_unzip.c_str());
-        if (unzip_ok != 0){
-            cerr << "ERROR: unzip failed\n";
-            exit(1);
-        }
+        merge_adjacent_contigs_BCALM("bcalm.unitigs.shaved.gfa", merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA);
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
         cout << "Appending to the compressed reads the contigs found\n";
         
         //open both compressed_file and bcalm.unitigs.shaved.merged.unzipped.gfa
         ofstream input_compressed(compressed_file, std::ios_base::app);
-        ifstream input_unzipped("bcalm.unitigs.shaved.merged.unzipped.gfa");
+        ifstream input_graph("bcalm.unitigs.shaved.merged.gfa");
         string line;
-        while (std::getline(input_unzipped, line))
+        while (std::getline(input_graph, line))
         {
             if (line[0] == 'S')
             {
@@ -512,26 +593,46 @@ int main(int argc, char** argv)
             }
         }
         input_compressed.close();
-        input_unzipped.close();
+        input_graph.close();
+    }
+
+    //sort the gfa to have S lines before L lines
+    sort_GFA("bcalm.unitigs.shaved.merged.gfa");
+
+    //untangle the graph to improve contiguity
+    cout << "Creating GAF file\n";
+    string gaf_file = "bcalm.unitigs.shaved.merged.unzipped.gaf";
+    unordered_map<string,float> coverages;
+    create_gaf_from_unitig_graph("bcalm.unitigs.shaved.merged.gfa", values_of_k[values_of_k.size()-1], compressed_file, gaf_file, coverages);
+    add_coverages_to_graph("bcalm.unitigs.shaved.merged.gfa", coverages);
+    
+    cout << "Untangling GFA\n";
+    string command_unzip = "python " + path_src + "/GraphUnzip/graphunzip.py unzip -R -l bcalm.unitigs.shaved.merged.unzipped.gaf -g bcalm.unitigs.shaved.merged.gfa -o bcalm.unitigs.shaved.merged.unzipped.gfa";
+    cout << "command is " << command_unzip << endl;
+    auto unzip_ok = system(command_unzip.c_str());
+    if (unzip_ok != 0){
+        cerr << "ERROR: unzip failed\n";
+        exit(1);
     }
 
 
     //now let's parse the gfa file and decompress it
-    kmers = unordered_map<string, pair<string,string>>();
     cout << "Going through the reads again\n";
     //time the next function
-    go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers);
+    unordered_map<string, pair<string,string>> kmers;
+    go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers, num_threads);
     cout << "Decompressing\n";
     string decompressed_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
     expand("bcalm.unitigs.shaved.merged.unzipped.gfa", decompressed_file, km, values_of_k[values_of_k.size()-1]-1, kmers);
 
-    //test pop_and_shave_homopolymer_errors
-    string pop_and_shave_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.pop_and_shaved.gfa";
-    pop_and_shave_homopolymer_errors(decompressed_file, pop_and_shave_file);
+    //test pop_and_shave_homopolymer_errors //not necessary now that the compression is done with HPC
+    // string pop_and_shave_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.pop_and_shaved.gfa";
+    // remove_homopolymer_errors(decompressed_file, pop_and_shave_file, path_to_minimap);
+    string pop_and_shave_file = decompressed_file;
     // exit(0);
 
     //test compute_eact_cigar
-    compute_exact_CIGARs(pop_and_shave_file, output_file, 2000);
+    compute_exact_CIGARs(pop_and_shave_file, output_file, 2000, (values_of_k[values_of_k.size()-1]-1)*compression);
 
     //convert to fasta
     cout << "Convert to fasta\n";

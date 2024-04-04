@@ -43,19 +43,20 @@ void roll_reverse(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
  * @return true 
  * @return false 
  */
-bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq, size_t &pos ){
-    
-    if (pos == seq.size()){
+bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq,  size_t &pos_end, long& pos_begin, bool hpc) {
+
+    if (pos_end == seq.size()){
         return false;
     }
 
-    if (pos < k){
-        if (pos == 0){
+    if (pos_begin < 0){
+        if (pos_end == 0){
             foward_hash = 0;
             reverse_hash = 0;
+            pos_begin = -k;
         }
 
-        switch (seq[pos])
+        switch (seq[pos_end])
         {
         case 'A':
             roll_forward(foward_hash, hash_A, 0, k);
@@ -77,10 +78,10 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
     }
     else{
         //case switch to avoid using a dictionary
-        switch (seq[pos])
+        switch (seq[pos_end])
         {
         case 'A':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_A, hash_A, k);
@@ -99,12 +100,12 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
                 roll_reverse(reverse_hash, hash_T, hash_A, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: " << pos_begin << " " << seq << std::endl;
                 exit(1);
             }
             break;
         case 'C':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_C, hash_A, k);
@@ -123,12 +124,12 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
                 roll_reverse(reverse_hash, hash_G, hash_A, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         case 'G':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_G, hash_A, k);
@@ -147,12 +148,12 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
                 roll_reverse(reverse_hash, hash_C, hash_A, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         case 'T':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_T, hash_A, k);
@@ -171,34 +172,46 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
                 roll_reverse(reverse_hash, hash_A, hash_A, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         default:
-            std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+            std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
             exit(1);
         }
     }
 
-    pos++;
+    pos_end++;
+    while(hpc && pos_end < seq.size() && seq[pos_end] == seq[pos_end-1]){
+        pos_end++;
+    }
+
+    pos_begin++;
+    if (pos_begin < 0){
+        return true;
+    }
+    while(hpc && pos_begin < seq.size() && seq[pos_begin] == seq[pos_begin-1]){
+        pos_begin++;
+    }
 
     return true;
 }
 
 //same as roll but only forward hash
-bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos ){
+bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos_end, long& pos_begin, bool hpc ){
         
-    if (pos == seq.size()){
+    if (pos_end == seq.size()){
         return false;
     }
 
-    if (pos < k){
-        if (pos == 0){
+    if (pos_begin < 0){
+        if (pos_end == 0){
             foward_hash = 0;
+            pos_begin = -k;
         }
 
-        switch (seq[pos])
+        switch (seq[pos_end])
         {
         case 'A':
             roll_forward(foward_hash, hash_A, 0, k);
@@ -213,16 +226,16 @@ bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos ){
             roll_forward(foward_hash, hash_T, 0, k);
             break;
         default:
-            std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+            std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
             exit(1);
         }
     }
     else{
         //case switch to avoid using a dictionary
-        switch (seq[pos])
+        switch (seq[pos_end])
         {
         case 'A':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_A, hash_A, k);
@@ -237,12 +250,12 @@ bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos ){
                 roll_forward(foward_hash, hash_A, hash_T, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         case 'C':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_C, hash_A, k);
@@ -257,12 +270,12 @@ bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos ){
                 roll_forward(foward_hash, hash_C, hash_T, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         case 'G':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_G, hash_A, k);
@@ -277,12 +290,12 @@ bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos ){
                 roll_forward(foward_hash, hash_G, hash_T, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         case 'T':
-            switch (seq[pos-k])
+            switch (seq[pos_begin])
             {
             case 'A':
                 roll_forward(foward_hash, hash_T, hash_A, k);
@@ -297,15 +310,28 @@ bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos ){
                 roll_forward(foward_hash, hash_T, hash_T, k);
                 break;
             default:
-                std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+                std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
                 exit(1);
             }
             break;
         default:
-            std::cout << "ERROR: Non-ACGT character found in sequence: " << seq << std::endl;
+            std::cout << "ERROR: Non-ACGT character found in sequence: "  << pos_begin<< seq << std::endl;
             exit(1);
         }
     }
-    pos++;
+
+    pos_end++;
+    while(hpc && pos_end < seq.size() && seq[pos_end] == seq[pos_end-1]){
+        pos_end++;
+    }
+
+    pos_begin++;
+    if (pos_begin < 0){
+        return true;
+    }
+    while(hpc && pos_begin < seq.size() && seq[pos_begin] == seq[pos_begin-1]){
+        pos_begin++;
+    }
+    
     return true;
 }

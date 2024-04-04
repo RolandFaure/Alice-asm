@@ -137,6 +137,8 @@ def simple_unzip(segments, names, gafFile) :
     # translate the paths in the GAF as paths in the graph
     paths = []
     for line in lines :
+        # if line[0] != "SRR13128013.131014 131014 length=8539" :
+        #     continue
         #split the line on '>' and '<' to get the path
         cont = re.split('[><]' , line[1].rstrip())
         orientations = "".join(re.findall("[<>]", line[1]))
@@ -148,11 +150,13 @@ def simple_unzip(segments, names, gafFile) :
             pass
 
         paths.append(Path(contigs, orientations, line[0]))
+        # if '53110' in cont :
+        #     print("Here is a path: ", line[0], " ", paths[-1])
 
     #make sure all paths are coherent
     new_paths = []
     for p in paths:
-        # if "1657--1" in str(p) :
+        # if "53110" in str(p) :
         #     print("Here is sd ddisi Path: ", p.split_if_invalid())
         new_paths += [i for i in p.split_if_invalid()]
 
@@ -179,9 +183,6 @@ def simple_unzip(segments, names, gafFile) :
     while go_on :
         go_on = False
         for segment in segments :
-
-            # if segment.names != ['3151--1'] :
-            #     continue
 
             # print("Looking icizzcce at segment : ", segment.names, " ", len(segment.links[0]), " ", len(segment.links[1]))
             segment_to_duplicate = False
@@ -247,11 +248,12 @@ def simple_unzip(segments, names, gafFile) :
                         pair_to_paths[pair].append(p)
 
 
-                # if segment.names == ['460'] :
+                # if segment.names == ['53110'] :
                 #     print("Looking at segment ", segment.names, " ", pairs, " ", [(segment.links[0][i[0]].names, segment.links[1][i[1]].names) for i in pairs])
                 #     print("qldjl present on ",[paths[i[0]] for i in on_which_paths_is_this_contig[segment]])
                 #     for i in on_which_paths_is_this_contig[segment] :
-                #         print("idc : ", paths[i[0]])
+                #         if i[1] > 0 and i[1] < len(paths[i[0]].get_contigs()) -1 :
+                #             print("idc : ", paths[i[0]])
 
                 # if segment.names == ['130'] :
                 #     print("Pairs off ccncnc : ", segment.names, " ", pairs)
