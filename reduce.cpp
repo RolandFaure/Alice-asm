@@ -27,8 +27,8 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1.8";
-string date = "2024-04-03";
+string version = "0.1.9";
+string date = "2024-04-05";
 string author = "Roland Faure";
 
 /**
@@ -159,7 +159,7 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
     }
     input_asm.close();
 
-    unordered_map<string, int> kmer_count;
+    unordered_map<string, unordered_map<string, int>> kmer_count;
     unordered_map<string, bool> confirmed_kmers;
 
     int k = 2*context_length + 1;
@@ -180,6 +180,7 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
     
         std::string line;
         bool next_line_is_seq = false;
+        string read_name;
 
         while (std::getline(input, line)){
 
@@ -188,12 +189,13 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                 if (seq_num % 1000 == 0){
                     #pragma omp critical
                     {
-                        cout << "Compressing read " << seq_num << "\r" << std::flush;
+                        cout << "Decompressing read " << seq_num << "\r" << std::flush;
                     }
                     // cout << "nanaaaammmmma " << line << endl;
                 }
                 seq_num++;
                 next_line_is_seq = true;
+                read_name = line;
             }
             else if (next_line_is_seq){
                 //let's launch the foward and reverse rolling hash
@@ -201,11 +203,12 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                 uint64_t hash_reverse = 0;
                 size_t pos_end = 0;
                 long pos_begin = -k;
+                long pos_middle = -(k+1)/2;
 
                 vector<int> positions_sampled (0);
                 std::string kmer = string(km, 'N');
                 string rkmer;
-                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, true)){
+                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, true)){
                     if (pos_begin>=0){
 
                         if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
@@ -216,9 +219,25 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                             else{
                                 kmer = kmer.substr(1,kmer.size()-1) + "TGCA"[(hash_reverse/compression)%4];
                             }
-                        
-                            positions_sampled.push_back(pos_begin);
+
                             rkmer = reverse_complement(kmer); 
+                            positions_sampled.push_back(pos_middle);
+
+                            // if (kmer == "GTACCACTGACCTTACATATCGATTGTTTAA"){
+                            //     cout << "FOUND " << line.substr(pos_middle -1, 5) << " in " << read_name << endl;
+                            //     cout << positions_sampled[positions_sampled.size()-km+10] << " " << positions_sampled[positions_sampled.size()-1-10] << endl;
+                            //     cout << line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1) << endl;
+                            //     cout << "confirmed " << confirmed_kmers["GTACCACTGACCTTACATATCGATTGTTTAA"] << " " << kmer_count["GTACCACTGACCTTACATATCGATTGTTTAA"] << endl;
+                            //     if (confirmed_kmers["GTACCACTGACCTTACATATCGATTGTTTAA"]){
+                            //         cout << "confirmed " << kmers["GTACCACTGACCTTACATATCGATTGTTTAA"].first << endl;
+                            //         exit(1);
+                            //     }
+
+                            // }
+                            // else if (rkmer == "GCCATGACAACCTCTCGCCTTCTGGAGCCGT"){
+                            //     cout << "FOUNDdd " << line << endl;
+                            //     exit(1);
+                            // }
 
                             if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
                                 
@@ -226,39 +245,31 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
 
                                 #pragma omp critical
                                 {
-                                    if (kmer_count.find(canonical_kmer) == kmer_count.end()){
-                                        kmer_count[canonical_kmer] = 0;
-                                        kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
-                                        kmers[rkmer] = {"",""};
-                                    }
+                                    if (confirmed_kmers[canonical_kmer] == false){
 
-                                    kmer_count[canonical_kmer]++;
-                                    if (kmer_count[canonical_kmer] == 1){
-                                        string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                                        string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                                        kmers[kmer] = {central_seq, full_seq};
-                                        //since we have to exclude the last base, the reverse complement is slightly different from the foward // not exluding the last base anymore
-                                        // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                                        // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                                        kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
-                                    }
-                                    else if (kmer_count[canonical_kmer] > 1){
-
-                                        if (!confirmed_kmers[canonical_kmer]){
-                                            string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                                            if (kmers[kmer].first != central_seq){
-                                                string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                                                kmers[kmer].first = central_seq;
-                                                kmers[kmer].second = full_seq;
-                                                // central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10]+1, positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]);
-                                                // full_seq = line.substr(positions_sampled[positions_sampled.size()-km]+1, positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]);
-                                                kmers[rkmer].first = reverse_complement(central_seq);
-                                                kmers[rkmer].second = reverse_complement(full_seq);
-                                            }
-                                            else{
-                                                confirmed_kmers[canonical_kmer] = true;
-                                            }
+                                        if (kmer_count.find(canonical_kmer) == kmer_count.end()){
+                                            kmer_count[canonical_kmer] = {};
+                                            kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
+                                            kmers[rkmer] = {"",""};
+                                            confirmed_kmers[canonical_kmer] = false;
                                         }
+                                        
+                                        string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
+                                        string reverse_central_seq = reverse_complement(central_seq);
+                                        string canonical_central_seq = min(central_seq, reverse_central_seq);
+                                        if (kmer_count[canonical_kmer].find(canonical_central_seq) == kmer_count[canonical_kmer].end()){
+                                            kmer_count[canonical_kmer][canonical_central_seq] = 0;
+                                        }
+                                        kmer_count[canonical_kmer][canonical_central_seq]++;
+                                        
+                                        if (kmer_count[canonical_kmer][canonical_central_seq] > 3){
+                                            string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                            kmers[kmer] = {central_seq, full_seq};
+                                            kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
+                                            confirmed_kmers[canonical_kmer] = true;
+                                            kmer_count[canonical_kmer].clear();
+                                        }
+                                        
                                     }
                                 }
                             }
@@ -391,6 +402,7 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, u
                 string first_kmer = sequence.substr(0, km);
                 if (kmers.find(first_kmer) != kmers.end()){
                     string beginning_of_seq = kmers[first_kmer].second;
+
                     //compute the overlap
                     int overlap = beginning_of_seq.size();
                     string exp_start = expanded_sequence.substr(0, std::min(30, overlap));
@@ -434,7 +446,7 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, u
                 cerr << line << endl;
                 exit(1);
             }
-
+ 
             out << "S\t" << name << "\t" << expanded_sequence;
             while (ss >> sequence){
                 out << "\t" << sequence;
@@ -472,7 +484,6 @@ int main(int argc, char** argv)
 
     );
 
-
     if(!clipp::parse(argc, argv, cli)) {
         cout << "Could not parse the arguments" << endl;
         cout << clipp::make_man_page(cli, argv[0]);
@@ -508,12 +519,6 @@ int main(int argc, char** argv)
 
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
 
-    // string decompressed_file2 = "bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
-    // //test pop_and_shave_homopolymer_errors
-    // string pop_and_shave_file2 = "bcalm.unitigs.shaved.merged.unzipped.decompressed.pop_and_shaved.gfa";
-    // remove_homopolymer_errors(decompressed_file2, pop_and_shave_file2, path_to_minimap);
-    // exit(0);
-
     int km = 31; //size of the kmer used to do the expansion. Must be >21
     vector<int> values_of_k = {31,41,71}; //size of the kmer used to build the graph (max >= km)
 
@@ -530,6 +535,14 @@ int main(int argc, char** argv)
     }
 
     string compressed_file = "compressed.fa";
+
+    // unordered_map<string, pair<string,string>> kmers2;
+    // go_through_the_reads_again(input_file, "16.gfa", context_length, compression, km, kmers2, num_threads);
+    // cout << "Decompressing\n";
+    // string decompressed_file2 = "16.decompressed.gfa";
+    // expand("16.gfa", decompressed_file2, km, values_of_k[values_of_k.size()-1]-1, kmers2);
+    // cout << "EXIT" << endl;
+    // exit(0);
     
     reduce(input_file, compressed_file, context_length, compression, num_threads);
     // reduce2(input_file, compressed_file, context_length, compression, km, kmers);

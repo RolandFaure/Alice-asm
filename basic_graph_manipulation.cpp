@@ -965,11 +965,6 @@ void remove_homopolymer_errors(std::string gfa_in, std::string gfa_out, std::str
     input.open(gfa_in);
     out.open(gfa_out);
 
-    cout << "Remoovinng..." << endl;
-    for (auto c: toRemove){
-        cout << c << endl;
-    }
-
     while (std::getline(input, line))
     {
         if (line[0] == 'S')
