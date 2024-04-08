@@ -7,7 +7,7 @@ The Alice assembler is named after the character of Lewis Caroll's _Alice in Won
 
 To have all the dependencies, it is advised to create first a conda environment with all the dependencies (bcalm, minimap2, openmp, g++, scipy, numpy)
 ```
-conda create -n hairsplitter -c bioconda -c conda-forge bcalm openmp libgomp gxx gcc scipy numpy
+conda create -n hairsplitter -c bioconda -c conda-forge bcalm openmp libgomp gxx gcc scipy numpy cmake
 conda activate hairsplitter
 ```
 
