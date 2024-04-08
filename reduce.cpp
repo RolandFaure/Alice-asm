@@ -269,7 +269,6 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                                             confirmed_kmers[canonical_kmer] = true;
                                             kmer_count[canonical_kmer].clear();
                                         }
-                                        
                                     }
                                 }
                             }
@@ -383,7 +382,7 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, u
             for (i = 0; i <= sequence.size()-km; i+= km-20-1){ //-20 because we only take the central part of each kmer
                 string kmer = sequence.substr(i, km);
                 if (kmers.find(kmer) != kmers.end()){
-                    if (i == 0){
+                    if (i == 0 || kmers[kmer].first.size() == 0){
                         expanded_sequence += kmers[kmer].first;
                     }
                     else{ //don't append the first base, it has already been appended in the previous kmer
@@ -520,7 +519,7 @@ int main(int argc, char** argv)
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
 
     int km = 31; //size of the kmer used to do the expansion. Must be >21
-    vector<int> values_of_k = {31,41,71}; //size of the kmer used to build the graph (max >= km)
+    vector<int> values_of_k = {16,31,41,71}; //size of the kmer used to build the graph (max >= km)
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
@@ -535,18 +534,11 @@ int main(int argc, char** argv)
     }
 
     string compressed_file = "compressed.fa";
-
-    // unordered_map<string, pair<string,string>> kmers2;
-    // go_through_the_reads_again(input_file, "16.gfa", context_length, compression, km, kmers2, num_threads);
-    // cout << "Decompressing\n";
-    // string decompressed_file2 = "16.decompressed.gfa";
-    // expand("16.gfa", decompressed_file2, km, values_of_k[values_of_k.size()-1]-1, kmers2);
-    // cout << "EXIT" << endl;
-    // exit(0);
     
     reduce(input_file, compressed_file, context_length, compression, num_threads);
     // reduce2(input_file, compressed_file, context_length, compression, km, kmers);
     cout << "finished reducing\n";
+
 
     // start = std::chrono::high_resolution_clock::now();
     // go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers);
