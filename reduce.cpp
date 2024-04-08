@@ -519,7 +519,7 @@ int main(int argc, char** argv)
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
 
     int km = 31; //size of the kmer used to do the expansion. Must be >21
-    vector<int> values_of_k = {16,31,41,71}; //size of the kmer used to build the graph (max >= km)
+    vector<int> values_of_k = {31,41,71}; //size of the kmer used to build the graph (max >= km)
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
