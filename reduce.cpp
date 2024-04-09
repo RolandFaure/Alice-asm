@@ -27,8 +27,8 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
-string version = "0.1.9";
-string date = "2024-04-05";
+string version = "0.1.10";
+string date = "2024-04-09";
 string author = "Roland Faure";
 
 /**
@@ -80,10 +80,13 @@ void reduce(string input_file, string output_file, int context_length, int compr
             if (line[0] == '>')
             {
                 out << line << "\n";
-                if (seq_num % 1000 == 0){
+                if (seq_num % 50000 == 0){
                     #pragma omp critical
                     {
-                        cout << "Compressing read " << seq_num << "\r" << std::flush;
+                        //display the date and time
+                        time_t now = time(0);
+                        tm *ltm = localtime(&now);
+                        cout << "[" << 1 + ltm->tm_mon << "/" << 1900 + ltm->tm_year << " " << 1 + ltm->tm_hour << ":" << 1 + ltm->tm_min << ":" << 1 + ltm->tm_sec << "]" << " Compressed " << seq_num << " reads" << endl;
                     }
                 }
                 seq_num++;
@@ -186,10 +189,13 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
 
             if (line[0] == '>')
             {
-                if (seq_num % 1000 == 0){
+                if (seq_num % 50000 == 0){
                     #pragma omp critical
                     {
-                        cout << "Decompressing read " << seq_num << "\r" << std::flush;
+                        //display the date and time
+                        time_t now = time(0);
+                        tm *ltm = localtime(&now);
+                        cout << "[" << 1 + ltm->tm_mon << "/" << 1900 + ltm->tm_year << " " << 1 + ltm->tm_hour << ":" << 1 + ltm->tm_min << ":" << 1 + ltm->tm_sec << "]" << " Processed " << seq_num << " reads" << endl;
                     }
                     // cout << "nanaaaammmmma " << line << endl;
                 }
@@ -463,18 +469,18 @@ int main(int argc, char** argv)
 
     //use clipp to parse the command line
     bool help = false;
-    string input_file, output_file;
+    string input_file, output_folder;
     string path_to_bcalm = "bcalm";
     string path_to_minimap = "minimap2";
-    int min_abundance = 10;
+    int min_abundance = 5;
     int order = 201;
     int compression = 20;
     int num_threads = 1;
     auto cli = (
         clipp::required("-r", "--reads").doc("input file (fasta/q)") & clipp::opt_value("i", input_file),
-        clipp::required("-o", "--output").doc("output file (gfa)") & clipp::opt_value("o", output_file),
+        clipp::required("-o", "--output").doc("output folder") & clipp::opt_value("o", output_folder),
         clipp::option("-t", "--threads").doc("number of threads [1]") & clipp::opt_value("t", num_threads),
-        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [10]") & clipp::opt_value("m", min_abundance),
+        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
@@ -482,6 +488,51 @@ int main(int argc, char** argv)
         clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
 
     );
+
+    //ascii art of a cake:
+//      ___.--.__
+//    .'  &  .  '.\             
+//   |    &     &  |        
+//   \______&_____.'     
+//    |.|.|.|.|.|.|                                        
+//    `--.|.|.|.--' 
+
+    //ascii art of a the Alice Assembler:
+    //   _______ _                     _ _                                            _     _           
+    //  |__   __| |              /\   | (_)              /\                          | |   | |          
+    //     | |  | |__   ___     /  \  | |_  ___ ___     /  \   ___ ___  ___ _ __ ___ | |__ | | ___ _ __ 
+    //     | |  | '_ \ / _ \   / /\ \ | | |/ __/ _ \   / /\ \ / __/ __|/ _ \ '_ ` _ \| '_ \| |/ _ \ '__|
+    //     | |  | | | |  __/  / ____ \| | | (_|  __/  / ____ \\__ \__ \  __/ | | | | | |_) | |  __/ |   
+    //     |_|  |_| |_|\___| /_/    \_\_|_|\___\___| /_/    \_\___/___/\___|_| |_| |_|_.__/|_|\___|_|   
+
+    //ascii art of a bottle:
+    //  (-)  
+    //.-'-'-.
+    //|-...-|
+    //|;:.._|
+    //| ... |
+    //`-...-'
+
+    //The Alice Assembler ascii art
+
+
+    //Show the bottle left, then the cake right
+    cout << "  (-)        _______ _                     _ _                                            _     _              " << "   ___.--.__" << endl;
+    cout << ".-'-'-.     |__   __| |              /\\   | (_)              /\\                          | |   | |             " << " .'  &  .  '.\\" << endl;
+    cout << "|-...-|        | |  | |__   ___     /  \\  | |_  ___ ___     /  \\   ___ ___  ___ _ __ ___ | |__ | | ___ _ __    " << "|    &     &  |" << endl;
+    cout << "|;:.._|        | |  | '_ \\ / _ \\   / /\\ \\ | | |/ __/ _ \\   / /\\ \\ / __/ __|/ _ \\ '_ ` _ \\| '_ \\| |/ _ \\ '__|   "<< "\\______&_____.'" << endl;
+    cout << "| ... |        | |  | | | |  __/  / ____ \\| | | (_|  __/  / ____ \\\\__ \\__ \\  __/ | | | | | |_) | |  __/ |      " << " |.|.|.|.|.|.| " << endl;
+    cout << "`-...-'        |_|  |_| |_|\\___| /_/    \\_\\_|_|\\___\\___| /_/    \\_\\___/___/\\___|_| |_| |_|_.__/|_|\\___|_|      " << " `--.|.|.|.--'"<< endl;
+    cout << endl;
+     
+    cout << "Command line: ";
+    for (int i = 0 ; i < argc ; i++){
+        cout << argv[i] << " ";
+    }
+    cout << endl;
+
+    cout << "Alice Assembler version " << version << "\nLast update: " << date << "\nAuthor: " << author << endl << endl;
+
 
     if(!clipp::parse(argc, argv, cli)) {
         cout << "Could not parse the arguments" << endl;
@@ -494,6 +545,24 @@ int main(int argc, char** argv)
         exit(1);
     }
     int context_length = (order-1)/2;
+
+    //make sure the output folder ends with a /
+    if (output_folder[output_folder.size()-1] != '/'){
+        output_folder += "/";
+    }
+    string tmp_folder = output_folder + "tmp/";
+
+    //record time now to measure the time of the whole process
+    auto start = std::chrono::high_resolution_clock::now();
+
+    //check if the output folder exists
+    string command = "mkdir -p " + output_folder + " 2> /dev/null";
+    system(command.c_str());
+
+    //create the tmp folder
+    command = "mkdir -p " + tmp_folder + " 2> /dev/null";
+    system(command.c_str());
+    
 
     string path_src = argv[0];
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /reduce
@@ -508,7 +577,7 @@ int main(int argc, char** argv)
         exit(1);
     }
     //check if the path to minimap is correct
-    string command = path_to_minimap + " --help 2> /dev/null > /dev/null";
+    command = path_to_minimap + " --help 2> /dev/null > /dev/null";
     auto ok = system(command.c_str());
     if (ok != 0){
         cerr << "ERROR: minimap2 not found using command line " << command << "\n";
@@ -519,41 +588,37 @@ int main(int argc, char** argv)
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
 
     int km = 31; //size of the kmer used to do the expansion. Must be >21
-    vector<int> values_of_k = {16,31,41,71}; //size of the kmer used to build the graph (max >= km)
+    vector<int> values_of_k = {31,41,71}; //size of the kmer used to build the graph (min >= km)
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
         string fasta_file = input_file.substr(0, input_file.find_last_of('.')) + ".fasta";
-        string command = "sed -n '1~4s/^@/>/p;2~4p' " + input_file + " > " + fasta_file;
+        string command = "sed -n '1~4s/^@/>/p;2~4p' " + input_file + " > " + tmp_folder + fasta_file;
         auto ok = system(command.c_str());
         if (ok != 0){
             cerr << "ERROR: fastq_to_fasta failed\n";
             exit(1);
         }
-        input_file = fasta_file;
+        input_file = tmp_folder+fasta_file;
     }
 
-    string compressed_file = "compressed.fa";
+    string compressed_file = tmp_folder+"compressed.fa";
+    string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
+
+    cout << "==== Step 1: MSR compression of the reads ====\n";
     
     reduce(input_file, compressed_file, context_length, compression, num_threads);
-    // reduce2(input_file, compressed_file, context_length, compression, km, kmers);
-    cout << "finished reducing\n";
 
+    cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
 
-    // start = std::chrono::high_resolution_clock::now();
-    // go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers);
-    // end = std::chrono::high_resolution_clock::now();
-    // elapsed_seconds = end-start;
-    // cout << "Time to decompress: " << elapsed_seconds.count() << "s\n";
-    // cout << "finished decompressing\n";
-    // exit(0);
-
+    cout << "==== Step 2: Iterative DBG assemby of the compressed reads with increasing k ====\n";
     //iterative k to have good contiguity
     for (auto kmer_len: values_of_k){
         // launch bcalm        
-        cout << "Launching bcalm with k=" << kmer_len << "\n";
+        cout << " - Launching assembly with k=" << kmer_len << endl;
+        cout << "    - Unitig generation with bcalm" << endl;
         string bcalm_command = path_to_bcalm + " -in " + compressed_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min " 
-            + std::to_string(min_abundance) + " -out bcalm > bcalm.log 2>&1";
+            + std::to_string(min_abundance) + " -out "+tmp_folder+"bcalm > "+tmp_folder+"bcalm.log 2>&1";
         auto bcalm_ok = system(bcalm_command.c_str());
         if (bcalm_ok != 0){
             cerr << "ERROR: bcalm failed\n";
@@ -562,25 +627,27 @@ int main(int argc, char** argv)
         }
 
         // convert to gfa
-        cout << "Launching convertToGFA\n";
-        string convert_command = path_convertToGFA + " bcalm.unitigs.fa bcalm.unitigs.gfa " + std::to_string(kmer_len);
+        cout << "    - Converting result to GFA" << endl;
+        string unitig_file_fa = tmp_folder+"bcalm.unitigs.fa";
+        string unitig_file_gfa = tmp_folder+"bcalm.unitigs.gfa";
+        string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
         system(convert_command.c_str());
 
         // shave the resulting graph
-        cout << "Launching shave\n";
-        shave("bcalm.unitigs.gfa", "bcalm.unitigs.shaved.gfa", 2*kmer_len-1);
+        cout << "    - Shaving the graph of small dead ends" << endl;
+        string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
+        shave(unitig_file_gfa, shaved_gfa, 2*kmer_len-1);
 
         //merge the adjacent contigs
-        cout << "Launching merge_adjacent_contigs_BCALM\n";
-        string merged_gfa = "bcalm.unitigs.shaved.merged.gfa";
-        merge_adjacent_contigs_BCALM("bcalm.unitigs.shaved.gfa", merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA);
+        cout << "    - Merging resulting contigs" << endl;
+        merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
-        cout << "Appending to the compressed reads the contigs found\n";
+        cout << "    - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
         
         //open both compressed_file and bcalm.unitigs.shaved.merged.unzipped.gfa
         ofstream input_compressed(compressed_file, std::ios_base::app);
-        ifstream input_graph("bcalm.unitigs.shaved.merged.gfa");
+        ifstream input_graph(merged_gfa);
         string line;
         while (std::getline(input_graph, line))
         {
@@ -601,34 +668,41 @@ int main(int argc, char** argv)
         input_graph.close();
     }
 
+    cout << "Done with the iterative assembly, the final graph is in " << merged_gfa << "\n" << endl;
+
+    cout << "==== Step 3: Untangling the final compressed assembly ====\n";
+
     //sort the gfa to have S lines before L lines
-    sort_GFA("bcalm.unitigs.shaved.merged.gfa");
+    cout << " - Sorting the GFA" << endl;
+    sort_GFA(merged_gfa);
 
     //untangle the graph to improve contiguity
-    cout << "Creating GAF file\n";
-    string gaf_file = "bcalm.unitigs.shaved.merged.unzipped.gaf";
+    cout << " - Aligning the reads to the graph" << endl;
+    string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
     unordered_map<string,float> coverages;
-    create_gaf_from_unitig_graph("bcalm.unitigs.shaved.merged.gfa", values_of_k[values_of_k.size()-1], compressed_file, gaf_file, coverages);
-    add_coverages_to_graph("bcalm.unitigs.shaved.merged.gfa", coverages);
+    create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], compressed_file, gaf_file, coverages);
+    add_coverages_to_graph(merged_gfa, coverages);
     
-    cout << "Untangling GFA\n";
-    string command_unzip = "python " + path_src + "/GraphUnzip/graphunzip.py unzip -R -l bcalm.unitigs.shaved.merged.unzipped.gaf -g bcalm.unitigs.shaved.merged.gfa -o bcalm.unitigs.shaved.merged.unzipped.gfa";
-    cout << "command is " << command_unzip << endl;
+    cout << " - Untangling the graph with GraphUnzip" << endl;
+    string untangled_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.untangled.gfa";
+    string command_unzip = "python " + path_src + "/GraphUnzip/graphunzip.py unzip -R -l " + gaf_file + " -g " + merged_gfa + " -o " + untangled_gfa + " > " + tmp_folder + "graphunzip.log 2>&1";
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
         exit(1);
     }
+    cout << "Done untangling the graph, the final compressed graph is in " << untangled_gfa << "\n" << endl;
 
+    cout << "==== Step 4: Inflating back the assembly to non-compressed space ====\n";
 
     //now let's parse the gfa file and decompress it
-    cout << "Going through the reads again\n";
+    cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";
     //time the next function
     unordered_map<string, pair<string,string>> kmers;
-    go_through_the_reads_again(input_file, "bcalm.unitigs.shaved.merged.unzipped.gfa", context_length, compression, km, kmers, num_threads);
-    cout << "Decompressing\n";
-    string decompressed_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
-    expand("bcalm.unitigs.shaved.merged.unzipped.gfa", decompressed_file, km, values_of_k[values_of_k.size()-1]-1, kmers);
+    go_through_the_reads_again(input_file, untangled_gfa, context_length, compression, km, kmers, num_threads);
+    string decompressed_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.decompressed.gfa";
+    cout << " - Reconstructing the uncompressed assembly" << endl;
+    expand(untangled_gfa, decompressed_file, km, values_of_k[values_of_k.size()-1]-1, kmers);
 
     //test pop_and_shave_homopolymer_errors //not necessary now that the compression is done with HPC
     // string pop_and_shave_file = "bcalm.unitigs.shaved.merged.unzipped.decompressed.pop_and_shaved.gfa";
@@ -637,11 +711,22 @@ int main(int argc, char** argv)
     // exit(0);
 
     //test compute_eact_cigar
+    string output_file = output_folder + "assembly.gfa";
+    cout << " - Computing the exact overlaps between the contigs\n";
     compute_exact_CIGARs(pop_and_shave_file, output_file, 2000, (values_of_k[values_of_k.size()-1]-1)*compression);
 
     //convert to fasta
-    cout << "Convert to fasta\n";
+    
+    cout << " - Converting the assembly to fasta\n";
     gfa_to_fasta(output_file, output_file.substr(0, output_file.find_last_of('.')) + ".fasta");
+
+    //remove the temporary file
+    command = "cd "+ tmp_folder +" && ls | grep -v 'shaved' | xargs rm && cd ../../";
+    system(command.c_str());
+
+
+    cout << "\nDone, the final assembly is in " << output_file << "\n" << endl;
+    cout << "Total time: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() << "s\n";
 
     return 0;
 }

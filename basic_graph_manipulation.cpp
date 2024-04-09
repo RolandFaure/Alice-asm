@@ -621,10 +621,10 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     auto time_now = std::chrono::system_clock::now();
     while (std::getline(input2, line))
     {
-        if (nb_reads%1000==0){
-            auto time_now2 = std::chrono::system_clock::now();
-            cout << "aligned " << nb_reads << " on the graph, taking on average " << std::chrono::duration_cast<std::chrono::microseconds>(time_now2 - time_now).count() / (nb_reads+1) << " us per read\r";
-        }
+        // if (nb_reads%1000==0){
+        //     auto time_now2 = std::chrono::system_clock::now();
+        //     cout << "aligned " << nb_reads << " on the graph, taking on average " << std::chrono::duration_cast<std::chrono::microseconds>(time_now2 - time_now).count() / (nb_reads+1) << " us per read\r";
+        // }
         nb_reads++;
         // cout << "mljqdklmjm " << line << endl;
 
@@ -727,18 +727,17 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
 }
 
 
-void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA){
+void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder){
         
         //convert gfa_in to fasta
-        cout << "Convert to fasta bcalm.unitigs.shaved.gfa\n";
-        string tmp_fasta = "tmp_324.fasta";
+        string tmp_fasta = path_tmp_folder + "tmp_324.fasta";
         gfa_to_fasta(gfa_in, tmp_fasta);
 
         //to merge, simply make a unitig graph from bcalm.unitigs.shaved.gfa and then convert it to gfa
-        cout << "Creating shaved unitig graph\n";
-        string command_unitig_graph = path_to_bcalm + " -in " + tmp_fasta + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out tmp_324 > bcalm.log 2>&1";
+        // cout << "Creating shaved unitig graph\n";
+        string command_unitig_graph = path_to_bcalm + " -in " + tmp_fasta + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out "+path_tmp_folder+"tmp_324 > "+path_tmp_folder+"bcalm.log 2>&1";
         auto unitig_graph_ok = system(command_unitig_graph.c_str());
-        cout << "launching unitig graph\n" << command_unitig_graph << endl;
+        // cout << "launching unitig graph\n" << command_unitig_graph << endl;
         if (unitig_graph_ok != 0){
             cerr << "ERROR: unitig graph failed in merge_adjacent_contigs_BCALM\n";
             cout << command_unitig_graph << endl;
@@ -746,12 +745,12 @@ void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k
         }
 
         //convert to gfa
-        cout << "Launching convertToGFA\n";
-        string convert_command2 = path_convertToGFA + " tmp_324.unitigs.fa " + gfa_out + " " + std::to_string(k);
+        // cout << "Launching convertToGFA\n";
+        string convert_command2 = path_convertToGFA + " " + path_tmp_folder+ "tmp_324.unitigs.fa " + gfa_out + " " + std::to_string(k) + " > "+path_tmp_folder+"convertToGFA.log 2>&1";
         system(convert_command2.c_str());
 
         //remove tmp files
-        string remove_tmp_files = "rm tmp_324*";
+        string remove_tmp_files = "rm "+path_tmp_folder+"tmp_324*";
         system(remove_tmp_files.c_str());
 }
 
