@@ -8,22 +8,24 @@ project(AliceAsm)
 
 # Local header files here ONLY
 set(TARGET_H
+    assembly.h,
     basic_graph_manipulation.h,
-    rolling_hash.h,
-    clipp.h
+    clipp.h,
+    reduce_and_expand.h,
+    rolling_hash.h
    )
 
 # Local source files here
 set(TARGET_SRC
-    reduce.cpp,
+    assembly.cpp,
     basic_graph_manipulation.cpp,
+    main.cpp,
+    reduce_and_expand.cpp,
     rolling_hash.cpp
     )
 
-file(GLOB SOURCE "reduce.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
+file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
 add_executable(aliceasm ${SOURCE})
-# target_include_directories(aliceasm PRIVATE ntHash/build/include)
-# target_link_libraries(aliceasm PRIVATE ${CMAKE_SOURCE_DIR}/ntHash/build/lib/libnthash.a)
 target_compile_options (aliceasm PRIVATE -fopenmp)
 target_compile_options (aliceasm PRIVATE -g)
 target_compile_options (aliceasm PRIVATE -lm)
