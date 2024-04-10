@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
 
 using std::string;
 using std::cerr;
@@ -16,9 +17,17 @@ using std::ofstream;
 using std::ifstream;
 using robin_hood::unordered_map;
 
-void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file){
+/**
+ * @brief Assemble the read file with hifiasm and output the final assembly in final_file
+ * 
+ * @param read_file 
+ * @param tmp_folder 
+ * @param num_threads 
+ * @param final_file 
+ */
+void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_hifiasm){
     string hifiasm_output = tmp_folder;
-    string command_hifiasm = "hifiasm -o " + hifiasm_output + "hifiasm -t " + std::to_string(num_threads) + " " + read_file + " > " + tmp_folder + "hifiasm.log 2>&1";
+    string command_hifiasm = path_to_hifiasm + " -o " + hifiasm_output + "hifiasm -t " + std::to_string(num_threads) + " " + read_file + " > " + tmp_folder + "hifiasm.log 2>&1";
     string untangled_gfa = hifiasm_output + "hifiasm.bp.p_ctg.gfa";
 
     auto hifiasm_ok = system(command_hifiasm.c_str());
@@ -33,7 +42,19 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
     system(command_move.c_str());
 }
 
-void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_src){
+/**
+ * @brief Assemble the read file with k-iterative bcalm + graphunzip and output the final assembly in final_file
+ * 
+ * @param read_file Input read file
+ * @param min_abundance Minimum abundance of kmers to consider a kmers as valid
+ * @param tmp_folder Folder to store temporary files
+ * @param num_threads Number of threads to use
+ * @param final_gfa Output final assembly
+ * @param path_to_bcalm Path to the bcalm executable
+ * @param path_convertToGFA Path to the convertToGFA executable
+ * @param path_src Path to the src folder (to get GraphUnzip)
+ */
+void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
@@ -110,7 +131,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_fo
     add_coverages_to_graph(merged_gfa, coverages);
     
     cout << "    - Untangling the graph with GraphUnzip" << endl;
-    string command_unzip = "python " + path_src + "/GraphUnzip/graphunzip.py unzip -R -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " > " + tmp_folder + "graphunzip.log 2>&1";
+    string command_unzip = path_graphunzip + " unzip -R -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " > " + tmp_folder + "graphunzip.log 2>&1";
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
@@ -118,3 +139,73 @@ void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_fo
     }
     cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << "\n" << endl;
 }
+
+/**
+ * @brief assemble the read file with spades and output the final assembly in final_file
+ * 
+ * @param read_file 
+ * @param tmp_folder 
+ * @param num_threads 
+ * @param final_file 
+ */
+void assembly_spades(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_spades){
+    string spades_output = tmp_folder;
+    string command_spades = path_to_spades + " -o " + spades_output + "spades --only-assembler -t " + std::to_string(num_threads) + " -s " + read_file;// + " > " + tmp_folder + "spades.log 2>&1";
+    string spades_gfa = spades_output + "spades/assembly_graph_with_scaffolds.gfa";
+
+    auto spades_ok = system(command_spades.c_str());
+    if (spades_ok != 0){
+        cerr << "ERROR: spades failed after running command line\n";
+        cerr << command_spades << endl;
+        exit(1);
+    }
+
+    //move the output to the final file
+    string command_move = "cp " + spades_gfa + " " + final_file;
+    system(command_move.c_str());
+}
+
+void assembly_minia(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_gatb, std::string path_convertToGFA){
+
+    //recover the absolute path to the tmp_folder
+    tmp_folder = std::filesystem::absolute(tmp_folder).string();
+    read_file = std::filesystem::absolute(read_file).string();
+    final_file = std::filesystem::absolute(final_file).string();
+
+    //rm everything starting with minia in the tmp_folder
+    string command_rm = "rm -rf " + tmp_folder + "minia*";
+    system(command_rm.c_str());
+
+    string minia_output = tmp_folder + "minia";
+    string command_minia = path_gatb + " --no-scaffolding --no-error-correction -s " + read_file + " --nb-cores " + std::to_string(num_threads) 
+        + " -o " + minia_output + " > " + tmp_folder + "minia.log 2>&1";
+
+    auto minia_ok = system(command_minia.c_str());
+    if (minia_ok != 0){
+        cerr << "ERROR: minia failed after running command line\n";
+        cerr << command_minia << endl;
+        exit(1);
+    }
+
+    string minia_fasta = minia_output + "_final.contigs.fa";
+    //convert the fasta to gfa
+    string minia_gfa = tmp_folder + "minia.gfa";
+    string command_convert = path_convertToGFA + " " + minia_fasta + " " + minia_gfa + " 241 > " + tmp_folder + "convertToGFA.log 2>&1";
+
+    //move the output to the final file
+    string command_move = "cp " + minia_gfa + " " + final_file;
+    system(command_move.c_str());
+}
+
+void assembly_raven(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_raven){
+    
+    string command_raven = path_to_raven + " --graphical-fragment-assembly " + final_file + " -t " + std::to_string(num_threads) + " " + read_file + " > " + tmp_folder + "raven.log 2>&1";
+
+    auto raven_ok = system(command_raven.c_str());
+    if (raven_ok != 0){
+        cerr << "ERROR: raven failed after running command line\n";
+        cerr << command_raven << endl;
+        exit(1);
+    }
+}
+

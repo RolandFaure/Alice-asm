@@ -37,7 +37,7 @@ using std::unordered_set;
  * @param min_abundance 
  * @param kmers maps a kmer to the uncompressed seq
  **/
-void reduce(string input_file, string output_file, int context_length, int compression, int num_threads) {
+void reduce(string input_file, string output_file, int context_length, int compression, int num_threads, bool homopolymer_compression) {
 
     int k = 2*context_length + 1;
 
@@ -96,7 +96,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 size_t pos_end = 0;
                 long pos_begin = -k;
 
-                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, true)){
+                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, homopolymer_compression)){
                     if (pos_begin>=0){
                         if (hash_foward<hash_reverse && hash_foward % compression == 0){
                             out << "ACGT"[(hash_foward/compression)%4];
@@ -136,7 +136,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
  * @param km size of the kmer used to do the expansion
  * @param kmers Associates a compressed sequence to its central uncompressed part and its full uncompressed part
  */
-void go_through_the_reads_again(string reads_file, string assemblyFile, int context_length, int compression, int km, unordered_map<string, pair<string,string>>& kmers, int num_threads){
+void go_through_the_reads_again(string reads_file, string assemblyFile, int context_length, int compression, int km, unordered_map<string, pair<string,string>>& kmers, int num_threads, bool homopolymer_compression){
 
     unordered_set<string> kmers_in_assembly;
 
@@ -213,7 +213,7 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                 vector<int> positions_sampled (0);
                 std::string kmer = string(km, 'N');
                 string rkmer;
-                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, true)){
+                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
                     if (pos_begin>=0){
 
                         if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){

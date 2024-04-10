@@ -28,10 +28,87 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
+// ANSI escape codes for text color
+#define RED_TEXT "\033[1;31m"
+#define GREEN_TEXT "\033[1;32m"
+#define RESET_TEXT "\033[0m"
+
 string version = "0.2.0";
 string date = "2024-04-10";
 string author = "Roland Faure";
 
+void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string &path_convertToGFA, string &path_graphunzip, string path_src){
+
+    string command_bcalm = path_bcalm + " --help 2> /dev/null > /dev/null";
+    auto bcalm_ok = system(command_bcalm.c_str());
+
+    string command_hifiasm = path_hifiasm + " --help 2> /dev/null > /dev/null";
+    auto hifiasm_ok = system(command_hifiasm.c_str());
+
+    string command_spades = path_spades + " --help 2> /dev/null > /dev/null";
+    auto spades_ok = system(command_spades.c_str());
+
+    string command_raven = path_raven + " --help 2> /dev/null > /dev/null";
+    auto raven_ok = system(command_raven.c_str());
+
+    // string command_minia = path_minia + " --help 2> /dev/null > /dev/null";
+    // auto minia_ok = system(command_minia.c_str());
+    // cout << "trying command line " << command_minia << " " << minia_ok << " " << minia_ok2 << endl;
+
+    int convertToGFA_ok = 0;
+    int graphunzip_ok = 0;
+    if (assembler == "bcalm"){
+        path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
+        convertToGFA_ok = system((path_convertToGFA+" --help >/dev/null 2>/dev/null").c_str());
+        if (convertToGFA_ok != 0){
+            path_convertToGFA = "convertToGFA.py";
+            convertToGFA_ok = system(path_convertToGFA.c_str());
+            if (convertToGFA_ok != 0){
+                cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321. I was looking for convertToGFA.py at " << path_src << "/bcalm/scripts/convertToGFA.py but did not find it\n";
+                cerr << "Command 1: " << "python " << path_src << "/bcalm/scripts/convertToGFA.py\n";
+                cerr << "Command 2: " << "convertToGFA.py\n";
+                exit(1);
+            }
+        }
+
+        path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
+        auto graphunzip_ok = system((path_graphunzip + " --help >/dev/null 2>/dev/null ").c_str());
+        if (graphunzip_ok != 0){
+            path_graphunzip = "graphunzip.py";
+            graphunzip_ok = system(path_graphunzip.c_str());
+            if (graphunzip_ok != 0){
+                cerr << "ERROR: graphunzip.py not found, problem in the installation, error code 322. I was looking for graphunzip.py at " << path_src << "/GraphUnzip/graphunzip.py but did not find it\n";
+                exit(1);
+            }
+        }
+    }
+
+    std::cout << "_______________________________" << std::endl;
+    std::cout << "|    Dependency     |  Found  |" << std::endl;
+    std::cout << "|-------------------|---------|" << std::endl;
+    if (assembler == "bcalm")
+        std::cout << "|    bcalm          |   " << (bcalm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    else if (assembler == "hifiasm")
+        std::cout << "|    hifiasm        |   " << (hifiasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    else if (assembler == "spades")
+        std::cout << "|    spades         |   " << (spades_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    // else if (assembler == "gatb-minia")
+    //     std::cout << "|    gatb-minia     |   " << (minia_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    else if (assembler == "raven")
+        std::cout << "|    raven          |   " << (raven_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    std::cout << "-------------------------------" << std::endl;
+
+    if ((bcalm_ok != 0 && assembler == "bcalm") || 
+        (hifiasm_ok != 0 && assembler == "hifiasm") || 
+        (spades_ok != 0 && assembler == "spades") || 
+        // (minia_ok != 0 && assembler == "gatb-minia") ||
+        (raven_ok != 0 && assembler == "raven") ||
+        convertToGFA_ok != 0 || graphunzip_ok != 0){
+        std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
+        exit(1);
+    }
+
+}
 
 int main(int argc, char** argv)
 {
@@ -41,24 +118,35 @@ int main(int argc, char** argv)
     string input_file, output_folder;
     string assembler = "bcalm";
     string path_to_bcalm = "bcalm";
-    string path_to_minimap = "minimap2";
+    string path_to_hifiasm = "hifiasm";
+    string path_to_spades = "spades.py";
+    string path_to_minia = "gatb";
+    string path_to_raven = "raven";
     bool rescue = false;
     int min_abundance = 5;
     int order = 201;
     int compression = 20;
     int num_threads = 1;
+    bool no_hpc = false;
     auto cli = (
         clipp::required("-r", "--reads").doc("input file (fasta/q)") & clipp::opt_value("r",input_file),
         clipp::required("-o", "--output").doc("output folder") & clipp::opt_value("o",output_folder),
         clipp::option("-t", "--threads").doc("number of threads [1]") & clipp::opt_value("t", num_threads),
-        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
+        clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia} [bcalm]") & clipp::opt_value("a", assembler),
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
+        clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
-        clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap),
+        clipp::option("--hifiasm").doc("paht to hifiasm [hifiasm]") & clipp::opt_value("h", path_to_hifiasm),
+        clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
+        clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
+        clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
+        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5] (for kmer-based assemblers)") & clipp::opt_value("m", min_abundance),
+
         clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
 
     );
+    bool homopolymer_compression = !no_hpc;
 
     //ascii art of a cake:
     //     _.mnm._    
@@ -80,16 +168,14 @@ int main(int argc, char** argv)
 //    :  :
 //    :__:  
 
-    //The Alice Assembler ascii art
-
 
     //Show the bottle left, then the cake right
-    cout << "          _______ _                     _ _                                            _     _              " << "" << endl;
-    cout << "         |__   __| |              /\\   | (_)              /\\                          | |   | |             " << "" << endl;
-    cout << " ::         | |  | |__   ___     /  \\  | |_  ___ ___     /  \\   ___ ___  ___ _ __ ___ | |__ | | ___ _ __    " << "   _.mnm._ " << endl;
+    cout << "          _______ _                     _ _                                            _     _              "           << "           " << endl;
+    cout << "         |__   __| |              /\\   | (_)              /\\                          | |   | |             "         << "           " << endl;
+    cout << " ::         | |  | |__   ___     /  \\  | |_  ___ ___     /  \\   ___ ___  ___ _ __ ___ | |__ | | ___ _ __    "         << "   _.mnm._ " << endl;
     cout << ":  :        | |  | '_ \\ / _ \\   / /\\ \\ | | |/ __/ _ \\   / /\\ \\ / __/ __|/ _ \\ '_ ` _ \\| '_ \\| |/ _ \\ '__|   "<< "  ( _____ )" << endl;
-    cout << ":  :        | |  | | | |  __/  / ____ \\| | | (_|  __/  / ____ \\\\__ \\__ \\  __/ | | | | | |_) | |  __/ |      " << "   |     |" << endl;
-    cout << ":__:        |_|  |_| |_|\\___| /_/    \\_\\_|_|\\___\\___| /_/    \\_\\___/___/\\___|_| |_| |_|_.__/|_|\\___|_|      " << "    `___/  "<< endl;
+    cout << ":  :        | |  | | | |  __/  / ____ \\| | | (_|  __/  / ____ \\\\__ \\__ \\  __/ | | | | | |_) | |  __/ |      "      << "   |     | " << endl;
+    cout << ":__:        |_|  |_| |_|\\___| /_/    \\_\\_|_|\\___\\___| /_/    \\_\\___/___/\\___|_| |_| |_|_.__/|_|\\___|_|      "  << "    `___/  " << endl;
     cout << endl;
 
     cout << "Command line: ";
@@ -111,8 +197,8 @@ int main(int argc, char** argv)
     }
     int context_length = (order-1)/2;
 
-    if (assembler != "bcalm" && assembler != "hifiasm"){
-        cerr << "ERROR: assembler must be bcalm or hifiasm\n";
+    if (assembler != "bcalm" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven"){
+        cerr << "ERROR: assembler must be bcalm or hifiasm or spades\n";
         exit(1);
     }
 
@@ -138,24 +224,10 @@ int main(int argc, char** argv)
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /reduce
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
 
-    //check if the path to bcalm is correct
-    string command_bcalm = path_to_bcalm + " --help 2> /dev/null > /dev/null";
-    auto bcalm_ok = system(command_bcalm.c_str());
-    if (bcalm_ok != 0){
-        cerr << "ERROR: bcalm not found using command line " << command_bcalm << "\n";
-        cerr << "Please specify a valid path using --bcalm\n" << endl;
-        exit(1);
-    }
-    //check if the path to minimap is correct
-    command = path_to_minimap + " --help 2> /dev/null > /dev/null";
-    auto ok = system(command.c_str());
-    if (ok != 0){
-        cerr << "ERROR: minimap2 not found using command line " << command << "\n";
-        cerr << "Please specify a valid path using --minimap2\n" << endl;
-        exit(1);
-    }
-
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
+    string path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
+
+    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_convertToGFA, path_graphunzip, path_src);
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
@@ -175,17 +247,26 @@ int main(int argc, char** argv)
 
     cout << "==== Step 1: MSR compression of the reads ====\n";
     
-    reduce(input_file, compressed_file, context_length, compression, num_threads);
+    reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
 
-    cout << "==== Step 2: Assembly of the compressed reads with ====\n";
+    cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====\n";
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "bcalm"){
-        assembly_bcalm(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_src);
+        assembly_bcalm(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip);
     }
     else if (assembler == "hifiasm"){
-        assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly);
+        assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm);
+    }
+    else if (assembler == "spades"){
+        assembly_spades(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_spades);
+    }
+    else if (assembler == "gatb-minia"){
+        assembly_minia(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_minia, path_convertToGFA);
+    }
+    else if (assembler == "raven"){
+        assembly_raven(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_raven);
     }
 
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";
@@ -194,7 +275,7 @@ int main(int argc, char** argv)
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";
     //time the next function
     unordered_map<string, pair<string,string>> kmers;
-    go_through_the_reads_again(input_file, compressed_assembly, context_length, compression, km, kmers, num_threads);
+    go_through_the_reads_again(input_file, compressed_assembly, context_length, compression, km, kmers, num_threads, homopolymer_compression);
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
     cout << " - Reconstructing the uncompressed assembly" << endl;
     expand(compressed_assembly, decompressed_assembly, km, 70, kmers);

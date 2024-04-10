@@ -17,6 +17,5 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
 void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::string, float>& coverages);
 
 void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overlap, int default_overlap);
-void remove_homopolymer_errors(std::string gfa_in, std::string gfa_out, std::string path_to_minimap2);
 
 #endif
