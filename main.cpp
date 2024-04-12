@@ -33,25 +33,28 @@ using std::unordered_set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.2.0";
-string date = "2024-04-10";
+string version = "0.2.1";
+string date = "2024-04-12";
 string author = "Roland Faure";
 
-void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string &path_convertToGFA, string &path_graphunzip, string path_src){
+void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string &path_convertToGFA, string &path_graphunzip, string path_src){
 
-    string command_bcalm = path_bcalm + " --help 2> /dev/null > /dev/null";
+    string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
     auto bcalm_ok = system(command_bcalm.c_str());
 
-    string command_hifiasm = path_hifiasm + " --help 2> /dev/null > /dev/null";
+    string command_hifiasm = path_hifiasm + " -h 2> trash.log > trash.log";
     auto hifiasm_ok = system(command_hifiasm.c_str());
 
-    string command_spades = path_spades + " --help 2> /dev/null > /dev/null";
+    string command_spades = path_spades + " --help 2> trash.log > trash.log";
     auto spades_ok = system(command_spades.c_str());
 
-    string command_raven = path_raven + " --help 2> /dev/null > /dev/null";
+    string command_raven = path_raven + " --help 2> trash.log > trash.log";
     auto raven_ok = system(command_raven.c_str());
 
-    // string command_minia = path_minia + " --help 2> /dev/null > /dev/null";
+    string command_flye = path_to_flye + " --help 2> trash.log > trash.log";
+    auto flye_ok = system(command_flye.c_str());
+
+    // string command_minia = path_minia + " --help 2> trash.log > trash.log";
     // auto minia_ok = system(command_minia.c_str());
     // cout << "trying command line " << command_minia << " " << minia_ok << " " << minia_ok2 << endl;
 
@@ -59,7 +62,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     int graphunzip_ok = 0;
     if (assembler == "bcalm"){
         path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
-        convertToGFA_ok = system((path_convertToGFA+" --help >/dev/null 2>/dev/null").c_str());
+        convertToGFA_ok = system((path_convertToGFA+" --help >trash.log 2>trash.log").c_str());
         if (convertToGFA_ok != 0){
             path_convertToGFA = "convertToGFA.py";
             convertToGFA_ok = system(path_convertToGFA.c_str());
@@ -72,7 +75,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         }
 
         path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
-        auto graphunzip_ok = system((path_graphunzip + " --help >/dev/null 2>/dev/null ").c_str());
+        auto graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());
         if (graphunzip_ok != 0){
             path_graphunzip = "graphunzip.py";
             graphunzip_ok = system(path_graphunzip.c_str());
@@ -96,6 +99,8 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     //     std::cout << "|    gatb-minia     |   " << (minia_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     else if (assembler == "raven")
         std::cout << "|    raven          |   " << (raven_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    else if (assembler == "flye")
+        std::cout << "|    flye           |   " << (flye_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     std::cout << "-------------------------------" << std::endl;
 
     if ((bcalm_ok != 0 && assembler == "bcalm") || 
@@ -103,6 +108,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         (spades_ok != 0 && assembler == "spades") || 
         // (minia_ok != 0 && assembler == "gatb-minia") ||
         (raven_ok != 0 && assembler == "raven") ||
+        (flye_ok != 0 && assembler == "flye") ||
         convertToGFA_ok != 0 || graphunzip_ok != 0){
         std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
         exit(1);
@@ -122,6 +128,8 @@ int main(int argc, char** argv)
     string path_to_spades = "spades.py";
     string path_to_minia = "gatb";
     string path_to_raven = "raven";
+    string path_to_flye = "flye";
+    string assembler_parameters = "";
     bool rescue = false;
     int min_abundance = 5;
     int order = 201;
@@ -136,10 +144,12 @@ int main(int argc, char** argv)
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
+        clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
         clipp::option("--hifiasm").doc("paht to hifiasm [hifiasm]") & clipp::opt_value("h", path_to_hifiasm),
         clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
         clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
+        // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
         clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5] (for kmer-based assemblers)") & clipp::opt_value("m", min_abundance),
 
@@ -147,6 +157,7 @@ int main(int argc, char** argv)
 
     );
     bool homopolymer_compression = !no_hpc;
+
 
     //ascii art of a cake:
     //     _.mnm._    
@@ -170,12 +181,12 @@ int main(int argc, char** argv)
 
 
     //Show the bottle left, then the cake right
-    cout << "          _______ _                     _ _                                            _     _              "           << "           " << endl;
-    cout << "         |__   __| |              /\\   | (_)              /\\                          | |   | |             "         << "           " << endl;
-    cout << " ::         | |  | |__   ___     /  \\  | |_  ___ ___     /  \\   ___ ___  ___ _ __ ___ | |__ | | ___ _ __    "         << "   _.mnm._ " << endl;
-    cout << ":  :        | |  | '_ \\ / _ \\   / /\\ \\ | | |/ __/ _ \\   / /\\ \\ / __/ __|/ _ \\ '_ ` _ \\| '_ \\| |/ _ \\ '__|   "<< "  ( _____ )" << endl;
-    cout << ":  :        | |  | | | |  __/  / ____ \\| | | (_|  __/  / ____ \\\\__ \\__ \\  __/ | | | | | |_) | |  __/ |      "      << "   |     | " << endl;
-    cout << ":__:        |_|  |_| |_|\\___| /_/    \\_\\_|_|\\___\\___| /_/    \\_\\___/___/\\___|_| |_| |_|_.__/|_|\\___|_|      "  << "    `___/  " << endl;
+    cout << "   _______ _                     _ _                                            _     _              "           << "      " << "           " << endl;
+    cout << "  |__   __| |              /\\   | (_)              /\\                          | |   | |             "         << "      " << "           " << endl;
+    cout << "     | |  | |__   ___     /  \\  | |_  ___ ___     /  \\   ___ ___  ___ _ __ ___ | |__ | | ___ _ __    "         << "  ::  " << "   _.mnm._ " << endl;
+    cout << "     | |  | '_ \\ / _ \\   / /\\ \\ | | |/ __/ _ \\   / /\\ \\ / __/ __|/ _ \\ '_ ` _ \\| '_ \\| |/ _ \\ '__|   "<< " :  : " << "  ( _____ )" << endl;
+    cout << "     | |  | | | |  __/  / ____ \\| | | (_|  __/  / ____ \\\\__ \\__ \\  __/ | | | | | |_) | |  __/ |      "      << " :  : " << "   |     | " << endl;
+    cout << "     |_|  |_| |_|\\___| /_/    \\_\\_|_|\\___\\___| /_/    \\_\\___/___/\\___|_| |_| |_|_.__/|_|\\___|_|      "  << " :__: " << "    `___/  " << endl;
     cout << endl;
 
     cout << "Command line: ";
@@ -192,13 +203,13 @@ int main(int argc, char** argv)
     }
 
     if (order % 2 == 0){
-        cerr << "ERROR: order must be odd\n";
-        exit(1);
+        cerr << "WARNING: order (-l) must be odd, changing l to " << order-1 << "\n";
+        order = order-1;
     }
     int context_length = (order-1)/2;
 
     if (assembler != "bcalm" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven"){
-        cerr << "ERROR: assembler must be bcalm or hifiasm or spades\n";
+        cerr << "ERROR: assembler must be bcalm or hifiasm or spades or gatb-mina or raven or flye \n";
         exit(1);
     }
 
@@ -212,11 +223,11 @@ int main(int argc, char** argv)
     auto start = std::chrono::high_resolution_clock::now();
 
     //check if the output folder exists
-    string command = "mkdir -p " + output_folder + " 2> /dev/null";
+    string command = "mkdir -p " + output_folder + " 2> trash.log";
     system(command.c_str());
 
     //create the tmp folder
-    command = "mkdir -p " + tmp_folder + " 2> /dev/null";
+    command = "mkdir -p " + tmp_folder + " 2> trash.log";
     system(command.c_str());
     
 
@@ -227,7 +238,7 @@ int main(int argc, char** argv)
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
     string path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
 
-    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_convertToGFA, path_graphunzip, path_src);
+    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_convertToGFA, path_graphunzip, path_src);
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
@@ -245,28 +256,31 @@ int main(int argc, char** argv)
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
     int km = 31; //size of the kmer used to do the expansion. Must be >21
 
-    cout << "==== Step 1: MSR compression of the reads ====\n";
+    cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
     reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
 
-    cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====\n";
+    cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "bcalm"){
-        assembly_bcalm(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip);
+        assembly_bcalm(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
     }
     else if (assembler == "hifiasm"){
-        assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm);
+        assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);
     }
     else if (assembler == "spades"){
-        assembly_spades(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_spades);
+        assembly_spades(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_spades, assembler_parameters);
     }
     else if (assembler == "gatb-minia"){
-        assembly_minia(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_minia, path_convertToGFA);
+        assembly_minia(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_minia, path_convertToGFA, assembler_parameters);
     }
     else if (assembler == "raven"){
-        assembly_raven(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_raven);
+        assembly_raven(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_raven, assembler_parameters);
+    }
+    else if (assembler == "flye"){
+        assembly_flye(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_flye, assembler_parameters);
     }
 
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";

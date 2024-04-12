@@ -25,9 +25,9 @@ using robin_hood::unordered_map;
  * @param num_threads 
  * @param final_file 
  */
-void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_hifiasm){
+void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_hifiasm, std::string parameters){
     string hifiasm_output = tmp_folder;
-    string command_hifiasm = path_to_hifiasm + " -o " + hifiasm_output + "hifiasm -t " + std::to_string(num_threads) + " " + read_file + " > " + tmp_folder + "hifiasm.log 2>&1";
+    string command_hifiasm = path_to_hifiasm + " -o " + hifiasm_output + "hifiasm -t " + std::to_string(num_threads) + " " + read_file + " " + parameters + " > " + tmp_folder + "hifiasm.log 2>&1";
     string untangled_gfa = hifiasm_output + "hifiasm.bp.p_ctg.gfa";
 
     auto hifiasm_ok = system(command_hifiasm.c_str());
@@ -54,7 +54,7 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
+void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
@@ -148,9 +148,9 @@ void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_fo
  * @param num_threads 
  * @param final_file 
  */
-void assembly_spades(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_spades){
+void assembly_spades(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_spades, std::string parameters){
     string spades_output = tmp_folder;
-    string command_spades = path_to_spades + " -o " + spades_output + "spades --only-assembler -t " + std::to_string(num_threads) + " -s " + read_file;// + " > " + tmp_folder + "spades.log 2>&1";
+    string command_spades = path_to_spades + " -o " + spades_output + "spades --only-assembler -t " + std::to_string(num_threads) + " -s " + read_file + " " + parameters + " > " + tmp_folder + "spades.log 2>&1";
     string spades_gfa = spades_output + "spades/assembly_graph_with_scaffolds.gfa";
 
     auto spades_ok = system(command_spades.c_str());
@@ -165,7 +165,7 @@ void assembly_spades(std::string read_file, std::string tmp_folder, int num_thre
     system(command_move.c_str());
 }
 
-void assembly_minia(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_gatb, std::string path_convertToGFA){
+void assembly_minia(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_gatb, std::string path_convertToGFA, std::string parameters){
 
     //recover the absolute path to the tmp_folder
     tmp_folder = std::filesystem::absolute(tmp_folder).string();
@@ -178,7 +178,7 @@ void assembly_minia(std::string read_file, std::string tmp_folder, int num_threa
 
     string minia_output = tmp_folder + "minia";
     string command_minia = path_gatb + " --no-scaffolding --no-error-correction -s " + read_file + " --nb-cores " + std::to_string(num_threads) 
-        + " -o " + minia_output + " > " + tmp_folder + "minia.log 2>&1";
+        + " -o " + minia_output + " " + parameters + " > " + tmp_folder + "minia.log 2>&1";
 
     auto minia_ok = system(command_minia.c_str());
     if (minia_ok != 0){
@@ -197,9 +197,9 @@ void assembly_minia(std::string read_file, std::string tmp_folder, int num_threa
     system(command_move.c_str());
 }
 
-void assembly_raven(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_raven){
+void assembly_raven(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_raven, std::string parameters){
     
-    string command_raven = path_to_raven + " --graphical-fragment-assembly " + final_file + " -t " + std::to_string(num_threads) + " " + read_file + " > " + tmp_folder + "raven.log 2>&1";
+    string command_raven = path_to_raven + " --graphical-fragment-assembly " + final_file + " -t " + std::to_string(num_threads) + " " + read_file + " " + parameters + " > " + tmp_folder + "raven.log 2>&1";
 
     auto raven_ok = system(command_raven.c_str());
     if (raven_ok != 0){
@@ -207,5 +207,21 @@ void assembly_raven(std::string read_file, std::string tmp_folder, int num_threa
         cerr << command_raven << endl;
         exit(1);
     }
+}
+
+void assembly_flye(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_flye, std::string parameters){
+    
+    string command_flye = path_to_flye + " --pacbio-raw " + read_file + " --out-dir " + tmp_folder + "flye --threads " + std::to_string(num_threads) + " " + parameters+ " > " + tmp_folder + "flye.log 2>&1";
+
+    auto flye_ok = system(command_flye.c_str());
+    if (flye_ok != 0){
+        cerr << "ERROR: flye failed after running command line\n";
+        cerr << command_flye << endl;
+        exit(1);
+    }
+
+    //move the output to the final file
+    string command_move = "mv " + tmp_folder + "flye/assembly_graph.gfa " + final_file;
+    system(command_move.c_str());
 }
 

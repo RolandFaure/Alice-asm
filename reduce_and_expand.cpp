@@ -10,6 +10,9 @@
 #include <chrono>
 #include <thread>
 #include <omp.h> //for efficient parallelization
+#include <filesystem>
+#include <zlib.h>  // Include the gzstream header
+
 
 #include "robin_hood.h"
 #include "basic_graph_manipulation.h"
@@ -70,6 +73,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
         std::ofstream out(output_file_chunk);
         std::string line;
         bool next_line_is_seq = false;
+        int size_of_line = 0;
 
         while (std::getline(input, line))
         {
@@ -88,6 +92,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 }
                 seq_num++;
                 next_line_is_seq = true;
+                size_of_line = line.size();
             }
             else if (next_line_is_seq){
                 //let's launch the foward and reverse rolling hash
@@ -95,26 +100,38 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 uint64_t hash_reverse = 0;
                 size_t pos_end = 0;
                 long pos_begin = -k;
+                int num_bases = 0;
 
                 while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, homopolymer_compression)){
                     if (pos_begin>=0){
                         if (hash_foward<hash_reverse && hash_foward % compression == 0){
                             out << "ACGT"[(hash_foward/compression)%4];
+                            num_bases++;
                         }
                         else if (hash_foward>=hash_reverse && hash_reverse % compression == 0){
                             out << "TGCA"[(hash_reverse/compression)%4];
+                            num_bases++;
                         }
                     }
                 }
+                if (num_bases == 0){ //just to make sure we don't have empty lines
+                    //go back to the beginning of the previous line and remove the name
+                    out.seekp(-1-size_of_line-1, std::ios_base::cur);
+                }
                 out << "\n";
-            }
-            //if we went beyond chunk+1 * size_of_chunk, we can stop
-            if (input.tellg() > (chunk+1)*size_of_chunk){
-                break;
+
+                if (input.tellg() > (chunk+1)*size_of_chunk){
+                    break;
+                }
             }
         }
+
+        auto size_of_file = out.tellp(); //to remove the last name of read if the last read was of length 0 
         input.close();
         out.close();
+
+        //resize the file to the actual size
+        std::filesystem::resize_file(output_file_chunk, size_of_file);
 
         //append the chunk to the final output
         #pragma omp critical
@@ -171,6 +188,7 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
 
     //go through the fasta file and compute the hash of all the kmer using homecoded ntHash
     int seq_num = 0;
+    long long output_limit = 0;
     omp_set_num_threads(num_threads);
     #pragma omp parallel for
     for (int chunk = 0 ; chunk <= file_size/size_of_chunk ; chunk++){
@@ -181,7 +199,6 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
         std::string line;
         bool next_line_is_seq = false;
         string read_name;
-        long long output_limit = 0;
 
         while (std::getline(input, line)){
 
@@ -193,7 +210,7 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                         //display the date and time
                         time_t now = time(0);
                         tm *ltm = localtime(&now);
-                        cout << "[" << 1 + ltm->tm_mon << "/" << 1900 + ltm->tm_year << " " << ltm->tm_hour << ":" << ltm->tm_min << ":" << ltm->tm_sec << "]" << " Processed " << seq_num << " reads" << endl;
+                        cout << "[" << 1 + ltm->tm_mday << "/" << 1 + ltm->tm_mon << "/" << 1900 + ltm->tm_year << " " << ltm->tm_hour << ":" << ltm->tm_min << ":" << ltm->tm_sec << "]" << " Processed " << seq_num << " reads" << endl;
                         output_limit += 50000;
                     }
                     // cout << "nanaaaammmmma " << line << endl;
@@ -252,16 +269,22 @@ void go_through_the_reads_again(string reads_file, string assemblyFile, int cont
                                 {
                                     if (confirmed_kmers[canonical_kmer] == false){
 
-                                        if (kmer_count.find(canonical_kmer) == kmer_count.end()){
-                                            kmer_count[canonical_kmer] = {};
-                                            kmers[kmer] = {"",""}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
-                                            kmers[rkmer] = {"",""};
-                                            confirmed_kmers[canonical_kmer] = false;
-                                        }
+                                        
                                         
                                         string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
                                         string reverse_central_seq = reverse_complement(central_seq);
                                         string canonical_central_seq = min(central_seq, reverse_central_seq);
+
+                                        if (kmer_count.find(canonical_kmer) == kmer_count.end()){
+                                            kmer_count[canonical_kmer] = {};
+                                            string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+
+                                            kmers[kmer] = {central_seq, full_seq}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
+                                            kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
+
+                                            confirmed_kmers[canonical_kmer] = false;
+                                        }
+
                                         if (kmer_count[canonical_kmer].find(canonical_central_seq) == kmer_count[canonical_kmer].end()){
                                             kmer_count[canonical_kmer][canonical_central_seq] = 0;
                                         }
@@ -519,6 +542,7 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, u
                 }
 
                 expanded_sequence += end_of_seq.substr(overlap, end_of_seq.size()-overlap);
+
             }
             else{
                 cerr << "WARNING (code 557) not found kmer " << last_kmer << "\n";
