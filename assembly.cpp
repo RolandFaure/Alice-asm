@@ -28,7 +28,7 @@ using robin_hood::unordered_map;
 void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_hifiasm, std::string parameters){
     string hifiasm_output = tmp_folder;
     string command_hifiasm = path_to_hifiasm + " -o " + hifiasm_output + "hifiasm -t " + std::to_string(num_threads) + " " + read_file + " " + parameters + " > " + tmp_folder + "hifiasm.log 2>&1";
-    string untangled_gfa = hifiasm_output + "hifiasm.bp.p_ctg.gfa";
+    string untangled_gfa = hifiasm_output + "hifiasm.p_ctg.gfa";
 
     auto hifiasm_ok = system(command_hifiasm.c_str());
     if (hifiasm_ok != 0){
@@ -223,5 +223,40 @@ void assembly_flye(std::string read_file, std::string tmp_folder, int num_thread
     //move the output to the final file
     string command_move = "mv " + tmp_folder + "flye/assembly_graph.gfa " + final_file;
     system(command_move.c_str());
+}
+
+void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_miniasm, std::string path_to_minimap2, std::string path_to_minipolish, std::string parameters){
+
+    //all-vs-all read mapping
+    string command_minimap = path_to_minimap2 + " -t " + std::to_string(num_threads) + " -x ava-ont " + read_file + " " + read_file + " > " + tmp_folder + "minimap.paf 2> " + tmp_folder + "minimap.log";
+    cout << "rqdj runneig command line: " << command_minimap << endl;
+    auto minimap_ok = system(command_minimap.c_str());
+    if (minimap_ok != 0){
+        cerr << "ERROR: minimap failed after running command line\n";
+        cerr << command_minimap << endl;
+        exit(1);
+    }
+
+    //miniasm assembly to get the raw, unpolished assembly
+    string command_miniasm = path_to_miniasm + " -f " + read_file + " " + tmp_folder + "minimap.paf > " + tmp_folder + "miniasm.gfa 2> " + tmp_folder + "miniasm.log";
+    cout << "rqdj runneig command line: " << command_miniasm << endl;
+    auto miniasm_ok = system(command_miniasm.c_str());
+    if (miniasm_ok != 0){
+        cerr << "ERROR: miniasm failed after running command line\n";
+        cerr << command_miniasm << endl;
+        exit(1);
+    }
+
+    //minipolish to polish the assembly
+    string command_minipolish = path_to_minipolish + " -t " + std::to_string(num_threads) + " " + read_file + " " + tmp_folder + "miniasm.gfa > " + final_file + " 2> " + tmp_folder + "minipolish.log";
+    cout << "rqdj runneig command line: " << command_minipolish << endl;
+    auto minipolish_ok = system(command_minipolish.c_str());
+    if (minipolish_ok != 0){
+        cerr << "ERROR: minipolish failed after running command line\n";
+        cerr << command_minipolish << endl;
+        exit(1);
+    }
+
+
 }
 

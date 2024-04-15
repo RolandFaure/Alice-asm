@@ -10,5 +10,6 @@ void assembly_spades(std::string read_file, std::string tmp_folder, int num_thre
 void assembly_minia(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_gatb, std::string path_convertToGFA, std::string parameters);
 void assembly_raven(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_raven, std::string parameters);
 void assembly_flye(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_flye, std::string parameters);
+void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_miniasm, std::string path_to_minimap2, std::string path_to_minipolish, std::string parameters);
 
 #endif

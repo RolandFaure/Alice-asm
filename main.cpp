@@ -33,11 +33,12 @@ using std::unordered_set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.2.1";
+string version = "0.2.2";
 string date = "2024-04-12";
 string author = "Roland Faure";
 
-void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string &path_convertToGFA, string &path_graphunzip, string path_src){
+void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish,
+    string &path_convertToGFA, string &path_graphunzip, string path_src){
 
     string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
     auto bcalm_ok = system(command_bcalm.c_str());
@@ -53,6 +54,15 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
     string command_flye = path_to_flye + " --help 2> trash.log > trash.log";
     auto flye_ok = system(command_flye.c_str());
+
+    string command_minimap = path_minimap + " --version 2> trash.log > trash.log";
+    auto minimap_ok = system(command_minimap.c_str());
+
+    string command_miniasm = path_miniasm + " -V 2> trash.log > trash.log";
+    auto miniasm_ok = system(command_miniasm.c_str());
+
+    string command_minipolish = path_minipolish + " --version 2> trash.log > trash.log";
+    auto minipolish_ok = system(command_minipolish.c_str());
 
     // string command_minia = path_minia + " --help 2> trash.log > trash.log";
     // auto minia_ok = system(command_minia.c_str());
@@ -101,6 +111,11 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         std::cout << "|    raven          |   " << (raven_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     else if (assembler == "flye")
         std::cout << "|    flye           |   " << (flye_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    else if (assembler == "miniasm"){
+        std::cout << "|    minimap2       |   " << (minimap_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+        std::cout << "|    miniasm        |   " << (miniasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+        std::cout << "|    minipolish     |   " << (minipolish_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    }
     std::cout << "-------------------------------" << std::endl;
 
     if ((bcalm_ok != 0 && assembler == "bcalm") || 
@@ -109,6 +124,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         // (minia_ok != 0 && assembler == "gatb-minia") ||
         (raven_ok != 0 && assembler == "raven") ||
         (flye_ok != 0 && assembler == "flye") ||
+        ((minimap_ok != 0 || miniasm_ok != 0 || minipolish_ok != 0) && assembler == "miniasm") ||
         convertToGFA_ok != 0 || graphunzip_ok != 0){
         std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
         exit(1);
@@ -124,11 +140,14 @@ int main(int argc, char** argv)
     string input_file, output_folder;
     string assembler = "bcalm";
     string path_to_bcalm = "bcalm";
-    string path_to_hifiasm = "hifiasm";
+    string path_to_hifiasm = "hifiasm_meta";
     string path_to_spades = "spades.py";
     string path_to_minia = "gatb";
     string path_to_raven = "raven";
     string path_to_flye = "flye";
+    string path_to_miniasm = "miniasm";
+    string path_to_minimap2 = "minimap2";
+    string path_to_minipolish = "racon";
     string assembler_parameters = "";
     bool rescue = false;
     int min_abundance = 5;
@@ -140,17 +159,20 @@ int main(int argc, char** argv)
         clipp::required("-r", "--reads").doc("input file (fasta/q)") & clipp::opt_value("r",input_file),
         clipp::required("-o", "--output").doc("output folder") & clipp::opt_value("o",output_folder),
         clipp::option("-t", "--threads").doc("number of threads [1]") & clipp::opt_value("t", num_threads),
-        clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia} [bcalm]") & clipp::opt_value("a", assembler),
+        clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia, miniasm} [bcalm]") & clipp::opt_value("a", assembler),
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
         clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
-        clipp::option("--hifiasm").doc("paht to hifiasm [hifiasm]") & clipp::opt_value("h", path_to_hifiasm),
+        clipp::option("--hifiasm_meta").doc("path to hifiasm_meta [hifiasm_meta]") & clipp::opt_value("h", path_to_hifiasm),
         clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
         clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
         // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
         clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
+        // clipp::option("--miniasm").doc("path to miniasm [miniasm]") & clipp::opt_value("m", path_to_miniasm), //we did not manage to make miniasm work
+        // clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap2),
+        // clipp::option("--minipolish").doc("path to minipolish [minipolish]") & clipp::opt_value("r", path_to_minipolish),
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5] (for kmer-based assemblers)") & clipp::opt_value("m", min_abundance),
 
         clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
@@ -238,7 +260,7 @@ int main(int argc, char** argv)
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
     string path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
 
-    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_convertToGFA, path_graphunzip, path_src);
+    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_convertToGFA, path_graphunzip, path_src);
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
@@ -281,6 +303,9 @@ int main(int argc, char** argv)
     }
     else if (assembler == "flye"){
         assembly_flye(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_flye, assembler_parameters);
+    }
+    else if (assembler == "miniasm"){
+        assembly_miniasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_miniasm, path_to_minimap2, path_to_minipolish, assembler_parameters);
     }
 
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";
