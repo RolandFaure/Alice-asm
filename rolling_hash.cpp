@@ -191,7 +191,7 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
     if (pos_begin < 0){
         return true;
     }
-    while(hpc && pos_begin < seq.size() && seq[pos_begin] == seq[pos_begin-1]){
+    while(hpc && pos_begin < seq.size() && pos_begin >= 1 && seq[pos_begin] == seq[pos_begin-1]){
         pos_begin++;
     }
 
@@ -358,7 +358,7 @@ bool roll(uint64_t &foward_hash, uint64_t &reverse_hash, int k, std::string &seq
     if (pos_begin < 0){
         return true;
     }
-    while(hpc && pos_begin < seq.size() && seq[pos_begin] == seq[pos_begin-1]){
+    while(hpc && pos_begin < seq.size() && pos_begin >= 1 && seq[pos_begin] == seq[pos_begin-1]){
         pos_begin++;
     }
 
@@ -497,7 +497,7 @@ bool roll_f(uint64_t &foward_hash, int k, std::string &seq, size_t &pos_end, lon
     if (pos_begin < 0){
         return true;
     }
-    while(hpc && pos_begin < seq.size() && seq[pos_begin] == seq[pos_begin-1]){
+    while(hpc && pos_begin < seq.size() && pos_begin >= 1 && seq[pos_begin] == seq[pos_begin-1]){
         pos_begin++;
     }
     

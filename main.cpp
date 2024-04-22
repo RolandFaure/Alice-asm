@@ -33,11 +33,11 @@ using std::unordered_set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.2.2";
-string date = "2024-04-12";
+string version = "0.2.3";
+string date = "2024-04-22";
 string author = "Roland Faure";
 
-void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish,
+void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
     string &path_convertToGFA, string &path_graphunzip, string path_src){
 
     string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
@@ -63,6 +63,13 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
     string command_minipolish = path_minipolish + " --version 2> trash.log > trash.log";
     auto minipolish_ok = system(command_minipolish.c_str());
+
+    string command_megahit = path_megahit + " --version 2> trash.log > trash.log";
+    auto megahit_ok = system(command_megahit.c_str());
+
+    string command_fastg2gfa = path_fastg2gfa + " 2> trash.log > trash.log";
+    auto fastg2gfa_ok = system(command_fastg2gfa.c_str());
+
 
     // string command_minia = path_minia + " --help 2> trash.log > trash.log";
     // auto minia_ok = system(command_minia.c_str());
@@ -116,7 +123,11 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         std::cout << "|    miniasm        |   " << (miniasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
         std::cout << "|    minipolish     |   " << (minipolish_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     }
+    else if (assembler == "megahit")
+        std::cout << "|    megahit        |   " << (megahit_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+        std::cout << "|    fastg2gfa      |   " << (fastg2gfa_ok == 256 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     std::cout << "-------------------------------" << std::endl;
+
 
     if ((bcalm_ok != 0 && assembler == "bcalm") || 
         (hifiasm_ok != 0 && assembler == "hifiasm") || 
@@ -125,7 +136,8 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         (raven_ok != 0 && assembler == "raven") ||
         (flye_ok != 0 && assembler == "flye") ||
         ((minimap_ok != 0 || miniasm_ok != 0 || minipolish_ok != 0) && assembler == "miniasm") ||
-        convertToGFA_ok != 0 || graphunzip_ok != 0){
+        (megahit_ok != 0 && assembler == "megahit" && fastg2gfa_ok != 0) ||
+        (convertToGFA_ok != 0 || graphunzip_ok != 0)){
         std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
         exit(1);
     }
@@ -148,6 +160,7 @@ int main(int argc, char** argv)
     string path_to_miniasm = "miniasm";
     string path_to_minimap2 = "minimap2";
     string path_to_minipolish = "racon";
+    string path_to_megahit = "megahit";
     string assembler_parameters = "";
     bool rescue = false;
     int min_abundance = 5;
@@ -159,7 +172,7 @@ int main(int argc, char** argv)
         clipp::required("-r", "--reads").doc("input file (fasta/q)") & clipp::opt_value("r",input_file),
         clipp::required("-o", "--output").doc("output folder") & clipp::opt_value("o",output_folder),
         clipp::option("-t", "--threads").doc("number of threads [1]") & clipp::opt_value("t", num_threads),
-        clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia, miniasm} [bcalm]") & clipp::opt_value("a", assembler),
+        clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia, megahit} [bcalm]") & clipp::opt_value("a", assembler),
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
@@ -170,6 +183,7 @@ int main(int argc, char** argv)
         clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
         // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
         clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
+        clipp::option("--megahit").doc("path to megahit [megahit]") & clipp::opt_value("m", path_to_megahit),
         // clipp::option("--miniasm").doc("path to miniasm [miniasm]") & clipp::opt_value("m", path_to_miniasm), //we did not manage to make miniasm work
         // clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap2),
         // clipp::option("--minipolish").doc("path to minipolish [minipolish]") & clipp::opt_value("r", path_to_minipolish),
@@ -230,7 +244,7 @@ int main(int argc, char** argv)
     }
     int context_length = (order-1)/2;
 
-    if (assembler != "bcalm" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven"){
+    if (assembler != "bcalm" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven" && assembler != "megahit"){
         cerr << "ERROR: assembler must be bcalm or hifiasm or spades or gatb-mina or raven or flye \n";
         exit(1);
     }
@@ -260,7 +274,10 @@ int main(int argc, char** argv)
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
     string path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
 
-    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_convertToGFA, path_graphunzip, path_src);
+    string path_total = argv[0];
+    string path_fastg2gfa = path_total.substr(0, path_total.find_last_of("/"))+ "/fastg2gfa";
+
+    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_to_megahit, path_fastg2gfa, path_convertToGFA, path_graphunzip, path_src);
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
@@ -306,6 +323,9 @@ int main(int argc, char** argv)
     }
     else if (assembler == "miniasm"){
         assembly_miniasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_miniasm, path_to_minimap2, path_to_minipolish, assembler_parameters);
+    }
+    else if (assembler == "megahit"){
+        assembly_megahit(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_megahit, path_fastg2gfa, assembler_parameters);
     }
 
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";

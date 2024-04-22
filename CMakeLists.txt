@@ -34,6 +34,13 @@ target_compile_options (aliceasm PRIVATE -std=c++17)
 target_compile_options (aliceasm PRIVATE -O3)
 target_compile_options (aliceasm PRIVATE -march=x86-64)
 
+file (GLOB SOURCE_FASTG2GFA "fastg2gfa.c")
+add_executable(fastg2gfa ${SOURCE_FASTG2GFA})
+target_compile_options (fastg2gfa PRIVATE -g)
+target_compile_options (fastg2gfa PRIVATE -O3)
+target_compile_options (fastg2gfa PRIVATE -march=x86-64)
+target_link_libraries(fastg2gfa PRIVATE z)
+
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(aliceasm PRIVATE OpenMP::OpenMP_CXX)

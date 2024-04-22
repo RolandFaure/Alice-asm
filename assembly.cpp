@@ -229,7 +229,6 @@ void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_thr
 
     //all-vs-all read mapping
     string command_minimap = path_to_minimap2 + " -t " + std::to_string(num_threads) + " -x ava-ont " + read_file + " " + read_file + " > " + tmp_folder + "minimap.paf 2> " + tmp_folder + "minimap.log";
-    cout << "rqdj runneig command line: " << command_minimap << endl;
     auto minimap_ok = system(command_minimap.c_str());
     if (minimap_ok != 0){
         cerr << "ERROR: minimap failed after running command line\n";
@@ -239,7 +238,6 @@ void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_thr
 
     //miniasm assembly to get the raw, unpolished assembly
     string command_miniasm = path_to_miniasm + " -f " + read_file + " " + tmp_folder + "minimap.paf > " + tmp_folder + "miniasm.gfa 2> " + tmp_folder + "miniasm.log";
-    cout << "rqdj runneig command line: " << command_miniasm << endl;
     auto miniasm_ok = system(command_miniasm.c_str());
     if (miniasm_ok != 0){
         cerr << "ERROR: miniasm failed after running command line\n";
@@ -249,7 +247,6 @@ void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_thr
 
     //minipolish to polish the assembly
     string command_minipolish = path_to_minipolish + " -t " + std::to_string(num_threads) + " " + read_file + " " + tmp_folder + "miniasm.gfa > " + final_file + " 2> " + tmp_folder + "minipolish.log";
-    cout << "rqdj runneig command line: " << command_minipolish << endl;
     auto minipolish_ok = system(command_minipolish.c_str());
     if (minipolish_ok != 0){
         cerr << "ERROR: minipolish failed after running command line\n";
@@ -258,5 +255,41 @@ void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_thr
     }
 
 
+}
+
+void assembly_megahit(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_megahit, std::string path_fastg2gfa, std::string parameters){
+    
+    //remove a potential already existing megahit folder
+    string command_rm = "rm -rf " + tmp_folder + "megahit > /dev/null 2>&1";
+    system(command_rm.c_str());
+
+
+    string command_megahit = path_to_megahit + " -t " + std::to_string(num_threads) + " -o " + tmp_folder + "megahit -r " + read_file + " " + parameters + " > " + tmp_folder + "megahit.log 2>&1";
+    auto megahit_ok = system(command_megahit.c_str());
+    cout << "command_megahit: " << command_megahit << "\n";
+    if (megahit_ok != 0){
+        cerr << "ERROR: megahit failed after running command line\n";
+        cerr << command_megahit << endl;
+        exit(1);
+    }
+
+    //convert the last intermediate assembly (k141) to fastg then to gfa
+    string command_to_fastg = "megahit_toolkit contig2fastg 141 " + tmp_folder + "megahit/intermediate_contigs/k141.contigs.fa > " + tmp_folder + "megahit/intermediate_contigs/k141.contigs.fastg";
+    cout << "command_to_fastg: " << command_to_fastg << "\n";
+    auto to_fastg_ok = system(command_to_fastg.c_str());
+    if (to_fastg_ok != 0){
+        cerr << "ERROR: megahit_toolkit contig2fastg failed after running command line\n";
+        cerr << command_to_fastg << endl;
+        exit(1);
+    }
+
+    string command_to_gfa = path_fastg2gfa + " " + tmp_folder + "megahit/intermediate_contigs/k141.contigs.fastg > " + final_file;
+    auto to_gfa_ok = system(command_to_gfa.c_str());
+    cout << "command_to_gfa: " << command_to_gfa << "\n";
+    if (to_gfa_ok != 0){
+        cerr << "ERROR: fastg2gfa failed after running command line\n";
+        cerr << command_to_gfa << endl;
+        exit(1);
+    }
 }
 
