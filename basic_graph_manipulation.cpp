@@ -510,3 +510,155 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
 
 }
 
+/**
+ * @brief Function that takes as input a graph, trim the tips less frequent than abundance_min, remove the branch of bubbles less abundant than abundance_min
+ * 
+ * @param gfa_in 
+ * @param abundance_min
+ * @param gfa_out 
+ */
+void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, string gfa_out){
+    ifstream input(gfa_in);
+    //first go through the gfa and find all the places where an end of contig is connected with two links
+    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
+    unordered_map<string, long int> pos_of_contig_seq_in_file;
+    unordered_map<string, float> coverage;
+    unordered_map<string, int> length_of_contigs;
+
+    string line;
+    long int pos = 0;
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            string depth_string = "  ";
+            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
+                string nds;
+                ss >> nds;
+                depth_string = nds;
+            }
+
+            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
+                cerr << "ERROR: no depth found for contig " << name << "\n";
+                exit(1);
+            }
+            float depth = std::stof(depth_string.substr(5, depth_string.size()-5));
+            coverage[name] = depth;
+            pos_of_contig_seq_in_file[name] = pos;
+            length_of_contigs[name] = sequence.size();
+
+            if (linked.find(name) == linked.end()){
+                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            int i = 0;
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            char or1 = (orientation1 == "+" ? 1 : 0);
+            char or2 = (orientation2 == "+" ? 0 : 1);
+            if (orientation1 == "+"){
+                linked[name1].second.push_back(make_pair(name2, or2));
+            }
+            else{
+                linked[name1].first.push_back(make_pair(name2, or2));
+            }
+
+            if (orientation2 == "+"){
+                linked[name2].first.push_back(make_pair(name1, or1));
+            }
+            else{
+                linked[name2].second.push_back(make_pair(name1, or1));
+            }
+        }
+        pos += line.size() + 1;
+    }
+    input.close();
+    input.open(gfa_in);
+
+    unordered_set<string> to_keep; //kept contigs are the one with a coverage above abundance_min and their necessary neighbors for the contiguity
+
+    //iterative cleaning of the graph
+    int number_of_edits = 1;
+    while (number_of_edits > 0){
+        number_of_edits = 0;
+
+        for (auto c: linked){
+
+            string contig = c.first;
+
+            if (coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length){
+                to_keep.insert(contig);
+            }
+
+            if (to_keep.find(contig) != to_keep.end()){
+                //make sure the contig has at least one neighbor left and right (if not, take the one with the highest coverage)
+                float best_coverage = 0;
+                string best_contig = "";
+                for (auto l: linked[contig].second){
+                    if (coverage[l.first] > best_coverage){
+                        best_coverage = coverage[l.first];
+                        best_contig = l.first;
+                    }
+                }
+                if (best_contig != ""){
+                    if (to_keep.find(best_contig) == to_keep.end()){
+                        to_keep.insert(best_contig);
+                        number_of_edits++;
+                    }
+                }
+            }
+        }
+
+        //update the links by removing all references to the contigs to remove
+
+        // cout << "Finished one iteration of pop and shave, added " << number_of_edits << " contigs to keep\n";
+
+    }
+
+    //now wirte the gfa file without the contigs to remove
+    input.close();
+    input.open(gfa_in);
+    ofstream out(gfa_out);
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            if (to_keep.find(name) != to_keep.end()){
+                out << line << "\n";
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            int i = 0;
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            if (to_keep.find(name1) != to_keep.end() && to_keep.find(name2) != to_keep.end()){
+                out << line << "\n";
+            }
+        }
+    }
+    out.close();
+
+}

@@ -33,8 +33,8 @@ using std::unordered_set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.2.3";
-string date = "2024-04-22";
+string version = "0.3.0";
+string date = "2024-04-24";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -123,9 +123,10 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         std::cout << "|    miniasm        |   " << (miniasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
         std::cout << "|    minipolish     |   " << (minipolish_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     }
-    else if (assembler == "megahit")
+    else if (assembler == "megahit"){
         std::cout << "|    megahit        |   " << (megahit_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
         std::cout << "|    fastg2gfa      |   " << (fastg2gfa_ok == 256 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    }
     std::cout << "-------------------------------" << std::endl;
 
 
@@ -146,7 +147,6 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
-
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;

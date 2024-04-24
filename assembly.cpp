@@ -59,13 +59,13 @@ void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_fo
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
-    vector<int> values_of_k = {16,31,41,71}; //size of the kmer used to build the graph (min >= km)
+    vector<int> values_of_k = {17,31,41,71}; //size of the kmer used to build the graph (min >= km)
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
         cout << "       - Unitig generation with bcalm" << endl;
-        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min " 
-            + std::to_string(min_abundance) + " -out "+tmp_folder+"bcalm > "+tmp_folder+"bcalm.log 2>&1";
+        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
+            + " -out "+tmp_folder+"bcalm > "+tmp_folder+"bcalm.log 2>&1";
         auto bcalm_ok = system(bcalm_command.c_str());
         if (bcalm_ok != 0){
             cerr << "ERROR: bcalm failed\n";
@@ -83,7 +83,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_fo
         // shave the resulting graph
         cout << "       - Shaving the graph of small dead ends" << endl;
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
-        shave(unitig_file_gfa, shaved_gfa, 2*kmer_len-1);
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, shaved_gfa);
 
         //merge the adjacent contigs
         cout << "       - Merging resulting contigs" << endl;
