@@ -517,7 +517,7 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
  * @param abundance_min
  * @param gfa_out 
  */
-void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, string gfa_out){
+void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, string gfa_out){
     ifstream input(gfa_in);
     //first go through the gfa and find all the places where an end of contig is connected with two links
     unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
@@ -599,7 +599,27 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, strin
             string contig = c.first;
 
             if (coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length){
-                to_keep.insert(contig);
+                //this contig is solid EXCEPT if it is a tip that has an abundance less than 2% of the coverage of the contig it is connected to
+                if (linked[contig].first.size() == 0 && linked[contig].second.size() == 1){
+                    //this is a tip
+                    if (coverage[contig] >= 0.02*coverage[linked[contig].second[0].first]){
+                        to_keep.insert(contig);
+                    }
+                }
+                else if (linked[contig].first.size() == 1 && linked[contig].second.size() == 0){
+                    //this is a tip
+                    if (coverage[contig] >= 0.02*coverage[linked[contig].first[0].first]){
+                        to_keep.insert(contig);
+                    }
+                }
+                else if (contiguity && linked[contig].first.size() == 1 && linked[contig].second.size() == 1) {//if contiguity mode is on, do not take contigs that have strictly two neighbors and less than 5% coverage compared to them (corresponds to bubble)
+                    if (coverage[contig] >= 0.05*max(coverage[linked[contig].first[0].first], coverage[linked[contig].second[0].first])){
+                        to_keep.insert(contig);
+                    }
+                }
+                else{
+                    to_keep.insert(contig);
+                }
             }
 
             if (to_keep.find(contig) != to_keep.end()){

@@ -54,7 +54,7 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
+void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
@@ -83,7 +83,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, std::string tmp_fo
         // shave the resulting graph
         cout << "       - Shaving the graph of small dead ends" << endl;
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, shaved_gfa);
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, shaved_gfa);
 
         //merge the adjacent contigs
         cout << "       - Merging resulting contigs" << endl;
