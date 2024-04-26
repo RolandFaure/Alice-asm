@@ -83,7 +83,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, s
         // shave the resulting graph
         cout << "       - Shaving the graph of small dead ends" << endl;
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, shaved_gfa);
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa);
 
         //merge the adjacent contigs
         cout << "       - Merging resulting contigs" << endl;

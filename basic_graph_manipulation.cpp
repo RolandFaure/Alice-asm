@@ -447,8 +447,8 @@ void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k
         system(convert_command2.c_str());
 
         //remove tmp files
-        string remove_tmp_files = "rm "+path_tmp_folder+"tmp_324*";
-        system(remove_tmp_files.c_str());
+        // string remove_tmp_files = "rm "+path_tmp_folder+"tmp_324*";
+        // system(remove_tmp_files.c_str());
 }
 
 void gfa_to_fasta(string gfa, string fasta){   
@@ -510,6 +510,101 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
 
 }
 
+//recursive function that returns true if it can find a path on one side of the contig of the contig of size 4*k without going through a contig with a coverage more than 20x the coverage of the contig
+//three possible outcomes: 0 = nothing overcovered but dead end, 1 = overcovered, 2 = not overcovered path found
+/**
+ * @brief 
+ * 
+ * @param contig current contig
+ * @param endOfContig endOfContig we arrive from
+ * @param linked 
+ * @param coverage 
+ * @param length_of_contigs 
+ * @param k 
+ * @param length_left 
+ * @param original_coverage 
+ * @param not_overcovered set to true if the contig is not overcovered left or right
+ * @return int 
+ */
+int explore_neighborhood(string contig, int endOfContig, unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> &linked, unordered_map<string, float>& coverage, unordered_map<string, int>& length_of_contigs, int k, int length_left, float original_coverage, unordered_map<string, pair<bool, bool>> &not_overcovered){
+    
+    if (length_left <= 0){
+        return 2;
+    }
+
+    bool overcovered_in_neighborhood = false;
+    if (endOfContig == 1){ //arrived by the right, go through to the left
+        if (linked[contig].first.size() == 0){
+            return 0;
+        }
+        for (auto l: linked[contig].first){
+            if (coverage[l.first] > 20*original_coverage){
+                overcovered_in_neighborhood = true;
+            }
+            else if (l.first != contig) { //the condition is so we don't end up in a loop
+                if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].first && l.second == 1 && coverage[l.first] < 2*coverage[contig] && coverage[l.first]*2 > original_coverage){
+                    return 2;
+                }
+                else if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].second && l.second == 0 && coverage[l.first] < 2*coverage[contig] && coverage[l.first]*2 > original_coverage){
+                    return 2;
+                }
+
+                int res = explore_neighborhood(l.first, l.second, linked, coverage, length_of_contigs, k, length_left - length_of_contigs[l.first] + k - 1, original_coverage, not_overcovered);
+                if (res == 2){
+                    return 2;
+                }
+                if (res == 1){
+                    overcovered_in_neighborhood = true;
+                }
+            }
+        }
+        if (overcovered_in_neighborhood){
+            return 1;
+        }
+        else{
+            return 0;
+        }
+    }
+    else if (endOfContig == 0){ //arrived by the left, go through to the right
+        if (linked[contig].second.size() == 0){
+            return 0;
+        }
+        for (auto l: linked[contig].second){
+            if (coverage[l.first] > 20*original_coverage){
+                overcovered_in_neighborhood = true;
+            }
+            else {
+
+                if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].first && l.second == 1 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
+                    return 2;
+                }
+                else if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].second && l.second == 0 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
+                    return 2;
+                }
+
+                int res = explore_neighborhood(l.first, l.second, linked, coverage, length_of_contigs, k, length_left - length_of_contigs[l.first] + k - 1, original_coverage, not_overcovered);
+                if (res == 2){
+                    return 2;
+                }
+                if (res == 1){
+                    overcovered_in_neighborhood = true;
+                }
+            }
+        }
+        if (overcovered_in_neighborhood){
+            return 1;
+        }
+        else{
+            return 0;
+        }
+    }
+    else{
+        cerr << "ERROR: endOfContig should be 0 or 1 in explore_neighborhood\n";
+        exit(1);
+    }
+    
+}
+
 /**
  * @brief Function that takes as input a graph, trim the tips less frequent than abundance_min, remove the branch of bubbles less abundant than abundance_min
  * 
@@ -517,7 +612,7 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
  * @param abundance_min
  * @param gfa_out 
  */
-void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, string gfa_out){
+void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out){
     ifstream input(gfa_in);
     //first go through the gfa and find all the places where an end of contig is connected with two links
     unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
@@ -568,18 +663,28 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
 
             char or1 = (orientation1 == "+" ? 1 : 0);
             char or2 = (orientation2 == "+" ? 0 : 1);
+            auto neighbor = make_pair(name2, or2);
             if (orientation1 == "+"){
-                linked[name1].second.push_back(make_pair(name2, or2));
+                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
+                    linked[name1].second.push_back(neighbor);
+                }
             }
             else{
-                linked[name1].first.push_back(make_pair(name2, or2));
+                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
+                    linked[name1].first.push_back(neighbor);
+                }
             }
 
+            neighbor = make_pair(name1, or1);
             if (orientation2 == "+"){
-                linked[name2].first.push_back(make_pair(name1, or1));
+                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
+                    linked[name2].first.push_back(neighbor);
+                }
             }
             else{
-                linked[name2].second.push_back(make_pair(name1, or1));
+                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
+                    linked[name2].second.push_back(neighbor);
+                }
             }
         }
         pos += line.size() + 1;
@@ -591,35 +696,79 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
 
     //iterative cleaning of the graph
     int number_of_edits = 1;
+    unordered_map<string, pair<bool, bool>> not_overcovered; //iteratively mark the contigs that are not overcovered left or right
+    not_overcovered.reserve(linked.size());
     while (number_of_edits > 0){
         number_of_edits = 0;
+        int count = 0;
 
         for (auto c: linked){
 
             string contig = c.first;
+            // cout << "contig " << contig << " djuqst sdkdqsm \n";
+            // if (contig != "254117"){
+            //     continue;
+            // }
 
             if (coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length){
-                //this contig is solid EXCEPT if it is a tip that has an abundance less than 2% of the coverage of the contig it is connected to
+                //this contig is solid EXCEPT if it is a tip that has an abundance less than 10% of the coverage of the contig it is connected to
                 if (linked[contig].first.size() == 0 && linked[contig].second.size() == 1){
                     //this is a tip
-                    if (coverage[contig] >= 0.02*coverage[linked[contig].second[0].first]){
+                    if (coverage[contig] >= 0.1*coverage[linked[contig].second[0].first]){
                         to_keep.insert(contig);
                     }
                 }
                 else if (linked[contig].first.size() == 1 && linked[contig].second.size() == 0){
                     //this is a tip
-                    if (coverage[contig] >= 0.02*coverage[linked[contig].first[0].first]){
+                    if (coverage[contig] >= 0.1*coverage[linked[contig].first[0].first]){
                         to_keep.insert(contig);
                     }
                 }
-                else if (contiguity && linked[contig].first.size() == 1 && linked[contig].second.size() == 1) {//if contiguity mode is on, do not take contigs that have strictly two neighbors and less than 5% coverage compared to them (corresponds to bubble)
-                    if (coverage[contig] >= 0.05*max(coverage[linked[contig].first[0].first], coverage[linked[contig].second[0].first])){
+                else if (contiguity) {//if contiguity mode is on, do not take contigs that have in all their neighborhood contigs with 20x their coverage (corresponds to poorly covered side of a bubble)
+                    
+                    int size_of_neighborhood = 5*k;
+                    // cout << "launching..\n";
+                    int overcovered_right = 2;
+                    if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].second){
+                        overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], not_overcovered);
+                    }
+                    if (overcovered_right == 2){
+                        if (not_overcovered.find(contig) != not_overcovered.end()){
+                            not_overcovered[contig].first = false;
+                            not_overcovered[contig].second = false;
+                        }
+                        not_overcovered[contig].second = true;
+                    }
+                    int overcovered_left = 2;
+                    if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
+                        overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], not_overcovered);
+                    }
+                    if (overcovered_left == 2){
+                        if (not_overcovered.find(contig) != not_overcovered.end()){
+                            not_overcovered[contig].first = false;
+                            not_overcovered[contig].second = false;
+                        }
+                        not_overcovered[contig].first = true;
+                    }
+                    // cout << contig << " " << overcovered_left << " " << overcovered_right << "\n";
+
+                    // if (contig == "280245"){
+                    //     cout << "contig " << contig << " has overcovered neighborhood " << overcovered_left << " " << overcovered_right << " " << coverage[contig] << "\n";
+                    //     exit(1);
+                    // }
+
+                    if ((overcovered_left == 2 || overcovered_right == 2) || (overcovered_left == 0 && overcovered_right == 0)){
                         to_keep.insert(contig);
                     }
+                    // else{
+                    //     cout << "contig " << contig << " has overcovered neighborhood " << count << " " << linked.size() << "\n";
+                    //     // exit(1);
+                    // }
                 }
                 else{
                     to_keep.insert(contig);
                 }
+                count ++;
             }
 
             if (to_keep.find(contig) != to_keep.end()){
@@ -682,3 +831,8 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
     out.close();
 
 }
+
+
+
+
+
