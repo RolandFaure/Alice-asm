@@ -162,9 +162,9 @@ def simple_unzip(segments, names, gafFile) :
 
     paths = new_paths
 
-    #trim all the paths :
-    for p in paths : 
-        p.trim()
+    # #trim all the paths :
+    # for p in paths : 
+    #     p.trim()
 
     # print("All the paths are indexed: hccue")
 
@@ -180,10 +180,19 @@ def simple_unzip(segments, names, gafFile) :
 
     toDelete = set()
     go_on = True
+    round = 0
+    potentially_interesting_segments = set()
+    for segment in segments :
+        if len(segment.links[0]) > 1 or len(segment.links[1]) > 1 :
+            potentially_interesting_segments.add(segment)
     while go_on :
+        round += 1
         go_on = False
+        next_potentially_interesting_segments = set()
         for segment in segments :
 
+            if segment not in potentially_interesting_segments :
+                continue
             # print("Looking icizzcce at segment : ", segment.names, " ", len(segment.links[0]), " ", len(segment.links[1]))
             segment_to_duplicate = False
             #see if it should be duplicated
@@ -299,11 +308,17 @@ def simple_unzip(segments, names, gafFile) :
 
                 if segment_to_duplicate and len(pairs) > 0 :#and segment.names == ['NC_038882.1_9000_0'] :
 
-                    # print("Duplicating segment ", segment.names, " ", pairs, " ", [(segment.links[0][i[0]].names, segment.links[1][i[1]].names) for i in pairs])
+                    #mark all the neighbors of the segment as potentially interesting
+                    for neighbor in segment.links[0] :
+                        next_potentially_interesting_segments.add(neighbor)
+                    for neighbor in segment.links[1] :
+                        next_potentially_interesting_segments.add(neighbor)
+
                     totalCoverage = np.sum(p for p in pairs.values())
                     for pair in pairs.keys() :
                         # if heeere :
                         #     print("On contig ", segment.names, " a pair is ", segment.links[0][pair[0]].names, " ", segment.links[1][pair[1]].names, " ", pairs[pair], " ", pair )
+
 
                         #create a new segment
                         new_coverages = [pairs[pair]/totalCoverage*segment.depth for i in range(len(segment.names)) ]
@@ -322,6 +337,8 @@ def simple_unzip(segments, names, gafFile) :
                         on_which_paths_is_this_contig[new_segment] = pair_to_paths[pair]
 
                         segments.append(new_segment)
+                        next_potentially_interesting_segments.add(new_segment)
+                        potentially_interesting_segments.add(new_segment)
 
                     pa = 0
                     # for p in paths :
@@ -341,6 +358,8 @@ def simple_unzip(segments, names, gafFile) :
                     on_which_paths_is_this_contig[segment] = []
 
                     go_on = True
+            
+        potentially_interesting_segments = next_potentially_interesting_segments
 
     delIdx = 0
     while delIdx < len(segments) :
@@ -398,23 +417,22 @@ def detach_and_destroy_tips(segments):
     changes = True
     max_tip_length = 1000
     contig_to_delete = set()
-    while changes :
-        changes = False
-        for s, seg in enumerate(segments):
-            
-            for end in range(2) :
 
-                if len(seg.links[end]) > 1 : #one of the branch may be a short dead end    
-                    extended_lengths = [extended_length(seg.links[end][i], seg.otherEndOfLinks[end][i], max_tip_length*5, 50) for i in range(len(seg.links[end]))]
-                    max_length = max(extended_lengths)
-                    toDelete = set()
-                    for n in range(len(seg.links[end])) :
-                        if 5*extended_lengths[n] < max_length and max_length > 1000 : #the branch is a short dead end
-                            toDelete.add((seg, end, seg.links[end][n], seg.otherEndOfLinks[end][n]))
-                            contig_to_delete.add(seg.links[end][n].ID)
-                    for seg, end, neighbor, otherEnd in toDelete :
-                        sg.delete_link(seg, end, neighbor, otherEnd, warning=False)
-                        changes = True
+    for s, seg in enumerate(segments):
+        
+        for end in range(2) :
+
+            if len(seg.links[end]) > 1 : #one of the branch may be a short dead end 
+                already_visited = set()   
+                extended_lengths = [extended_length(seg.links[end][i], seg.otherEndOfLinks[end][i], max_tip_length*5, 50, already_visited) for i in range(len(seg.links[end]))]
+                max_length = max(extended_lengths)
+                toDelete = set()
+                for n in range(len(seg.links[end])) :
+                    if 5*extended_lengths[n] < max_length and max_length > 1000 : #the branch is a short dead end
+                        toDelete.add((seg, end, seg.links[end][n], seg.otherEndOfLinks[end][n]))
+                        contig_to_delete.add(seg.links[end][n].ID)
+                for seg, end, neighbor, otherEnd in toDelete :
+                    sg.delete_link(seg, end, neighbor, otherEnd, warning=False)
 
     #destroy the contigs that are in contig_to_delete
     delIdx = 0
@@ -429,10 +447,12 @@ def detach_and_destroy_tips(segments):
                  
 
 #a function returning the longest path you can get with neighbors of neighbors of neighbors of... (up to threshold) 
-def extended_length(segment, end, thresholdLength, thresholdContigs) :
+def extended_length(segment, end, thresholdLength, thresholdContigs, already_visited) :
         
     if thresholdContigs == 0 or thresholdLength <= 0 :
         return segment.length
+    
+    already_visited.add((segment, end))
     
     #start by looking down the longest contig, it will be fastest
     longestContig = [i for i in range(len(segment.links[1-end]))]
@@ -443,13 +463,13 @@ def extended_length(segment, end, thresholdLength, thresholdContigs) :
     maxLength = 0
     for n in longestContig :
         neighbor = segment.links[1-end][n]
-        l = extended_length(neighbor, segment.otherEndOfLinks[1-end][n], thresholdLength-segment.length, thresholdContigs-1)
+        if (neighbor, segment.otherEndOfLinks[1-end][n]) in already_visited :
+            return thresholdLength
+        l = extended_length(neighbor, segment.otherEndOfLinks[1-end][n], thresholdLength-segment.length, thresholdContigs-1, already_visited)
         if l > maxLength :
             maxLength = l
         
     return maxLength + segment.length
-
-
 
 
 

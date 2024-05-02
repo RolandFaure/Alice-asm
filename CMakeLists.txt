@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 project(AliceAsm)
-#add_executable(${PROJECT_NAME} "main.cpp")
+
 
 # Local header files here ONLY
 set(TARGET_H
@@ -24,8 +24,10 @@ set(TARGET_SRC
     rolling_hash.cpp
     )
 
+
 file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
 add_executable(aliceasm ${SOURCE})
+target_include_directories(aliceasm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tclap)
 target_compile_options (aliceasm PRIVATE -fopenmp)
 target_compile_options (aliceasm PRIVATE -lz)
 target_compile_options (aliceasm PRIVATE -g)
@@ -45,4 +47,6 @@ find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(aliceasm PRIVATE OpenMP::OpenMP_CXX)
 endif()
+
+
 

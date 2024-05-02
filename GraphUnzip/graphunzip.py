@@ -12,6 +12,7 @@ from transform_gfa import gfa_to_fasta
 from finish_untangling import merge_adjacent_contigs
 from finish_untangling import duplicate_contigs
 from finish_untangling import trim_overlaps
+from finish_untangling import merge_adjacent_contigs_GFA
 from solve_with_long_reads import bridge_with_long_reads
 #from solve_with_long_reads2 import bridge_with_long_reads2
 from solve_with_HiC import solve_with_HiC
@@ -206,6 +207,9 @@ def main():
     args_command = parse_args_command()
     command = args_command.command
 
+    #print the whole command line
+    print(" ".join(sys.argv))
+
     # if len(sys.argv) < 1 :
     #     sys.exit()
     
@@ -389,12 +393,11 @@ def main():
             #     segments = bridge_with_long_reads(segments, names, cn, lrFile, supported_links2, multiplicities, exhaustive)
             # else :
 
-
             segments = simple_unzip(segments, names, lrFile)
 
-            if merge :
-                print("Merging contigs that can be merged...")
-                merge_adjacent_contigs(segments)
+            # if merge :
+            #     print("Merging contigs that can be merged...")
+            #     merge_adjacent_contigs(segments)
 
             sg.delete_links_present_twice(segments)
             
@@ -412,8 +415,8 @@ def main():
         
         elif tagInteractionMatrix.count_nonzero() > 0 :
             segments = solve_with_HiC(segments, tagInteractionMatrix, names, confidentCoverage=reliableCoverage, verbose = verbose)
-            print("Merging contigs that can be merged...")
-            merge_adjacent_contigs(segments)
+            # print("Merging contigs that can be merged...")
+            # merge_adjacent_contigs(segments)
 
         elif not uselr :
             print("WARNING: all interaction matrices are empty, GraphUnzip does not do anything")
@@ -431,7 +434,14 @@ def main():
 
         # now exporting the output  
         print("Now exporting the result")
-        io.export_to_GFA(segments, copies, gfaFile, exportFile=outFile, merge_adjacent_contigs=merge, rename_contigs=rename)
+        if merge:
+            print("Merging contigs that can be merged...")
+            tmp_non_merged_gfa_file = outFile + ".tmp"
+            io.export_to_GFA(segments, copies, gfaFile, exportFile=tmp_non_merged_gfa_file, merge_adjacent_contigs=False, rename_contigs=rename)
+            merge_adjacent_contigs_GFA(tmp_non_merged_gfa_file, outFile)
+            # os.remove(tmp_non_merged_gfa_file)
+        else:
+            io.export_to_GFA(segments, copies, gfaFile, exportFile=outFile, merge_adjacent_contigs=merge, rename_contigs=rename)
     
         if fastaFile != "None":
             io.export_to_fasta(segments, gfaFile, fastaFile, rename_contigs=rename)

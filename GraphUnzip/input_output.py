@@ -380,6 +380,7 @@ def export_to_GFA(listOfSegments, copies, gfaFile="", exportFile="results/newAss
                     elif segment.orientations[c] == 0:
                         f.write("\t-\t")
                         
+                    #print("In segment ", segment.full_name(), " the CIGARs are ", segment.insideCIGARs, " ", len(segment.insideCIGARs), " ", len(segment.names))
                     f.write(segment.insideCIGARs[c-1]+'\n')
     
         print('Done exporting sequences, just a little more time...')

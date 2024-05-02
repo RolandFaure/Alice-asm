@@ -833,6 +833,3 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
 }
 
 
-
-
-
