@@ -10,8 +10,7 @@
 #include <chrono>
 #include <thread>
 #include <omp.h> //for efficient parallelization
-
-#include "tclap/CmdLine.h"
+#include <set>
 
 #include "reduce_and_expand.h"
 #include "basic_graph_manipulation.h"
@@ -29,14 +28,15 @@ using std::cerr;
 using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
+using std::set;
 
 // ANSI escape codes for text color
 #define RED_TEXT "\033[1;31m"
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.3.3";
-string date = "2024-05-02";
+string version = "0.4.0";
+string date = "2024-05-03";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -149,6 +149,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
+
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;
@@ -347,12 +348,21 @@ int main(int argc, char** argv)
 
     //now let's parse the gfa file and decompress it
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";
-    //time the next function
-    unordered_map<string, pair<string,string>> kmers;
-    go_through_the_reads_again(input_file, compressed_assembly, context_length, compression, km, kmers, num_threads, homopolymer_compression);
+
+    unordered_map<string, pair<unsigned long long, unsigned long long>> kmers;
+    std::set<string> kmers_needed;
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
+    list_kmers_needed_for_expansion("out_alice/tmp/assembly_compressed.gfa", 31, 70, kmers_needed);
+    string kmer_file = tmp_folder+"kmers.txt";
+    go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, context_length, compression, km, kmers_needed, kmers, kmer_file, num_threads, homopolymer_compression);
     cout << " - Reconstructing the uncompressed assembly" << endl;
-    expand(compressed_assembly, decompressed_assembly, km, 70, kmers);
+    expand(compressed_assembly, decompressed_assembly, km, 70, kmer_file, kmers);
+
+
+    
+    // go_through_the_reads_again(input_file, compressed_assembly, context_length, compression, km, kmers, num_threads, homopolymer_compression);
+    // cout << " - Reconstructing the uncompressed assembly" << endl;
+    // expand(compressed_assembly, decompressed_assembly, km, 70, kmers);
 
     //test compute_eact_cigar
     string output_file = output_folder + "assembly.gfa";
