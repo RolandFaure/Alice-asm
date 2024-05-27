@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.4.0";
-string date = "2024-05-03";
+string version = "0.5.0";
+string date = "2024-05-27";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -187,7 +187,7 @@ int main(int argc, char** argv)
 
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid (for custom Alice assembler) [5]") & clipp::opt_value("m", min_abundance),
-        clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains (for custom Alice assembler) [off]"),
+        clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
 
         //Other assemblers options
         clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia, megahit} [bcalm]") & clipp::opt_value("a", assembler),
@@ -352,11 +352,11 @@ int main(int argc, char** argv)
     unordered_map<string, pair<unsigned long long, unsigned long long>> kmers;
     std::set<string> kmers_needed;
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
-    list_kmers_needed_for_expansion("out_alice/tmp/assembly_compressed.gfa", 31, 70, kmers_needed);
+    list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
     string kmer_file = tmp_folder+"kmers.txt";
     go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, context_length, compression, km, kmers_needed, kmers, kmer_file, num_threads, homopolymer_compression);
     cout << " - Reconstructing the uncompressed assembly" << endl;
-    expand(compressed_assembly, decompressed_assembly, km, 70, kmer_file, kmers);
+    expand(compressed_assembly, decompressed_assembly, km, kmer_file, kmers);
 
 
     

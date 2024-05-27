@@ -147,7 +147,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
  * @brief List the kmers that will be needed for expansion... basically this is like the expand function but without the expansion
  * 
  */
-void list_kmers_needed_for_expansion(string asm_reduced, int km, int length_of_overlaps, std::set<string> &kmers_needed){
+void list_kmers_needed_for_expansion(string asm_reduced, int km, std::set<string> &kmers_needed){
     ifstream input(asm_reduced);
 
     int length_of_central_kmers = 1;
@@ -168,10 +168,6 @@ void list_kmers_needed_for_expansion(string asm_reduced, int km, int length_of_o
             string sequence;
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
-            // if (sequence.size() > 10 + length_of_overlaps){
-            //     first_10[name] = sequence.substr(length_of_overlaps, std::min(10, (int)sequence.size()));
-            //     last_10[name] = sequence.substr(std::max(0, (int)sequence.size()-10-length_of_overlaps), 10);
-            // }
             contig_locations[name] = current_position;
         }
         current_position += line.size() + 1;
@@ -294,6 +290,11 @@ void list_kmers_needed_for_expansion(string asm_reduced, int km, int length_of_o
             }
             if (right_seq.find(name) != right_seq.end()){
                 sequence += right_seq[name];
+            }
+
+            if (sequence.size() < km){
+                cerr << "WARNING (code 553) sequence too short \n";
+                continue;                
             }
             
             //expand the sequence (focusing on the central part of each kmer and thus missing the two ends)
@@ -519,7 +520,7 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
  * 
  * @param kmers dictionnary mapping compressed kmers to their positions in the kmer file
  */
-void expand(string asm_reduced, string output, int km, int length_of_overlaps, string kmers_file, unordered_map<string, pair<unsigned long long,unsigned long long>>& kmers){
+void expand(string asm_reduced, string output, int km, string kmers_file, unordered_map<string, pair<unsigned long long,unsigned long long>>& kmers){
 
     ifstream input(asm_reduced);
 
@@ -544,10 +545,6 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, s
             string sequence;
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
-            // if (sequence.size() > 10 + length_of_overlaps){
-            //     first_10[name] = sequence.substr(length_of_overlaps, std::min(10, (int)sequence.size()));
-            //     last_10[name] = sequence.substr(std::max(0, (int)sequence.size()-10-length_of_overlaps), 10);
-            // }
             contig_locations[name] = current_position;
         }
         current_position += line.size() + 1;
@@ -673,6 +670,17 @@ void expand(string asm_reduced, string output, int km, int length_of_overlaps, s
             }
             if (right_seq.find(name) != right_seq.end()){
                 sequence += right_seq[name];
+            }
+
+            if (sequence.size() < km){
+                cerr << "WARNING (code 743) sequence too short \n";
+                string expanded_sequence (sequence.size() * 20, 'N');
+                out << "S\t" << name << "\t" << expanded_sequence;
+                while (ss >> sequence){
+                    out << "\t" << sequence;
+                }
+                out << "\n";
+                continue;                
             }
             
             //expand the sequence (focusing on the central part of each kmer and thus missing the two ends)

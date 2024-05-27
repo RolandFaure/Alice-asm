@@ -237,9 +237,11 @@ def duplicate_contigs(segments):
             for end in range(2):
                 if contig.ID not in alreadyDuplicated:
 
-                    if len(contig.links[end]) > 1 \
+                    if len(contig.links[end]) > 1 and len(contig.links[1-end]) > 1 \
                         and all([len(contig.links[end][i].links[contig.otherEndOfLinks[end][i]]) == 1 for i in range(len(contig.links[end]))]) \
+                        and all([len(contig.links[1-end][i].links[contig.otherEndOfLinks[1-end][i]]) == 1 for i in range(len(contig.links[1-end]))]) \
                         and (contig.depth > 0.7*np.sum([contig.links[end][i].depth for i in range(len(contig.links[end]))]) or contig.length < 1000) \
+                        and all([neighbor.depth > 0.2*contig.depth for neighbor in contig.links[end]]) \
                         and contig.ID not in [i.ID for i in contig.links[end]] :
 
                         #then duplicate the segment !
@@ -262,7 +264,7 @@ def duplicate_contigs(segments):
             segments[s].cut_all_links()
             del segments[s]
 
-        segments = merge_adjacent_contigs(segments)
+        # segments = merge_adjacent_contigs(segments)
 
     return segments
 
@@ -368,6 +370,7 @@ def merge_adjacent_contigs_GFA(gfa_in, gfa_out):
                 if line[1] not in links :
                     links[line[1]] = [[], []]
                 lengths[line[1]] = len(line[2])
+                depths[line[1]] = 0
                 #look for the depth
                 for field in line[3:] :
                     if field[:2] == "DP" :
@@ -484,6 +487,7 @@ def merge_adjacent_contigs_GFA(gfa_in, gfa_out):
             # print("Looking for sequence of ", new_segment)
             for seg in new_segment :
 
+                # print("Looking for sequence of ", seg[0])
                 length_total += lengths[seg[0]]
                 depth_total += depths[seg[0]]*lengths[seg[0]]
 
@@ -508,7 +512,7 @@ def merge_adjacent_contigs_GFA(gfa_in, gfa_out):
 
             #write the new segment
             new_segment_name = "_".join([i[0] for i in new_segment])
-            f.write("S\t"+new_segment_name+"\t"+seq+"\tDP:f:"+ str(depth_total/length_total) +"\n")
+            f.write("S\t"+new_segment_name+"\t"+seq+"\tDP:f:"+ str(depth_total/(length_total+1)) +"\n")
 
             #now check if the new segment has links at its ends
             #first left end

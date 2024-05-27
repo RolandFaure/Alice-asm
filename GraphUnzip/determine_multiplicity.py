@@ -6,6 +6,10 @@ Created on Fri Oct  8 13:02:36 2021
 @author: rfaure
 """
 
+from input_output import read_GAF
+import re
+import sys
+
 #main function of the file : tries to estimate how many copies of each contig is actually present in the actual assembly, based on the topology of the graph and the coverage
 #input : a gfa (as a list of segments), with mandatory coverage information ; names (to know at what index to put each contig)
 #output : computed_multiplicity, which is a list containing the theoretical multiplicity of contig 'a' at position names[a], as well as updated supported_links, telling which links actually exist
@@ -232,17 +236,86 @@ def propagate_multiplicity(multiplicities, segments, names, contigIdx, supported
                             supported_links[2*names[neighbor.names[0]]+seg.otherEndOfLinks[end][n], 2*names[seg.names[0]]+end] = new_multiplicity
                             #print("Inferring multiplicity of ", neighbor.names, " at ", round(computed_multiplicity[s] * neighbor.depths[0]/covTot) , ", from contig ", seg.names)
                         propagate_multiplicity(multiplicities, segments, names, names[neighbor.names[0]], supported_links, refCoverage)
+
+
+
+class Path :
+
+    #contigs are names
+    def __init__(self, contigs, orientations, read_name) :
+        if len(contigs) != len(orientations) :
+            raise ValueError("ERROR in simple_unzip.py: iiox")
+        self.__contigs = contigs
+        self.__orientations = []
+        self.__read_name = read_name
+        for i in orientations :
+            if i == ">":
+                self.__orientations.append(1)
+            else :
+                self.__orientations.append(0)
+
+    def __len__(self):
+        return len(self.__contigs)
+    
+    def __str__(self):
+        string = ""
+        for c in range(len(self.__contigs)) :
+            string += "<>"[self.__orientations[c]] + str(self.__contigs[c].names)+ ", "
+        return string
+
+    def name(self):
+        return self.__read_name
+    
+    def get_contigs(self):
+        return self.__contigs
+    
+    def get_orientations(self):
+        return self.__orientations
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+def determine_multiplicity_based_on_gaf(gafFile) :
+    
+    lines = []
+    print("Reading the gaf file...")
+    read_GAF(gafFile, 0, 0, lines)
+    print("Finished going through the gaf file.")
+
+    on_which_paths_is_contig = {} #associates to each contig the paths it is in in the form of (path, position in path, orientation on path)
+
+    # translate the paths in the GAF as paths in the graph
+    paths = []
+    for line in lines :
+        # if line[0] != "SRR13128013.131014 131014 length=8539" :
+        #     continue
+        #split the line on '>' and '<' to get the path
+        cont = re.split('[><]' , line[1].rstrip())
+        orientations = "".join(re.findall("[<>]", line[1]))
+        del cont[0] #because the first element is always ''
+
+        paths.append(Path(cont, orientations, line[0]))
+
+        for c in range(len(cont)) :
+            if cont[c] not in on_which_paths_is_contig :
+                on_which_paths_is_contig[cont[c]] = []
+            on_which_paths_is_contig[cont[c]].append((len(paths)-1, c, orientations[c]))
+
+    #now determine the multiplicity of each contig by consensusing the paths left and right of it
+    multiplicity = [0 for i in range(len(paths))]
+
+    for c in on_which_paths_is_contig :
+
+        list_of_paths_right = []
+        for path in on_which_paths_is_contig[c] :
+            if path[2] == ">" :
+                list_of_paths_right.append((paths[path[0]].get_contigs()[path[1]+1:], paths[path[0]].get_orientations()[path[1]+1:]))
+            else :
+                list_of_paths_right.append((paths[path[0]].get_contigs()[path[1]-1::-1], [1-i for i in paths[path[0]].get_orientations()[path[1]-1::-1]]))
+                    
+
+        if c == "2242268" :
+            print("List of paths for ", c, " : ", list_of_paths_right)
+            sys.exit()
+
+    print("ciao")
+    sys.exit()
         
         

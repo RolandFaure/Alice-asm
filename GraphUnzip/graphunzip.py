@@ -5,6 +5,8 @@ Created on Wed May  6 07:42:14 2020
 
 """
 
+version = 2.0
+
 import input_output as io
 
 # import analyse_HiC
@@ -17,10 +19,13 @@ from solve_with_long_reads import bridge_with_long_reads
 #from solve_with_long_reads2 import bridge_with_long_reads2
 from solve_with_HiC import solve_with_HiC
 from determine_multiplicity import determine_multiplicity
+from determine_multiplicity import determine_multiplicity_based_on_gaf
 from contig_DBG import DBG_long_reads
 import contig_DBG
 from contig_DBG import DBG_long_reads
 from simple_unzip import simple_unzip
+from simple_unzip import simple_unzip2
+
 from repolish import repolish_contigs
 import segment as sg
 #from segment import check_if_all_links_are_sorted
@@ -89,6 +94,14 @@ def parse_args_unzip() :
         required=False,
         default="None",
         help="""Optional fasta output [default: None]""",
+    )
+
+    groupOther.add_argument(
+        "-t",
+        "--num_threads",
+        required=False,
+        default=1,
+        help= "Number of threads to use"
     )
     
     groupOther.add_argument(
@@ -301,15 +314,19 @@ def main():
         reliableCoverage = not args.conservative
         exhaustive = args.exhaustive
 
+        num_threads= int(args.num_threads)
+
         # multiploid = args.meta
         
         #clean = args.clean
         
         # Loading the data
         print("Loading the GFA file")
-        segments, names = io.load_gfa(
-            gfaFile
-        )  # outputs the list of segments as well as names, which is a dict linking the names of the contigs to their index in interactionMatrix, listOfContigs...
+        segments, names = io.load_GFA_parallel(gfaFile, num_threads)
+        
+        # segments, names = io.load_gfa(
+        #     gfaFile
+        # )  # outputs the list of segments as well as names, which is a dict linking the names of the contigs to their index in interactionMatrix, listOfContigs...
         if len(segments) == 0 :
             print("ERROR: could not read the GFA")
             sys.exit()
@@ -380,7 +397,7 @@ def main():
         
         ##Moving to the actual unzipping of the graph
         
-        supported_links2 = sparse.lil_matrix((len(names)*2, len(names)*2)) #supported links considering the topography of the graph
+        # supported_links2 = sparse.lil_matrix((len(names)*2, len(names)*2)) #supported links considering the topography of the graph
         # if multiploid :
         #     refHaploidy, multiplicities = determine_multiplicity(segments, names, supported_links2, reliableCoverage) #multiplicities can be seen as a mininimum multiplicity of each contig regarding the topology of the graph
 
@@ -393,7 +410,10 @@ def main():
             #     segments = bridge_with_long_reads(segments, names, cn, lrFile, supported_links2, multiplicities, exhaustive)
             # else :
 
-            segments = simple_unzip(segments, names, lrFile)
+            # multiplicities = determine_multiplicity_based_on_gaf(lrFile)
+
+            segments = simple_unzip2(segments, names, lrFile, num_threads, exhaustive)
+            segments = duplicate_contigs(segments)
 
             # if merge :
             #     print("Merging contigs that can be merged...")

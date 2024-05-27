@@ -59,7 +59,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, s
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
-    vector<int> values_of_k = {17,31,41,71}; //size of the kmer used to build the graph (min >= km)
+    vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km)
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
@@ -131,12 +131,15 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, s
     add_coverages_to_graph(merged_gfa, coverages);
     
     cout << "    - Untangling the graph with GraphUnzip" << endl;
-    string command_unzip = path_graphunzip + " unzip -R -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " > " + tmp_folder + "graphunzip.log 2>&1";
+    string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
         exit(1);
     }
+
+    //last round of pop and shave
+
     cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << "\n" << endl;
 }
 

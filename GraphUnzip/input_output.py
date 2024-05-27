@@ -19,6 +19,9 @@ from segment import Segment
 from segment import compute_copiesNumber
 from segment import delete_links_present_twice
 
+import concurrent.futures #for multithreading
+import threading #for multithreading
+
 # Read fragments list file
 # Input :
 #   file : fragments_list.txt
@@ -111,6 +114,58 @@ def interactionMatrix(hiccontactsfile, fragmentList, names, segments, header=Tru
     
     return interactionMatrix
 
+def read_GAF_chunk(lines, gafFile, position_begin, position_end, lock, similarity_threshold, whole_mapping_threshold):
+    
+    local_lines = []
+    gaf = open(gafFile, 'r')
+    gaf.seek(position_begin)
+    pos_now = position_begin
+    for line in gaf:
+        if position_begin != 0 and pos_now==position_begin : #this line was in the previous chunk
+            pos_now += len(line)
+            continue
+        if pos_now >= position_end :
+            break
+        ls = line.split('\t')
+        if len(ls) > 5 :
+            path = ls[5]
+
+            if ls[5].count('>') + ls[5].count('<') > 1 :
+                            
+                if (not 'id:f' in ls[-2]) or (float(ls[-2].split(':')[-1]) > similarity_threshold) or similarity_threshold == 0 :
+                    
+                    if (float(ls[3])-float(ls[2]))/float(ls[1]) > whole_mapping_threshold or whole_mapping_threshold == 0 :
+
+                        local_lines.append((ls[0],ls[5]))
+        pos_now += len(line)
+
+    with lock:
+        lines.extend(local_lines)
+        # print("extending with ", len(local_lines), " lines")
+        # print("first and last lines: ", position_begin, " ", position_end, " ", local_lines[0], " ", local_lines[-1])
+
+def read_GAF_parallel(gafFile, similarity_threshold, whole_mapping_threshold, lines, n_threads):
+    # Create a global lines list
+    lines = []
+
+    # Create a lock object
+    lock = threading.Lock()
+
+    file_size = os.path.getsize(gafFile)
+    # Split the file into chunks
+    chunk_size = file_size // n_threads
+    chunks = [i for i in range(0, file_size, chunk_size)]
+    chunks_end = [i+chunk_size for i in range(0, file_size, chunk_size)]
+
+    # Use concurrent.futures to create a ThreadPoolExecutor
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as executor:
+        # Use the executor to map your function over the data
+        # We're using list() to ensure that all the futures are resolved before we move on
+        results = list(executor.map(read_GAF_chunk, [lines]*n_threads, [gafFile]*n_threads, chunks, chunks_end, [lock] * n_threads, [similarity_threshold] * n_threads, [whole_mapping_threshold] * n_threads))
+
+    return lines
+
 #input : GAF file (outputted by graphaligner) and parameters telling which line are deemed informative
 #output : list of useful lines extracted with the read name ([(read0,'>12>34<2') , (read1,'>77<33') ,... ] for example)
 def read_GAF(gafFile,similarity_threshold, whole_mapping_threshold, lines) : #a function going through the gaf files and inventoring all useful lines
@@ -130,6 +185,11 @@ def read_GAF(gafFile,similarity_threshold, whole_mapping_threshold, lines) : #a 
                     if (float(ls[3])-float(ls[2]))/float(ls[1]) > whole_mapping_threshold or whole_mapping_threshold == 0 :
         
                         lines += [(ls[0],ls[5])]  
+
+    print("here are the lines:")
+    print(lines)
+    print(len(lines))
+    sys.exit()
 
 #input : TSV file (outputted by SPAligner) 
 #output : list of sequences of contigs in GAF-like format (['>12>34<2' , '>77<33' ,... ] for example)
@@ -269,7 +329,7 @@ def get_contig_GFA(gfaFile, contig, contigOffset):
             depth = ''
             tags = ''
             if len(sline) > 3 :
-                tags = sline[3].split()
+                tags = " ".join(sline[3:]).split()
             for f in tags :
                 if 'dp' in f or 'DP' in f or 'KC' in f or 'RC' in f:
                     depth = f
@@ -312,17 +372,7 @@ def export_to_GFA(listOfSegments, copies, gfaFile="", exportFile="results/newAss
                     line_offset[sline[1]] = offset #adds pair sline[1]:offset to the dict
                     
                 offset += len(line)
-            
-        # with open(offsetsFile, 'wb') as o:
-        #     pickle.dump(line_offset, o)
-    
-    # if gfaFile != '' :
-    #     with open(offsetsFile, 'rb') as o:
-    #         line_offset = pickle.load(o)
-        
-        #print(line_offset)
  
-    #print('Line_offsets computed, launching proper writing of the new GFA')
     #Now that the preliminary work is done, start writing the new gfa file    
 
     # now sort the segments by length, to output at the beginning of the files the longests fragments
@@ -350,7 +400,6 @@ def export_to_GFA(listOfSegments, copies, gfaFile="", exportFile="results/newAss
                     sequence, depth, extra_tags = get_contig_GFA(gfaFile, contig, line_offset[contig])
                     if sequences[c] != None :
                         sequence = sequences[c]
-                    #print("Here is the depth I got : ", depth)
                     if extra_tags != "" :
                         extra_tags = "\t"+extra_tags
                     if depth == '':
@@ -631,3 +680,103 @@ def load_gfa(file):
     delete_links_present_twice(segments)
 
     return segments, names
+
+def load_chunk_of_GFA(file, position_begin, position_end, segments, names, lock):
+
+    gfa_read = open(file)
+    gfa_read.seek(position_begin)
+    local_segments = []
+    pos_now = position_begin
+
+    for line in gfa_read:
+
+        if position_begin != 0 and pos_now==position_begin : #this line was in the previous chunk
+            pos_now += len(line)
+            continue
+        if pos_now > position_end :
+            break
+
+        if line[0] == "S":
+
+            l = line.strip('\n').split("\t")
+            if line[4] == '\t' :
+                l = l[:4] + [''] + l[4:]
+            cov = 0
+            
+            for element in l :
+                if 'dp' in element[:2] or 'DP' in element[:2] :
+                    try :
+                       cov = float(element.split(":")[-1])
+                    except:
+                        pass
+                        
+                elif 'RC' in element[:2] or 'KC' in element[:2] :
+                    try :
+                       cov = float(element.split(":")[-1])/len(l[2])
+                    except:
+                        pass
+            
+            s = Segment([l[1]], [1], [len(l[2])], readCoverage = [cov])
+            local_segments.append(s)
+
+        pos_now += len(line)
+
+    with lock:
+        index = 0
+        for s in local_segments :
+            names[s.names[0]] = len(segments) + index
+            index += 1
+
+        segments += local_segments
+        print("Loaded ", len(segments), " segments", end='\r')
+
+def load_chunk_of_GFA_links(file, position_begin, position_end, segments, names, lock):
+
+    gfa_read = open(file)
+    gfa_read.seek(position_begin)
+    local_segments = []
+    pos_now = position_begin
+
+    for line in gfa_read:
+
+        if position_begin != 0 and pos_now==position_begin : #this line was in the previous chunk
+            pos_now += len(line)
+            continue
+        if pos_now >= position_end :
+            break
+
+        if line[0] == "L":
+
+            l = line.strip('\n').split("\t")
+
+            with lock:
+            
+                segments[names[l[1]]].add_link_from_GFA(line, names, segments, 0)
+                segments[names[l[3]]].add_link_from_GFA(line, names, segments, 1)
+
+        pos_now += len(line)
+
+def load_GFA_parallel(file, num_threads):
+
+    # Create a lock object
+    lock = threading.Lock()
+
+    segments = []
+    names = {}
+
+    file_size = os.path.getsize(file)
+    # Split the file into chunks
+    chunk_size = file_size // num_threads // 4
+    chunks = [i for i in range(0, file_size, chunk_size)]
+    chunks_end = [i+chunk_size for i in range(0, file_size, chunk_size)]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        # Use the executor to map your function over the data
+        # We're using list() to ensure that all the futures are resolved before we move on
+        results = list(executor.map(load_chunk_of_GFA, [file]*len(chunks), chunks, chunks_end, [segments] * len(chunks), [names] * len(chunks), [lock] * len(chunks)))        
+        results = list(executor.map(load_chunk_of_GFA_links, [file]*len(chunks), chunks, chunks_end, [segments] * len(chunks), [names] * len(chunks), [lock] * len(chunks)))
+
+    return segments, names
+
+
+

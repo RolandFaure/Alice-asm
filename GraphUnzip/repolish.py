@@ -39,6 +39,8 @@ def assign_reads_to_contigs(segments, gaf_file, copies):
                 
                 start_contig = 0
                 for start_contig in range(len(contigs)) :
+                    if contigs[start_contig] not in subcontig_to_segments:
+                        continue
 
                     for candidate_segments in subcontig_to_segments[contigs[start_contig]] :
                         
