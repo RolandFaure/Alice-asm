@@ -12,7 +12,8 @@ set(TARGET_H
     basic_graph_manipulation.h,
     clipp.h,
     reduce_and_expand.h,
-    rolling_hash.h
+    rolling_hash.h,
+    graphunzip.h
    )
 
 # Local source files here
@@ -21,7 +22,8 @@ set(TARGET_SRC
     basic_graph_manipulation.cpp,
     main.cpp,
     reduce_and_expand.cpp,
-    rolling_hash.cpp
+    rolling_hash.cpp,
+    graphunzip.cpp
     )
 
 
@@ -35,12 +37,16 @@ target_compile_options (aliceasm PRIVATE -std=c++17)
 target_compile_options (aliceasm PRIVATE -O3)
 target_compile_options (aliceasm PRIVATE -march=x86-64)
 
-file (GLOB SOURCE_FASTG2GFA "fastg2gfa.c")
-add_executable(fastg2gfa ${SOURCE_FASTG2GFA})
-target_compile_options (fastg2gfa PRIVATE -g)
-target_compile_options (fastg2gfa PRIVATE -O3)
-target_compile_options (fastg2gfa PRIVATE -march=x86-64)
-target_link_libraries(fastg2gfa PRIVATE z)
+# file (GLOB SOURCE_FASTG2GFA "fastg2gfa.c")
+# add_executable(fastg2gfa ${SOURCE_FASTG2GFA})
+# target_compile_options (fastg2gfa PRIVATE -g)
+# target_compile_options (fastg2gfa PRIVATE -O3)
+# target_compile_options (fastg2gfa PRIVATE -march=x86-64)
+# target_link_libraries(fastg2gfa PRIVATE z)
+
+file(GLOB SOURCE "graphunzip.cpp")
+add_executable(graphunzip ${SOURCE})
+
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

@@ -11,7 +11,7 @@
 #include <thread>
 #include <omp.h> //for efficient parallelization
 #include <filesystem>
-#include <zlib.h>  // Include the gzstream header
+// #include <zlib.h>  // Include the gzstream header
 #include <set>
 
 
@@ -29,6 +29,41 @@ using std::ifstream;
 using std::ofstream;
 using std::unordered_set;
 
+/**
+ * @brief Take the read, and output several subreads splitting the read on non ACGT characters
+ * 
+ * @param original_read_file 
+ * @param new_read_file 
+ */
+void split_reads_on_non_ACGT_characters(string original_read_file, string new_read_file){
+    ifstream input(original_read_file);
+    ofstream out(new_read_file);
+    string line;
+    string name_of_read;
+    while (std::getline(input, line)){
+        if (line[0] == '>'){
+            // out << line << "\n";
+            name_of_read = line;
+        }
+        else{
+            int last_non_ACGT = 0;
+            for (int i = 0; i < line.size(); i++){
+                if (line[i] != 'A' && line[i] != 'C' && line[i] != 'G' && line[i] != 'T'){
+                    if (i - last_non_ACGT > 0){
+                        out << ">" << std::to_string(last_non_ACGT) << name_of_read << "\n";
+                        out << line.substr(last_non_ACGT, i - last_non_ACGT) << "\n";
+                    }
+                    last_non_ACGT = i+1;
+                }
+            }
+            if (line.size() - last_non_ACGT > 0){
+                out << name_of_read << "\n";
+                out << line.substr(last_non_ACGT, line.size() - last_non_ACGT) << "\n";
+            }
+            out << "\n";
+        }
+    }
+}
 
 /**
  * @brief MSR the input sequencing
@@ -42,6 +77,19 @@ using std::unordered_set;
  * @param kmers maps a kmer to the uncompressed seq
  **/
 void reduce(string input_file, string output_file, int context_length, int compression, int num_threads, bool homopolymer_compression) {
+
+    //first split the reads on non ACGT characters, since only ACGT characters are compressible
+    string new_read_file = output_file + "_split";
+    time_t now2 = time(0);
+    tm *ltm2 = localtime(&now2);
+    cout << "[" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "] Splitting the reads on non ACGT characters" << endl;
+    split_reads_on_non_ACGT_characters(input_file, new_read_file);
+    //actualize the time
+    time_t now3 = time(0);
+    tm *ltm3 = localtime(&now3);
+    cout << "[" << 1+ ltm3->tm_mday << "/" << 1 + ltm3->tm_mon << "/" << 1900 + ltm3->tm_year << " " << ltm3->tm_hour << ":" << ltm3->tm_min << ":" << ltm3->tm_sec << "] Reads split" << endl;
+    cout << "Done" << endl;
+    input_file = new_read_file;
 
     int k = 2*context_length + 1;
 
@@ -704,7 +752,7 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
                     }
                 }
                 else{
-                    cerr << "WARNING (code 554) not found kmer " << kmer << "\n";
+                    cerr << "WARNING (code 554) not found kmer " << kmer  << "\n";
                     // cerr << line << endl;
                     // exit(1);
                     //create a sequence of Ns of sze length_of_central_kmers

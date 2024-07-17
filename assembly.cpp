@@ -131,14 +131,13 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, s
     add_coverages_to_graph(merged_gfa, coverages);
     
     cout << "    - Untangling the graph with GraphUnzip" << endl;
-    string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
+    // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
+    string command_unzip = "/home/rfaure/Documents/these/Alice/Alice-asm/build/graphunzip " + merged_gfa + " " + gaf_file + " 5 1 " + final_gfa + " 0 " + tmp_folder + "graphunzip.log";
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
         exit(1);
     }
-
-    //last round of pop and shave
 
     cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << "\n" << endl;
 }
