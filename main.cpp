@@ -93,13 +93,12 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
             }
         }
 
-        path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
         auto graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());
         if (graphunzip_ok != 0){
-            path_graphunzip = "graphunzip.py";
+            path_graphunzip = "graphunzip";
             graphunzip_ok = system(path_graphunzip.c_str());
             if (graphunzip_ok != 0){
-                cerr << "ERROR: graphunzip.py not found, problem in the installation, error code 322. I was looking for graphunzip.py at " << path_src << "/GraphUnzip/graphunzip.py but did not find it\n";
+                cerr << "ERROR: graphunzip not found, problem in the installation, error code 322.\n";
                 exit(1);
             }
         }
@@ -288,7 +287,7 @@ int main(int argc, char** argv)
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
 
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
-    string path_graphunzip = "python " + path_src + "/GraphUnzip/graphunzip.py";
+    string path_graphunzip = path_src + "/build/graphunzip";
 
     string path_total = argv[0];
     string path_fastg2gfa = path_total.substr(0, path_total.find_last_of("/"))+ "/fastg2gfa";

@@ -1380,6 +1380,11 @@ int main(int argc, char *argv[])
 {
     //HS_GraphUnzip <gfa_input> <gaf_file> <threads> <gfa_output> <exhaustive>
     if (argc != 8){
+        //if -h or --help is passed as an argument, print the help
+        if (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)){
+            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <exhaustive> <logfile>" << std::endl;
+            return 0;
+        }
         std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <exhaustive> <logfile>" << std::endl;
         return 1;
     }
