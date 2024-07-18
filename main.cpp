@@ -35,7 +35,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.0";
+string version = "0.6.1";
 string date = "2024-07-17";
 string author = "Roland Faure";
 
@@ -319,7 +319,7 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "bcalm"){
-        assembly_bcalm(compressed_file, min_abundance, contiguity, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
+        assembly_bcalm(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);
@@ -357,13 +357,6 @@ int main(int argc, char** argv)
     cout << " - Reconstructing the uncompressed assembly" << endl;
     expand(compressed_assembly, decompressed_assembly, km, kmer_file, kmers);
 
-
-    
-    // go_through_the_reads_again(input_file, compressed_assembly, context_length, compression, km, kmers, num_threads, homopolymer_compression);
-    // cout << " - Reconstructing the uncompressed assembly" << endl;
-    // expand(compressed_assembly, decompressed_assembly, km, 70, kmers);
-
-    //test compute_eact_cigar
     string output_file = output_folder + "assembly.gfa";
     cout << " - Computing the exact overlaps between the contigs\n";
     compute_exact_CIGARs(decompressed_assembly, output_file, 150*compression, 70*compression);

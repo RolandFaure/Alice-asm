@@ -1,8 +1,5 @@
 #include "graphunzip.h"
-
-#include <iostream>
-#include <fstream>
-#include <sstream>
+#include "basic_graph_manipulation.h"
 
 using std::vector;
 using std::cout;
@@ -17,121 +14,29 @@ using std::stringstream;
 using robin_hood::unordered_map;
 using std::set;
 
-string reverse_complement(string &seq){
-    string rev_comp = "";
-    for (int c = seq.size() - 1 ; c >= 0 ; c--){
-        if (seq[c] == 'A'){
-            rev_comp += 'T';
-        }
-        else if (seq[c] == 'T'){
-            rev_comp += 'A';
-        }
-        else if (seq[c] == 'C'){
-            rev_comp += 'G';
-        }
-        else if (seq[c] == 'G'){
-            rev_comp += 'C';
-        }
-        else{
-            rev_comp += 'N';
+string reverse_complement(string& seq){
+    string rc (seq.size(), 'N');
+    for (int i = seq.size() - 1 ; i >= 0; i--){
+        switch (seq[i]){
+            case 'A':
+                rc[seq.size() - 1 - i] = 'T';
+                break;
+            case 'T':
+                rc[seq.size() - 1 - i] = 'A';
+                break;
+            case 'C':
+                rc[seq.size() - 1 - i] = 'G';
+                break;
+            case 'G':
+                rc[seq.size() - 1 - i] = 'C';
+                break;
+            default:
+                rc[seq.size() - 1 - i] = 'N';
+                break;
         }
     }
-    return rev_comp;
+    return rc;
 }
-
-class Segment{
-    public:
-
-        string name;
-        int ID;
-        vector<pair<vector<pair<int,int>>, vector<string>>>  links; //first vector is for the links to the left, second vector is for the links to the right. Each link is the ID of the neighbor and its end (0 for left, 1 for right) and the CIGAR
-
-        Segment(){};
-
-        Segment(string name, int ID, long int pos_in_file, double coverage){
-            this->name = name;
-            this->ID = ID;
-            this->pos_in_file = pos_in_file;
-            this->coverage = coverage;
-            this->haploid = false;
-            this->links = vector<pair<vector<pair<int,int>>, vector<string>>>(2);
-        }
-
-        Segment(string name, int ID, vector<pair<vector<pair<int,int>>, vector<string>>> links, long int pos_in_file, double coverage){
-            this->name = name;
-            this->ID = ID;
-            this->links = links;
-            this->pos_in_file = pos_in_file;
-            this->coverage = coverage;
-            this->haploid = false;
-            this->links = vector<pair<vector<pair<int,int>>, vector<string>>>(2);
-        }
-
-        bool is_haploid(){return this->haploid;}
-        vector<pair<int,bool>> get_consensus_left(){return this->consensus_left;}
-        vector<pair<int,bool>> get_consensus_right(){return this->consensus_right;}
-        long int get_pos_in_file(){return this->pos_in_file;}
-        double get_coverage(){return this->coverage;}
-
-        string get_seq(string& gfa_file){
-            
-            if (seq != ""){
-                // cout << "the seq is already loaded" << endl;
-                return seq;
-            }
-
-            ifstream gfa(gfa_file);
-            gfa.seekg(pos_in_file);
-            string line;
-            getline(gfa, line);
-            stringstream ss(line);
-            string nothing, name, seq;
-            ss >> nothing >> name >> seq;
-            gfa.close();
-            return seq;
-        }
-
-        void add_neighbor(vector<pair<int,bool>> new_neighbor, bool left);
-
-        void decrease_coverage(double coverage_out){
-            coverage -= coverage_out;
-            if (coverage < 1){
-                coverage = 1;
-            }
-        }
-
-        void compute_consensuses();
-
-        vector<vector<pair<int,bool>>> get_strong_neighbors_left();
-        vector<vector<pair<int,bool>>> get_strong_neighbors_right();
-
-        vector<pair<vector<pair<int,bool>>, int>> get_neighbors_left(){return neighbors_left;}
-        vector<pair<vector<pair<int,bool>>, int>> get_neighbors_right(){return neighbors_right;}
-
-        //the hash of the segment is the hash of the name
-        size_t hash() const{
-            return std::hash<string>{}(name);
-        }
-
-        string seq;
-
-    private:
-        //consensus sequences of contigs left and right
-        vector<pair<int,bool>> consensus_left;
-        vector<pair<int,bool>> consensus_right;
-
-        vector<vector<pair<int,bool>>> representative_neighbors_left;
-        vector<vector<pair<int,bool>>> representative_neighbors_right;
-
-        vector<pair<vector<pair<int,bool>>, int>> neighbors_left; //each path is a vector of pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
-        vector<pair<vector<pair<int,bool>>, int>> neighbors_right; //each path is a vector of pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
-
-        long int pos_in_file;
-        double coverage;
-
-        bool haploid;
-
-};
 
 void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
 
@@ -145,7 +50,6 @@ void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
         neighbors_right.push_back({new_neighbor, 1});
     }
 }
-
 
 void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, int> &segment_IDs){
     //load the segments from the GFA file
@@ -533,7 +437,7 @@ void determine_haploid_contigs(vector<Segment> &segments, int min_coverage){
     for (auto s = 0 ; s < segments.size() ; s++){
     
         segments[s].compute_consensuses();
-        // if (segments[s].name == "706"){
+        // if (segments[s].name == "4062"){
         //     cout << "neighbors left: " << endl;
         //     for (pair<vector<pair<int,bool>>,int> neighbor : segments[s].get_neighbors_left()){
         //         for (pair<int,bool> contig : neighbor.first){

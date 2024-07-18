@@ -88,7 +88,6 @@ void reduce(string input_file, string output_file, int context_length, int compr
     time_t now3 = time(0);
     tm *ltm3 = localtime(&now3);
     cout << "[" << 1+ ltm3->tm_mday << "/" << 1 + ltm3->tm_mon << "/" << 1900 + ltm3->tm_year << " " << ltm3->tm_hour << ":" << ltm3->tm_min << ":" << ltm3->tm_sec << "] Reads split" << endl;
-    cout << "Done" << endl;
     input_file = new_read_file;
 
     int k = 2*context_length + 1;

@@ -1,6 +1,7 @@
 #include "assembly.h"
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
+#include "graphunzip.h"
 
 #include <vector>
 #include <iostream>
@@ -54,7 +55,7 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
+void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
@@ -85,9 +86,23 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, s
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
         pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa);
 
+        if (contiguity){
+            string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
+            pop_bubbles(shaved_gfa, size_longest_read, shaved_and_popped_gfa);
+            shaved_gfa = shaved_and_popped_gfa;
+        }
+
         //merge the adjacent contigs
         cout << "       - Merging resulting contigs" << endl;
-        merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
+
+        unordered_map<string, int> segments_IDs;
+        vector<Segment> segments;
+        vector<Segment> merged_segments;
+        load_GFA(shaved_gfa, segments, segments_IDs);
+        merge_adjacent_contigs(segments, merged_segments, shaved_gfa);
+        output_graph(merged_gfa, shaved_gfa, merged_segments);
+
+        // merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
         cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
