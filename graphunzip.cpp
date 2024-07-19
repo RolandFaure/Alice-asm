@@ -59,7 +59,7 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
     string line;
     while (getline(gfa, line)){
         if (line[0] == 'S'){
-            long int pos_in_file = gfa.tellg() - line.size() - 1;
+            long int pos_in_file = (long int) gfa.tellg() - line.size() - 1;
             stringstream ss(line);
             string nothing, name;
             ss >> nothing >> name;
@@ -1286,10 +1286,10 @@ int main(int argc, char *argv[])
     if (argc != 8){
         //if -h or --help is passed as an argument, print the help
         if (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)){
-            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <exhaustive> <logfile>" << std::endl;
+            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <contigutiy> <logfile>" << std::endl;
             return 0;
         }
-        std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <exhaustive> <logfile>" << std::endl;
+        std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <contiguity> <logfile>" << std::endl;
         return 1;
     }
 
@@ -1298,7 +1298,7 @@ int main(int argc, char *argv[])
     int min_coverage = std::stoi(argv[3]);
     int threads = std::stoi(argv[4]);
     std::string gfa_output = argv[5];
-    bool exhaustive = std::stoi(argv[6]);
+    bool contiguity = std::stoi(argv[6]);
     std::string logfile = argv[7];
 
     ofstream log(logfile);

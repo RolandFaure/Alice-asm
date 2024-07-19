@@ -86,15 +86,8 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
         pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa);
 
-        if (contiguity){
-            string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
-            pop_bubbles(shaved_gfa, size_longest_read, shaved_and_popped_gfa);
-            shaved_gfa = shaved_and_popped_gfa;
-        }
-
         //merge the adjacent contigs
         cout << "       - Merging resulting contigs" << endl;
-
         unordered_map<string, int> segments_IDs;
         vector<Segment> segments;
         vector<Segment> merged_segments;
@@ -134,6 +127,19 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
 
     cout << " - Untangling the final compressed assembly\n";
 
+    if (contiguity){
+        string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
+        pop_bubbles(merged_gfa, size_longest_read, shaved_and_popped_gfa);
+        unordered_map<string, int> segments_IDs;
+        vector<Segment> segments;
+        vector<Segment> merged_segments;
+        load_GFA(shaved_and_popped_gfa, segments, segments_IDs);
+        string shaved_and_popped_merged = tmp_folder+"bcalm.unitigs.shaved.popped.merged.gfa";
+        merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa);
+        output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
+        merged_gfa = shaved_and_popped_merged;
+    }
+
     //sort the gfa to have S lines before L lines
     cout << "    - Sorting the GFA" << endl;
     sort_GFA(merged_gfa);
@@ -147,7 +153,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     
     cout << "    - Untangling the graph with GraphUnzip" << endl;
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
-    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 " + final_gfa + " 0 " + tmp_folder + "graphunzip.log";
+    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
