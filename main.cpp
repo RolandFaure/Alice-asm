@@ -148,21 +148,6 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
-
-    string shaved_and_popped_gfa2 = "bcalm.unitigs.shaved.popped.gfa";
-    string merged_gfa2 = "bcalm.unitigs.shaved.merged.gfa";
-    int size_longest_read = 1000;
-    pop_bubbles(merged_gfa2, size_longest_read, shaved_and_popped_gfa2);
-    unordered_map<string, int> segments_IDs;
-    vector<Segment> segments;
-    vector<Segment> merged_segments;
-    load_GFA(shaved_and_popped_gfa2, segments, segments_IDs);
-    string shaved_and_popped_merged = "bcalm.unitigs.shaved.popped.merged.gfa";
-    merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa2);
-    output_graph(shaved_and_popped_merged, shaved_and_popped_gfa2, merged_segments);
-
-    exit(1);
-
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;
