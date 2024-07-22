@@ -12,8 +12,9 @@ set(TARGET_H
     basic_graph_manipulation.h,
     clipp.h,
     reduce_and_expand.h,
-    rolling_hash.h
-       )
+    rolling_hash.h,
+    graphunzip.h
+   )
 
 # Local source files here
 set(TARGET_SRC
@@ -21,8 +22,9 @@ set(TARGET_SRC
     basic_graph_manipulation.cpp,
     main.cpp,
     reduce_and_expand.cpp,
-    rolling_hash.cpp
-        )
+    rolling_hash.cpp,
+    graphunzip.cpp
+    )
 
 
 file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
