@@ -1077,7 +1077,7 @@ void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa
 
                 if (all_paths_reciprocal){
 
-                    cout << "popping bubble between " << contig_name << " and " << contig_to_reach.first << "\n";
+                    // cout << "popping bubble between " << contig_name << " and " << contig_to_reach.first << "\n";
 
                     //now compute the average coverage of each path of the bubble
                     vector<float> coverages (paths_left.size(), 0);

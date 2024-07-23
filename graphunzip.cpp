@@ -1074,12 +1074,11 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             dead_end_right = true;
         }
 
-        // cout << "dead end left: " << dead_end_left << " dead end right: " << dead_end_right << endl;
-
         if (!dead_end_left && !dead_end_right){ //means this contig is in the middle of a long haploid contig, no need to merge
             seg_idx++;
             continue;
         }
+
 
         //create a new contig
         if (dead_end_left && dead_end_right){
@@ -1241,6 +1240,73 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         seg_idx++;
     }
 
+    //some contigs are left: the ones that were in circular rings... go through them and add them
+    for (Segment old_seg : old_segments){
+        if (already_looked_at_segments.find(old_seg.ID) == already_looked_at_segments.end()){
+            int current_ID = old_seg.ID;
+            int current_end = 1;
+            vector<string> all_names = {old_seg.name};
+            vector<string> all_seqs = {old_seg.get_seq(original_gfa_file)};
+            vector<double> all_coverages = {old_seg.get_coverage()};
+            bool circular_as_expected = true;
+            while (old_segments[current_ID].links[current_end].first.size() == 1 && old_segments[old_segments[current_ID].links[current_end].first[0].first].links[old_segments[current_ID].links[current_end].first[0].second].first.size() == 1){
+                if (old_segments[current_ID].links[current_end].first[0].first == old_seg.ID){
+                    break;
+                }
+                already_looked_at_segments.insert(current_ID);
+                string cigar = old_segments[current_ID].links[current_end].second[0];
+                int tmp_current_end = 1-old_segments[current_ID].links[current_end].first[0].second;
+                current_ID = old_segments[current_ID].links[current_end].first[0].first;
+                current_end = tmp_current_end;
+                all_names.push_back(old_segments[current_ID].name);
+                string seq = old_segments[current_ID].get_seq(original_gfa_file);
+                //now reverse complement if current_end is 0
+                if (current_end == 0){
+                    seq = reverse_complement(seq);
+                }
+                //trim the sequence if there is a CIGAR
+                int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
+                all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
+                all_coverages.push_back(old_segments[current_ID].get_coverage());
+            }
+            if (old_segments[current_ID].links[current_end].first[0].first != old_seg.ID){
+                circular_as_expected = false;
+            }
+            if (circular_as_expected){
+                already_looked_at_segments.insert(current_ID);
+                string new_name = "";
+                for (string name : all_names){
+                    new_name += name + "_";
+                }
+                new_name = new_name.substr(0, new_name.size()-1);
+                string new_seq = "";
+                for (string seq : all_seqs){
+                    new_seq += seq;
+                }
+                double new_coverage = 0;
+                for (double coverage : all_coverages){
+                    new_coverage += coverage;
+                }
+                new_coverage = new_coverage/all_coverages.size();
+                new_segments.push_back(Segment(new_name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+                new_segments[new_segments.size()-1].seq = new_seq;
+
+                //add the links
+                int idx_link = 0;
+                for (pair<int,int> link : old_seg.links[0].first){
+                    links_to_add.insert({{{old_seg.ID, 0}, link}, old_seg.links[0].second[idx_link]});
+                    idx_link++;
+                }
+
+                old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
+                old_ID_to_new_ID[{current_ID, current_end}] = {new_segments.size() - 1, 1};
+            }
+            else{
+                cout << "ERROR: contig " << old_seg.name << " was discarded while merging the reads in graphunzip.cpp" << endl;
+            }
+        }
+    }
+
     //now add the links in the new segments
     for (pair<pair<pair<int,int>, pair<int,int>>, string> link : links_to_add){
         new_segments[old_ID_to_new_ID[link.first.first].first].links[old_ID_to_new_ID[link.first.first].second].first.push_back(old_ID_to_new_ID[link.first.second]);
@@ -1282,6 +1348,16 @@ void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments
 
 int main(int argc, char *argv[])
 {
+    unordered_map<string, int> segment_IDs2;
+    vector<Segment> segments2; //segments is a dict of pairs
+    load_GFA("circle.gfa", segments2, segment_IDs2);
+    //merge
+    vector<Segment> merged_segments2;
+    merge_adjacent_contigs(segments2, merged_segments2, "circle.gfa");
+    output_graph("circle_merged.gfa", "circle.gfa", merged_segments2);
+    exit(0);
+    
+
     //HS_GraphUnzip <gfa_input> <gaf_file> <threads> <gfa_output> <exhaustive>
     if (argc != 8){
         //if -h or --help is passed as an argument, print the help
