@@ -1045,11 +1045,12 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
     }
 }
     
-void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file){
+void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file, bool rename){
 
     set<int> already_looked_at_segments; //old IDs of segments that have already been looked at and merged (don't want to merge them twice)
     int seg_idx = 0;
     unordered_map<pair<int,int>,pair<int,int>> old_ID_to_new_ID; //associates (old_id, old end) with (new_id_new_end)
+    int number_of_merged_contigs = 0;
     set<pair<pair<pair<int,int>, pair<int,int>>,string>> links_to_add; //list of links to add, all in old IDs
     for (Segment old_seg : old_segments){
 
@@ -1083,7 +1084,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         //create a new contig
         if (dead_end_left && dead_end_right){
             already_looked_at_segments.insert(old_seg.ID);
-            new_segments.push_back(Segment(old_seg.name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_coverage()));
+            string name = old_seg.name;
+            if (rename){
+                name = std::to_string(number_of_merged_contigs);
+                number_of_merged_contigs++;
+            }
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_coverage()));
             old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
             old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
             //add the links
@@ -1142,7 +1148,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_coverage += coverage;
             }
             new_coverage = new_coverage/all_coverages.size();
-            new_segments.push_back(Segment(new_name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            string name = new_name;
+            if (rename){
+                name = std::to_string(number_of_merged_contigs);
+                number_of_merged_contigs++;
+            }
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1216,7 +1227,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_coverage += coverage;
             }
             new_coverage = new_coverage/all_coverages.size();
-            new_segments.push_back(Segment(new_name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            string name = new_name;
+            if (rename){
+                name = std::to_string(number_of_merged_contigs);
+                number_of_merged_contigs++;
+            }
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1288,7 +1304,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     new_coverage += coverage;
                 }
                 new_coverage = new_coverage/all_coverages.size();
-                new_segments.push_back(Segment(new_name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+                string name = new_name;
+                if (rename){
+                    name = std::to_string(number_of_merged_contigs);
+                    number_of_merged_contigs++;
+                }
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
                 new_segments[new_segments.size()-1].seq = new_seq;
 
                 //add the links
@@ -1348,24 +1369,15 @@ void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments
 
 int main(int argc, char *argv[])
 {
-    unordered_map<string, int> segment_IDs2;
-    vector<Segment> segments2; //segments is a dict of pairs
-    load_GFA("circle.gfa", segments2, segment_IDs2);
-    //merge
-    vector<Segment> merged_segments2;
-    merge_adjacent_contigs(segments2, merged_segments2, "circle.gfa");
-    output_graph("circle_merged.gfa", "circle.gfa", merged_segments2);
-    exit(0);
-    
 
     //HS_GraphUnzip <gfa_input> <gaf_file> <threads> <gfa_output> <exhaustive>
-    if (argc != 8){
+    if (argc != 9){
         //if -h or --help is passed as an argument, print the help
         if (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)){
-            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <contigutiy> <logfile>" << std::endl;
+            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <rename> <gfa_output> <contigutiy> <logfile>" << std::endl;
             return 0;
         }
-        std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <gfa_output> <contiguity> <logfile>" << std::endl;
+        std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <rename> <gfa_output> <contiguity> <logfile>" << std::endl;
         return 1;
     }
 
@@ -1373,9 +1385,10 @@ int main(int argc, char *argv[])
     std::string gaf_file = argv[2];
     int min_coverage = std::stoi(argv[3]);
     int threads = std::stoi(argv[4]);
-    std::string gfa_output = argv[5];
-    bool contiguity = std::stoi(argv[6]);
-    std::string logfile = argv[7];
+    bool rename = std::stoi(argv[5]);
+    std::string gfa_output = argv[6];
+    bool contiguity = std::stoi(argv[7]);
+    std::string logfile = argv[8];
 
     ofstream log(logfile);
 
@@ -1413,7 +1426,7 @@ int main(int argc, char *argv[])
     // cout << "Merging adjacent contigs" << endl;
     vector<Segment> merged_segments;
     output_graph("non_merged.gfa", gfa_input, unzipped_segments);
-    merge_adjacent_contigs(unzipped_segments, merged_segments, gfa_input);
+    merge_adjacent_contigs(unzipped_segments, merged_segments, gfa_input, rename);
     // cout << "Adjacent contigs merged" << endl;
 
     //output the graph

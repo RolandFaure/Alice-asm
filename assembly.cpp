@@ -92,7 +92,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         vector<Segment> segments;
         vector<Segment> merged_segments;
         load_GFA(shaved_gfa, segments, segments_IDs);
-        merge_adjacent_contigs(segments, merged_segments, shaved_gfa);
+        merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true); //the last bool is to rename the contigs
         output_graph(merged_gfa, shaved_gfa, merged_segments);
 
         // merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
@@ -135,7 +135,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         vector<Segment> merged_segments;
         load_GFA(shaved_and_popped_gfa, segments, segments_IDs);
         string shaved_and_popped_merged = tmp_folder+"bcalm.unitigs.shaved.popped.merged.gfa";
-        merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa);
+        merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true); //the last bool is to rename the contigs
         output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
         merged_gfa = shaved_and_popped_merged;
     }
@@ -153,7 +153,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     
     cout << "    - Untangling the graph with GraphUnzip" << endl;
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
-    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
+    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";

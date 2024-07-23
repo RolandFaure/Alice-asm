@@ -311,12 +311,12 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     input.close();
 
     //now go through the reads and find the paths
-    unordered_flat_map <string, Path> paths;
     ifstream input2(reads_file);
     string name;
     bool nextline = false;
     int nb_reads = 0;
     auto time_now = std::chrono::system_clock::now();
+    ofstream output(gaf_out);
     while (std::getline(input2, line))
     {
         // if (nb_reads%1000==0){
@@ -369,7 +369,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         //skip the next kmers
                         int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second - km;
                         if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
-                            // pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
+                            pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
                             // cout << "dqddf" << endl;
                         }
                         // cout << "found in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second <<" " << pos_nth << "\n";
@@ -390,7 +390,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         //skip the next kmers
                         int length_of_contig_left = kmers_to_contigs[hash_reverse].second;
                         if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
-                            // pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
+                            pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
                             // cout << "dqddf" << endl;
                         }
                         // cout << "found in " << kmers_to_contigs[nth.get_reverse_hash()].first << " at pos " << kmers_to_contigs[nth.get_reverse_hash()].second << " " << pos_nth<< "\n";
@@ -400,27 +400,21 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             }
 
             if (p.contigs.size() > 0){
-                paths[name] = p;
-            }
+                output << name << "\t-1\t-1\t-1\t+\t";
+                for (int i = 0 ; i < p.contigs.size() ; i++){
+                    if (p.orientations[i]){
+                        output << ">" << p.contigs[i];
+                    }
+                    else{
+                        output << "<" << p.contigs[i];
+                    }
+                }
+                output << "\t\n";}
         }
     }
 
     input2.close();
-
-    //now write the gaf file
-    ofstream output(gaf_out);
-    for (auto p: paths){
-        output << p.first << "\t-1\t-1\t-1\t+\t";
-        for (int i = 0 ; i < p.second.contigs.size() ; i++){
-            if (p.second.orientations[i]){
-                output << ">" << p.second.contigs[i];
-            }
-            else{
-                output << "<" << p.second.contigs[i];
-            }
-        }
-        output << "\t\n";
-    }
+    output.close();
 
 }
 
@@ -1217,11 +1211,12 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
     gfa.close();
 }
 
-void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file){
+void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file, bool rename){
 
     set<int> already_looked_at_segments; //old IDs of segments that have already been looked at and merged (don't want to merge them twice)
     int seg_idx = 0;
     unordered_map<pair<int,int>,pair<int,int>> old_ID_to_new_ID; //associates (old_id, old end) with (new_id_new_end)
+    int number_of_merged_contigs = 0;
     set<pair<pair<pair<int,int>, pair<int,int>>,string>> links_to_add; //list of links to add, all in old IDs
     for (Segment old_seg : old_segments){
 
@@ -1235,7 +1230,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             continue;
         }
         //check if it has either at least two neighbors left or that its neighbor left has at least two neighbors right
-        // cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
+        cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
         bool dead_end_left = false;
         if (old_seg.links[0].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].links[old_seg.links[0].first[0].second].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].ID == old_seg.ID){
             dead_end_left = true;
@@ -1246,17 +1241,21 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             dead_end_right = true;
         }
 
-        // cout << "dead end left: " << dead_end_left << " dead end right: " << dead_end_right << endl;
-
         if (!dead_end_left && !dead_end_right){ //means this contig is in the middle of a long haploid contig, no need to merge
             seg_idx++;
             continue;
         }
 
+
         //create a new contig
         if (dead_end_left && dead_end_right){
             already_looked_at_segments.insert(old_seg.ID);
-            new_segments.push_back(Segment(old_seg.name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_coverage()));
+            string name = old_seg.name;
+            if (rename){
+                name = std::to_string(number_of_merged_contigs);
+                number_of_merged_contigs++;
+            }
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_coverage()));
             old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
             old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
             //add the links
@@ -1315,7 +1314,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_coverage += coverage;
             }
             new_coverage = new_coverage/all_coverages.size();
-            new_segments.push_back(Segment(new_name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            string name = new_name;
+            if (rename){
+                name = std::to_string(number_of_merged_contigs);
+                number_of_merged_contigs++;
+            }
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1389,7 +1393,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_coverage += coverage;
             }
             new_coverage = new_coverage/all_coverages.size();
-            new_segments.push_back(Segment(new_name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            string name = new_name;
+            if (rename){
+                name = std::to_string(number_of_merged_contigs);
+                number_of_merged_contigs++;
+            }
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1411,6 +1420,78 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         }
 
         seg_idx++;
+    }
+
+    //some contigs are left: the ones that were in circular rings... go through them and add them
+    for (Segment old_seg : old_segments){
+        if (already_looked_at_segments.find(old_seg.ID) == already_looked_at_segments.end()){
+            int current_ID = old_seg.ID;
+            int current_end = 1;
+            vector<string> all_names = {old_seg.name};
+            vector<string> all_seqs = {old_seg.get_seq(original_gfa_file)};
+            vector<double> all_coverages = {old_seg.get_coverage()};
+            bool circular_as_expected = true;
+            while (old_segments[current_ID].links[current_end].first.size() == 1 && old_segments[old_segments[current_ID].links[current_end].first[0].first].links[old_segments[current_ID].links[current_end].first[0].second].first.size() == 1){
+                if (old_segments[current_ID].links[current_end].first[0].first == old_seg.ID){
+                    break;
+                }
+                already_looked_at_segments.insert(current_ID);
+                string cigar = old_segments[current_ID].links[current_end].second[0];
+                int tmp_current_end = 1-old_segments[current_ID].links[current_end].first[0].second;
+                current_ID = old_segments[current_ID].links[current_end].first[0].first;
+                current_end = tmp_current_end;
+                all_names.push_back(old_segments[current_ID].name);
+                string seq = old_segments[current_ID].get_seq(original_gfa_file);
+                //now reverse complement if current_end is 0
+                if (current_end == 0){
+                    seq = reverse_complement(seq);
+                }
+                //trim the sequence if there is a CIGAR
+                int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
+                all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
+                all_coverages.push_back(old_segments[current_ID].get_coverage());
+            }
+            if (old_segments[current_ID].links[current_end].first[0].first != old_seg.ID){
+                circular_as_expected = false;
+            }
+            if (circular_as_expected){
+                already_looked_at_segments.insert(current_ID);
+                string new_name = "";
+                for (string name : all_names){
+                    new_name += name + "_";
+                }
+                new_name = new_name.substr(0, new_name.size()-1);
+                string new_seq = "";
+                for (string seq : all_seqs){
+                    new_seq += seq;
+                }
+                double new_coverage = 0;
+                for (double coverage : all_coverages){
+                    new_coverage += coverage;
+                }
+                new_coverage = new_coverage/all_coverages.size();
+                string name = new_name;
+                if (rename){
+                    name = std::to_string(number_of_merged_contigs);
+                    number_of_merged_contigs++;
+                }
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+                new_segments[new_segments.size()-1].seq = new_seq;
+
+                //add the links
+                int idx_link = 0;
+                for (pair<int,int> link : old_seg.links[0].first){
+                    links_to_add.insert({{{old_seg.ID, 0}, link}, old_seg.links[0].second[idx_link]});
+                    idx_link++;
+                }
+
+                old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
+                old_ID_to_new_ID[{current_ID, current_end}] = {new_segments.size() - 1, 1};
+            }
+            else{
+                cout << "ERROR: contig " << old_seg.name << " was discarded while merging the reads in graphunzip.cpp" << endl;
+            }
+        }
     }
 
     //now add the links in the new segments
