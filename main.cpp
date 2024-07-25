@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.3";
-string date = "2024-07-23";
+string version = "0.6.4";
+string date = "2024-07-25";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -166,7 +166,7 @@ int main(int argc, char** argv)
     bool rescue = false;
     bool contiguity = true;
     int min_abundance = 5;
-    int order = 201;
+    int order = 101;
     int compression = 20;
     int num_threads = 1;
     bool no_hpc = false;

@@ -700,71 +700,118 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
         for (auto c: linked){
 
             string contig = c.first;
-            // cout << "contig " << contig << " djuqst sdkdqsm \n";
             // if (contig != "254117"){
             //     continue;
             // }
 
-            if (coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length){
-                //this contig is solid EXCEPT if it is a tip that has an abundance less than 10% of the coverage of the contig it is connected to
-                if (linked[contig].first.size() == 0 && linked[contig].second.size() == 1){
-                    //this is a tip
-                    if (coverage[contig] >= 0.1*coverage[linked[contig].second[0].first]){
-                        to_keep.insert(contig);
-                    }
-                }
-                else if (linked[contig].first.size() == 1 && linked[contig].second.size() == 0){
-                    //this is a tip
-                    if (coverage[contig] >= 0.1*coverage[linked[contig].first[0].first]){
-                        to_keep.insert(contig);
-                    }
-                }
-                else if (contiguity) {//if contiguity mode is on, do not take contigs that have in all their neighborhood contigs with 20x their coverage (corresponds to poorly covered side of a bubble)
-                    
-                    int size_of_neighborhood = 5*k;
-                    // cout << "launching..\n";
-                    int overcovered_right = 2;
-                    if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].second){
-                        overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], not_overcovered);
-                    }
-                    if (overcovered_right == 2){
-                        if (not_overcovered.find(contig) != not_overcovered.end()){
-                            not_overcovered[contig].first = false;
-                            not_overcovered[contig].second = false;
-                        }
-                        not_overcovered[contig].second = true;
-                    }
-                    int overcovered_left = 2;
-                    if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
-                        overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], not_overcovered);
-                    }
-                    if (overcovered_left == 2){
-                        if (not_overcovered.find(contig) != not_overcovered.end()){
-                            not_overcovered[contig].first = false;
-                            not_overcovered[contig].second = false;
-                        }
-                        not_overcovered[contig].first = true;
-                    }
-                    // cout << contig << " " << overcovered_left << " " << overcovered_right << "\n";
+            //check if this is a badly covered bubble
+            bool bubble = false;
+            if (linked[contig].first.size() == 1 && linked[contig].second.size() == 1){
 
-                    // if (contig == "280245"){
-                    //     cout << "contig " << contig << " has overcovered neighborhood " << overcovered_left << " " << overcovered_right << " " << coverage[contig] << "\n";
-                    //     exit(1);
-                    // }
+                string neighbor_left = linked[contig].first[0].first;
+                char end_of_neighbor_left = linked[contig].first[0].second;
+                string neighbor_right = linked[contig].second[0].first;
+                char end_of_neighbor_right = linked[contig].second[0].second;
 
-                    if ((overcovered_left == 2 || overcovered_right == 2) || (overcovered_left == 0 && overcovered_right == 0)){
-                        to_keep.insert(contig);
+                string other_neighbor_of_contig_left = "";
+                if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2){
+                    for (auto l: linked[neighbor_left].first){
+                        if (l.first != contig){
+                            other_neighbor_of_contig_left = l.first;
+                        }
                     }
-                    // else{
-                    //     cout << "contig " << contig << " has overcovered neighborhood " << count << " " << linked.size() << "\n";
-                    //     // exit(1);
-                    // }
                 }
-                else{
+                else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2){
+                    for (auto l: linked[neighbor_left].second){
+                        if (l.first != contig){
+                            other_neighbor_of_contig_left = l.first;
+                        }
+                    }
+                }
+
+                string other_neighbor_of_contig_right = "";
+                if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2){
+                    for (auto l: linked[neighbor_right].first){
+                        if (l.first != contig){
+                            other_neighbor_of_contig_right = l.first;
+                        }
+                    }
+                }
+                else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2){
+                    for (auto l: linked[neighbor_right].second){
+                        if (l.first != contig){
+                            other_neighbor_of_contig_right = l.first;
+                        }
+                    }
+                }
+
+                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && coverage[contig] < 5*coverage[other_neighbor_of_contig_left]){
+                    bubble = true;
+                }
+     
+            }
+
+            if (linked[contig].first.size() == 0 && linked[contig].second.size() == 1){
+                //this is a tip
+                if ( (coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length) && coverage[contig] >= 0.1*coverage[linked[contig].second[0].first]){
                     to_keep.insert(contig);
                 }
-                count ++;
             }
+            else if ( linked[contig].first.size() == 1 && linked[contig].second.size() == 0){
+                //this is a tip
+                if ((coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length) && coverage[contig] >= 0.1*coverage[linked[contig].first[0].first]){
+                    to_keep.insert(contig);
+                }
+            }
+            else if (bubble && (coverage[contig] < abundance_min && length_of_contigs[contig] < min_length)) //pop it if 1) this is a bubble and 2) coverage less than 5x or the contig is shorter than min_length
+            {
+                //do nothing, and most importantly, do not add the contig to the to_keep set
+            }
+            else if (contiguity) {//if contiguity mode is on, do not take contigs that have in all their neighborhood contigs with 20x their coverage (corresponds to poorly covered side of a bubble)
+                
+                int size_of_neighborhood = 5*k;
+                // cout << "launching..\n";
+                int overcovered_right = 2;
+                if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].second){
+                    overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], not_overcovered);
+                }
+                if (overcovered_right == 2){
+                    if (not_overcovered.find(contig) != not_overcovered.end()){
+                        not_overcovered[contig].first = false;
+                        not_overcovered[contig].second = false;
+                    }
+                    not_overcovered[contig].second = true;
+                }
+                int overcovered_left = 2;
+                if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
+                    overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], not_overcovered);
+                }
+                if (overcovered_left == 2){
+                    if (not_overcovered.find(contig) != not_overcovered.end()){
+                        not_overcovered[contig].first = false;
+                        not_overcovered[contig].second = false;
+                    }
+                    not_overcovered[contig].first = true;
+                }
+                // cout << contig << " " << overcovered_left << " " << overcovered_right << "\n";
+
+                // if (contig == "280245"){
+                //     cout << "contig " << contig << " has overcovered neighborhood " << overcovered_left << " " << overcovered_right << " " << coverage[contig] << "\n";
+                //     exit(1);
+                // }
+
+                if ((overcovered_left == 2 || overcovered_right == 2) || (overcovered_left == 0 && overcovered_right == 0)){
+                    to_keep.insert(contig);
+                }
+                // else{
+                //     cout << "contig " << contig << " has overcovered neighborhood " << count << " " << linked.size() << "\n";
+                //     // exit(1);
+                // }
+            }
+            else{
+                to_keep.insert(contig);
+            }
+            count ++;
 
             if (to_keep.find(contig) != to_keep.end()){
                 //make sure the contig has at least one neighbor left and right (if not, take the one with the highest coverage)
@@ -1230,7 +1277,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             continue;
         }
         //check if it has either at least two neighbors left or that its neighbor left has at least two neighbors right
-        cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
+        // cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
         bool dead_end_left = false;
         if (old_seg.links[0].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].links[old_seg.links[0].first[0].second].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].ID == old_seg.ID){
             dead_end_left = true;
