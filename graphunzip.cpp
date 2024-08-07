@@ -51,6 +51,191 @@ void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
     }
 }
 
+/**
+ * @brief Compute the consensual path of contigs left and right
+ * 
+ */
+void Segment::compute_consensuses(){
+
+    //go through the nighbors left and discard all reads that are subreads of another read
+
+    //first sort the neighbors by decreasing length
+    std::sort(neighbors_left.begin(), neighbors_left.end(), [](pair<vector<pair<int,bool>>,int> a, pair<vector<pair<int,bool>>,int> b){return a.first.size() > b.first.size();});
+
+    vector<pair<vector<pair<int,bool>>, int>> new_neighbors_left;
+    //iteratively go through the neighbors and check if they are subreads of existing neighbors
+    for (int n1 = 0 ; n1 < neighbors_left.size() ; n1++){
+        int nb_of_supra_reads = 0;
+        int idx_of_supra_read = -1;
+        for (int n2 = 0 ; n2<new_neighbors_left.size() ; n2++){
+            bool is_subread = true;
+            for (int c = 0 ; c < neighbors_left[n1].first.size() ; c++){
+
+                if (new_neighbors_left[n2].first[c] != neighbors_left[n1].first[c]){
+                    is_subread = false;
+                    break;
+                }
+            }
+            if (is_subread){
+                nb_of_supra_reads++;
+                idx_of_supra_read = n2;
+            }
+        }
+        if (nb_of_supra_reads == 0){
+            new_neighbors_left.push_back(neighbors_left[n1]);
+        }
+        else if (nb_of_supra_reads == 1){ //add 1 to the strength of the supraread
+            if (new_neighbors_left[idx_of_supra_read].second == 1){ //i.e. this is the second read confirming this only -> don't put too much confidence in the last contigs of the path
+                new_neighbors_left[idx_of_supra_read].first = neighbors_left[n1].first;
+            }
+            new_neighbors_left[idx_of_supra_read].second++;
+        }
+        //else it is a subread of several possibility, don't increment the strengths
+    }
+    neighbors_left = new_neighbors_left;
+
+    //go through the nighbors right and discard all reads that are subreads of another read
+
+    //first sort the neighbors by decreasing length
+    std::sort(neighbors_right.begin(), neighbors_right.end(), [](pair<vector<pair<int,bool>>,int> a, pair<vector<pair<int,bool>>,int> b){return a.first.size() > b.first.size();});
+
+    vector<pair<vector<pair<int,bool>>, int>> new_neighbors_right;
+    //iteratively go through the neighbors and check if they are subreads of existing neighbors
+    for (int n1 = 0 ; n1 < neighbors_right.size() ; n1++){
+        int nb_of_supra_reads = 0;
+        int idx_of_supra_read = -1;
+        for (int n2 = 0 ; n2<new_neighbors_right.size() ; n2++){
+            bool is_subread = true;
+            for (int c = 0 ; c < neighbors_right[n1].first.size() ; c++){
+                if (new_neighbors_right[n2].first[c] != neighbors_right[n1].first[c]){
+                    is_subread = false;
+                    break;
+                }
+            }
+            if (is_subread){
+                nb_of_supra_reads++;
+                idx_of_supra_read = n2;
+            }
+        }
+        if (nb_of_supra_reads == 0){
+            new_neighbors_right.push_back(neighbors_right[n1]);
+        }
+        else if (nb_of_supra_reads == 1){ //add 1 to the strength of the supraread
+            if (new_neighbors_right[idx_of_supra_read].second == 1){ //i.e. this is the second read confirming this only -> don't put too much confidence in the last contigs of the path
+                new_neighbors_right[idx_of_supra_read].first = neighbors_right[n1].first;
+            }
+            new_neighbors_right[idx_of_supra_read].second++;
+        }
+        //else it is a subread of several possibility, don't increment the strengths
+    }
+    neighbors_right = new_neighbors_right;
+
+    this->haploid = true;
+
+    //go through the remaining reads: if there are more than one strong then not haploid, else set the only strong read as the consensus
+    vector<int> strengths_left;
+    for (auto neighbor : neighbors_left){
+        strengths_left.push_back(neighbor.second);
+    }
+    //find the two strongest neighbors
+    int max_strength = 0;
+    int idx_max = -1;
+    int second_max_strength = 0;
+    int idx_second_max = -1;
+    for (int s = 0 ; s < strengths_left.size() ; s++){
+        if (strengths_left[s] > max_strength){
+            second_max_strength = max_strength;
+            idx_second_max = idx_max;
+            max_strength = strengths_left[s];
+            idx_max = s;
+        }
+        else if (strengths_left[s] > second_max_strength){
+            second_max_strength = strengths_left[s];
+            idx_second_max = s;
+        }
+    }
+
+    if (second_max_strength-1 > 0.2*(max_strength-1) || second_max_strength > 4){
+        this->haploid = false;
+    }
+    else{
+        if (idx_max != -1){
+            this->consensus_left = neighbors_left[idx_max].first;
+        }
+        else{
+            this->consensus_left = {};
+        }
+    }
+
+
+    //go through the remaining reads: if there are more than one strong then not haploid, else set the only strong read as the consensus
+    vector<int> strengths_right;
+    for (auto neighbor : neighbors_right){
+        strengths_right.push_back(neighbor.second);
+    }
+    //find the two strongest neighbors
+    max_strength = 0;
+    idx_max = -1;
+    second_max_strength = 0;
+    idx_second_max = -1;
+    for (int s = 0 ; s < strengths_right.size() ; s++){
+        if (strengths_right[s] > max_strength){
+            second_max_strength = max_strength;
+            idx_second_max = idx_max;
+            max_strength = strengths_right[s];
+            idx_max = s;
+        }
+        else if (strengths_right[s] > second_max_strength){
+            second_max_strength = strengths_right[s];
+            idx_second_max = s;
+        }
+    }
+
+    if ((second_max_strength-1) > 0.2*(max_strength-1) || second_max_strength > 4){
+        this->haploid = false;
+    }
+    else{
+        if (idx_max != -1){
+            this->consensus_right = neighbors_right[idx_max].first;
+        }
+        else{
+            this->consensus_right = {};
+        }
+    }
+}
+
+vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_left(){
+    vector<vector<pair<int,bool>>> strong_neighbors;
+    int max_strength = 0;
+    for (auto neighbor : neighbors_left){
+        if (neighbor.second > max_strength){
+            max_strength = neighbor.second;
+        }
+    }
+    for (auto neighbor : neighbors_left){
+        if (neighbor.second > 1  && (neighbor.second > 0.2*max_strength || neighbor.second > 4)){
+            strong_neighbors.push_back(neighbor.first);
+        }
+    }
+    return strong_neighbors;
+}
+
+vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_right(){
+    vector<vector<pair<int,bool>>> strong_neighbors;
+    int max_strength = 0;
+    for (auto neighbor : neighbors_right){
+        if (neighbor.second > max_strength){
+            max_strength = neighbor.second;
+        }
+    }
+    for (auto neighbor : neighbors_right){
+        if (neighbor.second > 1 && (neighbor.second > 0.2*max_strength || neighbor.second > 4)){
+            strong_neighbors.push_back(neighbor.first);
+        }
+    }
+    return strong_neighbors;
+}
+
 void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, int> &segment_IDs){
     //load the segments from the GFA file
     
@@ -242,191 +427,6 @@ void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, 
 }
 
 /**
- * @brief Compute the consensual path of contigs left and right
- * 
- */
-void Segment::compute_consensuses(){
-
-    //go through the nighbors left and discard all reads that are subreads of another read
-
-    //first sort the neighbors by decreasing length
-    std::sort(neighbors_left.begin(), neighbors_left.end(), [](pair<vector<pair<int,bool>>,int> a, pair<vector<pair<int,bool>>,int> b){return a.first.size() > b.first.size();});
-
-    vector<pair<vector<pair<int,bool>>, int>> new_neighbors_left;
-    //iteratively go through the neighbors and check if they are subreads of existing neighbors
-    for (int n1 = 0 ; n1 < neighbors_left.size() ; n1++){
-        int nb_of_supra_reads = 0;
-        int idx_of_supra_read = -1;
-        for (int n2 = 0 ; n2<new_neighbors_left.size() ; n2++){
-            bool is_subread = true;
-            for (int c = 0 ; c < neighbors_left[n1].first.size() ; c++){
-
-                if (new_neighbors_left[n2].first[c] != neighbors_left[n1].first[c]){
-                    is_subread = false;
-                    break;
-                }
-            }
-            if (is_subread){
-                nb_of_supra_reads++;
-                idx_of_supra_read = n2;
-            }
-        }
-        if (nb_of_supra_reads == 0){
-            new_neighbors_left.push_back(neighbors_left[n1]);
-        }
-        else if (nb_of_supra_reads == 1){ //add 1 to the strength of the supraread
-            if (new_neighbors_left[idx_of_supra_read].second == 1){ //i.e. this is the second read confirming this only -> don't put too much confidence in the last contigs of the path
-                new_neighbors_left[idx_of_supra_read].first = neighbors_left[n1].first;
-            }
-            new_neighbors_left[idx_of_supra_read].second++;
-        }
-        //else it is a subread of several possibility, don't increment the strengths
-    }
-    neighbors_left = new_neighbors_left;
-
-    //go through the nighbors right and discard all reads that are subreads of another read
-
-    //first sort the neighbors by decreasing length
-    std::sort(neighbors_right.begin(), neighbors_right.end(), [](pair<vector<pair<int,bool>>,int> a, pair<vector<pair<int,bool>>,int> b){return a.first.size() > b.first.size();});
-
-    vector<pair<vector<pair<int,bool>>, int>> new_neighbors_right;
-    //iteratively go through the neighbors and check if they are subreads of existing neighbors
-    for (int n1 = 0 ; n1 < neighbors_right.size() ; n1++){
-        int nb_of_supra_reads = 0;
-        int idx_of_supra_read = -1;
-        for (int n2 = 0 ; n2<new_neighbors_right.size() ; n2++){
-            bool is_subread = true;
-            for (int c = 0 ; c < neighbors_right[n1].first.size() ; c++){
-                if (new_neighbors_right[n2].first[c] != neighbors_right[n1].first[c]){
-                    is_subread = false;
-                    break;
-                }
-            }
-            if (is_subread){
-                nb_of_supra_reads++;
-                idx_of_supra_read = n2;
-            }
-        }
-        if (nb_of_supra_reads == 0){
-            new_neighbors_right.push_back(neighbors_right[n1]);
-        }
-        else if (nb_of_supra_reads == 1){ //add 1 to the strength of the supraread
-            if (new_neighbors_right[idx_of_supra_read].second == 1){ //i.e. this is the second read confirming this only -> don't put too much confidence in the last contigs of the path
-                new_neighbors_right[idx_of_supra_read].first = neighbors_right[n1].first;
-            }
-            new_neighbors_right[idx_of_supra_read].second++;
-        }
-        //else it is a subread of several possibility, don't increment the strengths
-    }
-    neighbors_right = new_neighbors_right;
-
-    this->haploid = true;
-
-    //go through the remaining reads: if there are more than one strong then not haploid, else set the only strong read as the consensus
-    vector<int> strengths_left;
-    for (auto neighbor : neighbors_left){
-        strengths_left.push_back(neighbor.second);
-    }
-    //find the two strongest neighbors
-    int max_strength = 0;
-    int idx_max = -1;
-    int second_max_strength = 0;
-    int idx_second_max = -1;
-    for (int s = 0 ; s < strengths_left.size() ; s++){
-        if (strengths_left[s] > max_strength){
-            second_max_strength = max_strength;
-            idx_second_max = idx_max;
-            max_strength = strengths_left[s];
-            idx_max = s;
-        }
-        else if (strengths_left[s] > second_max_strength){
-            second_max_strength = strengths_left[s];
-            idx_second_max = s;
-        }
-    }
-
-    if (second_max_strength-1 > 0.2*(max_strength-1) || second_max_strength > 4){
-        this->haploid = false;
-    }
-    else{
-        if (idx_max != -1){
-            this->consensus_left = neighbors_left[idx_max].first;
-        }
-        else{
-            this->consensus_left = {};
-        }
-    }
-
-
-    //go through the remaining reads: if there are more than one strong then not haploid, else set the only strong read as the consensus
-    vector<int> strengths_right;
-    for (auto neighbor : neighbors_right){
-        strengths_right.push_back(neighbor.second);
-    }
-    //find the two strongest neighbors
-    max_strength = 0;
-    idx_max = -1;
-    second_max_strength = 0;
-    idx_second_max = -1;
-    for (int s = 0 ; s < strengths_right.size() ; s++){
-        if (strengths_right[s] > max_strength){
-            second_max_strength = max_strength;
-            idx_second_max = idx_max;
-            max_strength = strengths_right[s];
-            idx_max = s;
-        }
-        else if (strengths_right[s] > second_max_strength){
-            second_max_strength = strengths_right[s];
-            idx_second_max = s;
-        }
-    }
-
-    if ((second_max_strength-1) > 0.2*(max_strength-1) || second_max_strength > 4){
-        this->haploid = false;
-    }
-    else{
-        if (idx_max != -1){
-            this->consensus_right = neighbors_right[idx_max].first;
-        }
-        else{
-            this->consensus_right = {};
-        }
-    }
-}
-
-vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_left(){
-    vector<vector<pair<int,bool>>> strong_neighbors;
-    int max_strength = 0;
-    for (auto neighbor : neighbors_left){
-        if (neighbor.second > max_strength){
-            max_strength = neighbor.second;
-        }
-    }
-    for (auto neighbor : neighbors_left){
-        if (neighbor.second > 1  && (neighbor.second > 0.2*max_strength || neighbor.second > 4)){
-            strong_neighbors.push_back(neighbor.first);
-        }
-    }
-    return strong_neighbors;
-}
-
-vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_right(){
-    vector<vector<pair<int,bool>>> strong_neighbors;
-    int max_strength = 0;
-    for (auto neighbor : neighbors_right){
-        if (neighbor.second > max_strength){
-            max_strength = neighbor.second;
-        }
-    }
-    for (auto neighbor : neighbors_right){
-        if (neighbor.second > 1 && (neighbor.second > 0.2*max_strength || neighbor.second > 4)){
-            strong_neighbors.push_back(neighbor.first);
-        }
-    }
-    return strong_neighbors;
-}
-
-/**
  * @brief Determine which contigs are haploid.
  * 
  * @param segments 
@@ -530,6 +530,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                         new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), coverage_bridge));
                         old_ID_to_new_IDs[cons_left[contig_in_cons].first] = {new_ID};
                         new_ID++;
+                        old_segments[cons_left[contig_in_cons].first].decrease_coverage(coverage_bridge);
                     }
                     else{
                         //check if the link already exists
@@ -562,7 +563,6 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                         }
                     }
                     
-                    old_segments[cons_left[contig_in_cons].first].decrease_coverage(coverage_bridge);
 
                     int ID_of_new_contig_left = old_ID_to_new_IDs[cons_left[contig_in_cons].first][old_ID_to_new_IDs[cons_left[contig_in_cons].first].size() - 1];
 
@@ -621,6 +621,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                         new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), coverage_bridge));
                         old_ID_to_new_IDs[cons_right[contig_in_cons].first] = {new_ID};
                         new_ID++;
+                        old_segments[cons_right[contig_in_cons].first].decrease_coverage(coverage_bridge);
                     }
                     else{
                         //check if the link already exists
@@ -652,8 +653,6 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                             new_ID++;
                         }
                     }
-
-                    old_segments[cons_right[contig_in_cons].first].decrease_coverage(coverage_bridge);
 
                     int ID_of_new_contig_right = old_ID_to_new_IDs[cons_right[contig_in_cons].first][old_ID_to_new_IDs[cons_right[contig_in_cons].first].size() - 1];
 
@@ -1064,7 +1063,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             continue;
         }
         //check if it has either at least two neighbors left or that its neighbor left has at least two neighbors right
-        cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
+        // cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
         bool dead_end_left = false;
         if (old_seg.links[0].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].links[old_seg.links[0].first[0].second].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].ID == old_seg.ID){
             dead_end_left = true;
@@ -1412,7 +1411,6 @@ int main(int argc, char *argv[])
     // cout << "Haploid contigs determined" << endl;
     // cout << "Creating haploid contigs" << endl;
     create_haploid_contigs(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage);
-    output_graph("haploid.gfa", gfa_input, unzipped_segments);
     // cout << "Haploid contigs created" << endl;
     // cout << "Listing non represented paths" << endl;
     vector<vector<pair<int,bool>>> non_represented_paths = list_non_represented_paths(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage);
@@ -1425,7 +1423,6 @@ int main(int argc, char *argv[])
 
     // cout << "Merging adjacent contigs" << endl;
     vector<Segment> merged_segments;
-    output_graph("non_merged.gfa", gfa_input, unzipped_segments);
     merge_adjacent_contigs(unzipped_segments, merged_segments, gfa_input, rename);
     // cout << "Adjacent contigs merged" << endl;
 

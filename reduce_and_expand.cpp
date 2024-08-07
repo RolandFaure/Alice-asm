@@ -149,6 +149,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 size_t pos_end = 0;
                 long pos_begin = -k;
                 int num_bases = 0;
+                next_line_is_seq = false;
 
                 while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, homopolymer_compression)){
                     if (pos_begin>=0){
@@ -158,6 +159,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
                         }
                         else if (hash_foward>=hash_reverse && hash_reverse % compression == 0){
                             out << "TGCA"[(hash_reverse/compression)%4];
+                            string kmer = line.substr(pos_begin, pos_end-pos_begin);
                             num_bases++;
                         }
                     }
@@ -446,6 +448,7 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                 size_t pos_end = 0;
                 long pos_begin = -k;
                 long pos_middle = -(k+1)/2;
+                next_line_is_seq = false;
 
                 vector<int> positions_sampled (0);
                 std::string kmer = string(km, 'N');
@@ -573,9 +576,6 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
 
     ofstream out(output);
     out << "H\tVN:Z:1.0\n";
-
-    int length_of_central_kmers = 1;
-    int length_of_full_kmers = 1;
 
     //first index the first and last 10 bases of all contigs
     unordered_map<std::string, std::string> first_10;
@@ -733,6 +733,7 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
             //expand the sequence (focusing on the central part of each kmer and thus missing the two ends)
             string expanded_sequence = "";
             int i = 0;
+            int length_of_central_kmers = 1 ;
             for (i = 0; i <= sequence.size()-km; i+= km-20-1){ //-20 because we only take the central part of each kmer
                 string kmer = sequence.substr(i, km);
                 if (kmers.find(kmer) != kmers.end()){
@@ -773,10 +774,10 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
 
                     //compute the overlap
                     int overlap = beginning_of_seq.size();
-                    string exp_start = expanded_sequence.substr(0, std::min(30, overlap));
+                    string exp_start = expanded_sequence.substr(0, std::min( (int) expanded_sequence.size(), std::min(30, overlap)));
                     while (overlap > 0 && beginning_of_seq.substr(beginning_of_seq.size()-overlap, exp_start.size()) != exp_start){
                         overlap--;
-                        if (overlap < 30){
+                        if (overlap < exp_start.size()){
                             exp_start = expanded_sequence.substr(0, overlap);
                         }
                     }
@@ -804,13 +805,14 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
                     end_of_seq = central_kmer;
                 }
                 //compute the overlap
-                int overlap = end_of_seq.size();
-
-                string exp_end = expanded_sequence.substr(std::max((int)expanded_sequence.size()-30,0), std::min((int)expanded_sequence.size(), 30));
-                while (overlap > 0 && end_of_seq.substr(overlap-exp_end.size(), exp_end.size()) != exp_end){
+                int overlap = std::min(end_of_seq.size(), expanded_sequence.size());
+                int size_of_compared_seq = std::min(30,  overlap);
+                string exp_end = expanded_sequence.substr((int)expanded_sequence.size()-size_of_compared_seq, size_of_compared_seq);
+                while (overlap > 0 && end_of_seq.substr(overlap-size_of_compared_seq, size_of_compared_seq) != exp_end){
                     overlap--;
-                    if (overlap < 30){
+                    if (overlap < size_of_compared_seq){
                         exp_end = expanded_sequence.substr(expanded_sequence.size()-overlap, overlap);
+                        size_of_compared_seq = overlap;
                     }
                 }
 

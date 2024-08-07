@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.4";
-string date = "2024-07-25";
+string version = "0.6.5";
+string date = "2024-08-07";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -170,6 +170,7 @@ int main(int argc, char** argv)
     int compression = 20;
     int num_threads = 1;
     bool no_hpc = false;
+    bool clean = false;
     auto cli = (
         //input/output option
         clipp::required("-r", "--reads").doc("input file (fasta/q)") & clipp::opt_value("r",input_file),
@@ -201,7 +202,8 @@ int main(int argc, char** argv)
         // clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap2),
         // clipp::option("--minipolish").doc("path to minipolish [minipolish]") & clipp::opt_value("r", path_to_minipolish),
         
-
+        //Other options
+        clipp::option("--clean").set(clean).doc("remove the tmp folder at the end [off]"),
         clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
 
     );
@@ -364,6 +366,12 @@ int main(int argc, char** argv)
     
     cout << " - Converting the assembly to fasta\n";
     gfa_to_fasta(output_file, output_file.substr(0, output_file.find_last_of('.')) + ".fasta");
+
+    //clean the tmp folder if the user wants
+    if (clean){
+        command = "rm -r " + tmp_folder + " 2> trash.log";
+        system(command.c_str());
+    }
 
     cout << "\nDone, the final assembly is in " << output_file << "\n" << endl;
     cout << "Total time: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() << "s\n";
