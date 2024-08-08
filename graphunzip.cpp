@@ -246,8 +246,8 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
         if (line[0] == 'S'){
             long int pos_in_file = (long int) gfa.tellg() - line.size() - 1;
             stringstream ss(line);
-            string nothing, name;
-            ss >> nothing >> name;
+            string nothing, name, seq;
+            ss >> nothing >> name >> seq;
 
             double coverage = 0;
             //try to find a DP: tag
@@ -258,7 +258,7 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
                 }
             }
 
-            Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, coverage);
+            Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq.size(), coverage);
 
             segment_IDs[name] = s.ID;
             segments.push_back(s);
@@ -494,7 +494,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
 
             //first create the contig if needed
             if (old_ID_to_new_IDs.find(old_segment) == old_ID_to_new_IDs.end()){
-                new_segments.push_back(Segment(old_segments[old_segment].name + "_0" , new_ID, old_segments[old_segment].get_pos_in_file(), old_segments[old_segment].get_coverage()));
+                new_segments.push_back(Segment(old_segments[old_segment].name + "_0" , new_ID, old_segments[old_segment].get_pos_in_file(), old_segments[old_segment].get_length(), old_segments[old_segment].get_coverage()));
                 old_ID_to_new_IDs[old_segment] = {new_ID};
                 new_ID++;
             }
@@ -506,10 +506,13 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             vector<pair<int,bool>> cons_left = old_segments[old_segment].get_consensus_left();
             bool there_is_a_bridge = false;
             double coverage_bridge = old_segments[old_segment].get_coverage();
+            int length_bridge = old_segments[old_segment].get_length();
             for (auto contig_and_orientation : cons_left){
+                length_bridge += old_segments[contig_and_orientation.first].get_length();
                 if (old_segments[contig_and_orientation.first].is_haploid()){
                     there_is_a_bridge = true;
                     coverage_bridge = (old_segments[contig_and_orientation.first].get_coverage() + old_segments[old_segment].get_coverage())/2;
+                    break;
                 }
             }
             if (there_is_a_bridge){
@@ -527,7 +530,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
 
                     //create the contig if needed
                     if (old_ID_to_new_IDs.find(cons_left[contig_in_cons].first) == old_ID_to_new_IDs.end()){
-                        new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), coverage_bridge));
+                        new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
                         old_ID_to_new_IDs[cons_left[contig_in_cons].first] = {new_ID};
                         new_ID++;
                         old_segments[cons_left[contig_in_cons].first].decrease_coverage(coverage_bridge);
@@ -557,7 +560,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                             continue;
                         }
                         else if (!old_segments[cons_left[contig_in_cons].first].is_haploid()){
-                            new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_left[contig_in_cons].first].size()) , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), coverage_bridge));
+                            new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_left[contig_in_cons].first].size()) , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
                             old_ID_to_new_IDs[cons_left[contig_in_cons].first].push_back(new_ID);
                             new_ID++;
                         }
@@ -597,10 +600,13 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             vector<pair<int,bool>> cons_right = old_segments[old_segment].get_consensus_right();
             there_is_a_bridge = false;
             coverage_bridge = old_segments[old_segment].get_coverage();
+            length_bridge = old_segments[old_segment].get_length();
             for (auto contig_and_orientation : cons_right){
+                length_bridge += old_segments[contig_and_orientation.first].get_length();
                 if (old_segments[contig_and_orientation.first].is_haploid()){
                     there_is_a_bridge = true;
                     coverage_bridge = (old_segments[contig_and_orientation.first].get_coverage() + old_segments[old_segment].get_coverage())/2;
+                    break;
                 }
             }
             if(there_is_a_bridge){
@@ -618,7 +624,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
 
                     //create the contig if needed
                     if (old_ID_to_new_IDs.find(cons_right[contig_in_cons].first) == old_ID_to_new_IDs.end()){
-                        new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), coverage_bridge));
+                        new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
                         old_ID_to_new_IDs[cons_right[contig_in_cons].first] = {new_ID};
                         new_ID++;
                         old_segments[cons_right[contig_in_cons].first].decrease_coverage(coverage_bridge);
@@ -648,7 +654,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                             continue;
                         }
                         else if (!old_segments[cons_right[contig_in_cons].first].is_haploid()){
-                            new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_right[contig_in_cons].first].size()) , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), coverage_bridge));
+                            new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_right[contig_in_cons].first].size()) , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
                             old_ID_to_new_IDs[cons_right[contig_in_cons].first].push_back(new_ID);
                             new_ID++;
                         }
@@ -992,7 +998,7 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
 
             //create the contigs if not already done
             if (old_IDs_to_new_non_haploid_IDs.find(old_ID1) == old_IDs_to_new_non_haploid_IDs.end()){
-                new_segments.push_back(Segment(old_segments[old_ID1].name + "_" + std::to_string(old_ID_to_new_IDs[old_ID1].size()) , new_segments.size(), old_segments[old_ID1].get_pos_in_file(), old_segments[old_ID1].get_coverage()));
+                new_segments.push_back(Segment(old_segments[old_ID1].name + "_" + std::to_string(old_ID_to_new_IDs[old_ID1].size()) , new_segments.size(), old_segments[old_ID1].get_pos_in_file(), old_segments[old_ID1].get_length(), old_segments[old_ID1].get_coverage()));
                 old_IDs_to_new_non_haploid_IDs[old_ID1] = new_segments.size() - 1;
                 if (old_ID_to_new_IDs.find(old_ID1) == old_ID_to_new_IDs.end()){
                     old_ID_to_new_IDs[old_ID1] = {(int) new_segments.size() - 1};
@@ -1003,7 +1009,7 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
             }
 
             if (old_IDs_to_new_non_haploid_IDs.find(old_ID2) == old_IDs_to_new_non_haploid_IDs.end()){
-                new_segments.push_back(Segment(old_segments[old_ID2].name + "_" + std::to_string(old_ID_to_new_IDs[old_ID2].size()) , new_segments.size(), old_segments[old_ID2].get_pos_in_file(), old_segments[old_ID2].get_coverage()));
+                new_segments.push_back(Segment(old_segments[old_ID2].name + "_" + std::to_string(old_ID_to_new_IDs[old_ID2].size()) , new_segments.size(), old_segments[old_ID2].get_pos_in_file(), old_segments[old_ID2].get_length(), old_segments[old_ID2].get_coverage()));
                 old_IDs_to_new_non_haploid_IDs[old_ID2] = new_segments.size() - 1;
                 if (old_ID_to_new_IDs.find(old_ID2) == old_ID_to_new_IDs.end()){
                     old_ID_to_new_IDs[old_ID2] = {(int) new_segments.size() - 1};
@@ -1043,7 +1049,16 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
         new_segments[link.first.second.first].links[link.first.second.second].second.push_back(link.second);
     }
 }
-    
+
+/**
+ * @brief Merge all old_segments into new_segments
+ * 
+ * @param old_segments 
+ * @param new_segments 
+ * @param original_gfa_file original gfa file to retrieve the sequences
+ * @param rename rename the contigs in short names or keep the old names with underscores in between
+ * @return * void 
+ */
 void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file, bool rename){
 
     set<int> already_looked_at_segments; //old IDs of segments that have already been looked at and merged (don't want to merge them twice)
@@ -1088,7 +1103,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 name = std::to_string(number_of_merged_contigs);
                 number_of_merged_contigs++;
             }
-            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_coverage()));
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_length(), old_seg.get_coverage()));
             old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
             old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
             //add the links
@@ -1110,6 +1125,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             vector<string> all_names = {old_seg.name};
             vector<string> all_seqs = {old_seg.get_seq(original_gfa_file)};
             vector<double> all_coverages = {old_seg.get_coverage()};
+            vector<int> all_lengths = {old_seg.get_length()};
             int current_ID = old_seg.ID;
             int current_end = 1;
 
@@ -1129,6 +1145,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
                 all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
+                all_lengths.push_back(old_segments[current_ID].get_length());
             }
             already_looked_at_segments.insert(current_ID);
 
@@ -1143,16 +1160,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_seq += seq;
             }
             double new_coverage = 0;
+            int new_length = 0;
+            int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage;
+                new_coverage += coverage*all_lengths[idx];
+                new_length += all_lengths[idx];
+                idx++;
             }
-            new_coverage = new_coverage/all_coverages.size();
+            new_coverage = new_coverage/new_length;
             string name = new_name;
             if (rename){
                 name = std::to_string(number_of_merged_contigs);
                 number_of_merged_contigs++;
             }
-            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1179,6 +1200,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             string seq = old_seg.get_seq(original_gfa_file);
             vector<string> all_seqs = {reverse_complement(seq)};
             vector<double> all_coverages = {old_seg.get_coverage()};
+            vector<int> all_lengths = {old_seg.get_length()};
             int current_ID = old_seg.ID;
             int current_end = 0;
 
@@ -1201,7 +1223,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
                 all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
-
+                all_lengths.push_back(old_segments[current_ID].get_length());
                 // cout << "exploring the link between " << old_segments[current_ID].name << " and " << old_segments[old_segments[current_ID].links[current_end].first[0].first].name  << " " << old_segments[current_ID].links[current_end].first.size() << endl;
                 // cout << "here are all the links : ";
                 // for (pair<int,int> link : old_segments[current_ID].links[current_end].first){
@@ -1222,16 +1244,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_seq += seq;
             }
             double new_coverage = 0;
+            int new_length = 0;
+            int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage;
+                new_coverage += coverage*all_lengths[idx];
+                new_length += all_lengths[idx];
+                idx++;
             }
-            new_coverage = new_coverage/all_coverages.size();
+            new_coverage = new_coverage/new_length;
             string name = new_name;
             if (rename){
                 name = std::to_string(number_of_merged_contigs);
                 number_of_merged_contigs++;
             }
-            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1263,6 +1289,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             vector<string> all_names = {old_seg.name};
             vector<string> all_seqs = {old_seg.get_seq(original_gfa_file)};
             vector<double> all_coverages = {old_seg.get_coverage()};
+            vector<int> all_lengths = {old_seg.get_length()};
             bool circular_as_expected = true;
             while (old_segments[current_ID].links[current_end].first.size() == 1 && old_segments[old_segments[current_ID].links[current_end].first[0].first].links[old_segments[current_ID].links[current_end].first[0].second].first.size() == 1){
                 if (old_segments[current_ID].links[current_end].first[0].first == old_seg.ID){
@@ -1283,6 +1310,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
                 all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
+                all_lengths.push_back(old_segments[current_ID].get_length());
             }
             if (old_segments[current_ID].links[current_end].first[0].first != old_seg.ID){
                 circular_as_expected = false;
@@ -1299,16 +1327,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     new_seq += seq;
                 }
                 double new_coverage = 0;
+                int new_length = 0;
+                int idx = 0;
                 for (double coverage : all_coverages){
-                    new_coverage += coverage;
+                    new_coverage += coverage*all_lengths[idx];
+                    new_length += all_lengths[idx];
+                    idx++;
                 }
-                new_coverage = new_coverage/all_coverages.size();
+                new_coverage = new_coverage/new_length;
                 string name = new_name;
                 if (rename){
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }
-                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
                 new_segments[new_segments.size()-1].seq = new_seq;
 
                 //add the links

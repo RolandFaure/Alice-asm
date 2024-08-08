@@ -604,7 +604,10 @@ int explore_neighborhood(string contig, int endOfContig, unordered_map<string, p
  * @brief Function that takes as input a graph, trim the tips less frequent than abundance_min, remove the branch of bubbles less abundant than abundance_min
  * 
  * @param gfa_in 
- * @param abundance_min
+ * @param abundance_min //contigs above this coverage are solid
+ * @param min_length  //contigs above this length are solid
+ * @param contiguity //to collapse more bubbles
+ * @param k
  * @param gfa_out 
  */
 void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out){
@@ -615,6 +618,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
     unordered_map<string, float> coverage;
     unordered_map<string, int> length_of_contigs;
 
+    //parse the gfa file
     string line;
     long int pos = 0;
     while (std::getline(input, line))
@@ -751,6 +755,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
      
             }
 
+            //check if this is a tip
             if (linked[contig].first.size() == 0 && linked[contig].second.size() == 1){
                 //this is a tip
                 if ( (coverage[contig] >= abundance_min || length_of_contigs[contig] >= min_length) && coverage[contig] >= 0.1*coverage[linked[contig].second[0].first]){
@@ -837,6 +842,16 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
         // cout << "Finished one iteration of pop and shave, added " << number_of_edits << " contigs to keep\n";
 
     }
+
+    //delete from to_keep isolated short and badly covered contigs
+    for (auto c: linked){
+        if (to_keep.find(c.first) == to_keep.end()){
+            continue;
+        }
+        if (linked[c.first].first.size() == 0 && linked[c.first].second.size() == 0 && (coverage[c.first] < abundance_min && length_of_contigs[c.first] < min_length)){
+            to_keep.erase(c.first);
+        }
+    } 
 
     //now wirte the gfa file without the contigs to remove
     input.close();
@@ -1194,19 +1209,19 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
         if (line[0] == 'S'){
             long int pos_in_file = (long int) gfa.tellg() - line.size() - 1;
             stringstream ss(line);
-            string nothing, name;
-            ss >> nothing >> name;
+            string nothing, name, seq;
+            ss >> nothing >> name >> seq;
 
             double coverage = 0;
             //try to find a DP: tag
             string tag;
             while (ss >> tag){
-                if (tag.substr(0, 3) == "DP:" || tag.substr(0, 3) == "km:"){
+                if (tag.substr(0, 3) == "DP:"){
                     coverage = std::stof(tag.substr(5, tag.size() - 5));
                 }
             }
 
-            Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, coverage);
+            Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq.size(), coverage);
 
             segment_IDs[name] = s.ID;
             segments.push_back(s);
@@ -1258,6 +1273,15 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
     gfa.close();
 }
 
+/**
+ * @brief Merge all old_segments into new_segments
+ * 
+ * @param old_segments 
+ * @param new_segments 
+ * @param original_gfa_file original gfa file to retrieve the sequences
+ * @param rename rename the contigs in short names or keep the old names with underscores in between
+ * @return * void 
+ */
 void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file, bool rename){
 
     set<int> already_looked_at_segments; //old IDs of segments that have already been looked at and merged (don't want to merge them twice)
@@ -1302,7 +1326,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 name = std::to_string(number_of_merged_contigs);
                 number_of_merged_contigs++;
             }
-            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_coverage()));
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_length(), old_seg.get_coverage()));
             old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
             old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
             //add the links
@@ -1324,6 +1348,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             vector<string> all_names = {old_seg.name};
             vector<string> all_seqs = {old_seg.get_seq(original_gfa_file)};
             vector<double> all_coverages = {old_seg.get_coverage()};
+            vector<int> all_lengths = {old_seg.get_length()};
             int current_ID = old_seg.ID;
             int current_end = 1;
 
@@ -1343,6 +1368,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
                 all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
+                all_lengths.push_back(old_segments[current_ID].get_length());
             }
             already_looked_at_segments.insert(current_ID);
 
@@ -1357,16 +1383,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_seq += seq;
             }
             double new_coverage = 0;
+            int new_length = 0;
+            int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage;
+                new_coverage += coverage*all_lengths[idx];
+                new_length += all_lengths[idx];
+                idx++;
             }
-            new_coverage = new_coverage/all_coverages.size();
+            new_coverage = new_coverage/new_length;
             string name = new_name;
             if (rename){
                 name = std::to_string(number_of_merged_contigs);
                 number_of_merged_contigs++;
             }
-            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1393,6 +1423,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             string seq = old_seg.get_seq(original_gfa_file);
             vector<string> all_seqs = {reverse_complement(seq)};
             vector<double> all_coverages = {old_seg.get_coverage()};
+            vector<int> all_lengths = {old_seg.get_length()};
             int current_ID = old_seg.ID;
             int current_end = 0;
 
@@ -1415,7 +1446,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
                 all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
-
+                all_lengths.push_back(old_segments[current_ID].get_length());
                 // cout << "exploring the link between " << old_segments[current_ID].name << " and " << old_segments[old_segments[current_ID].links[current_end].first[0].first].name  << " " << old_segments[current_ID].links[current_end].first.size() << endl;
                 // cout << "here are all the links : ";
                 // for (pair<int,int> link : old_segments[current_ID].links[current_end].first){
@@ -1436,16 +1467,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_seq += seq;
             }
             double new_coverage = 0;
+            int new_length = 0;
+            int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage;
+                new_coverage += coverage*all_lengths[idx];
+                new_length += all_lengths[idx];
+                idx++;
             }
-            new_coverage = new_coverage/all_coverages.size();
+            new_coverage = new_coverage/new_length;
             string name = new_name;
             if (rename){
                 name = std::to_string(number_of_merged_contigs);
                 number_of_merged_contigs++;
             }
-            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+            new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
             new_segments[new_segments.size()-1].seq = new_seq;
 
             //add the links
@@ -1477,6 +1512,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             vector<string> all_names = {old_seg.name};
             vector<string> all_seqs = {old_seg.get_seq(original_gfa_file)};
             vector<double> all_coverages = {old_seg.get_coverage()};
+            vector<int> all_lengths = {old_seg.get_length()};
             bool circular_as_expected = true;
             while (old_segments[current_ID].links[current_end].first.size() == 1 && old_segments[old_segments[current_ID].links[current_end].first[0].first].links[old_segments[current_ID].links[current_end].first[0].second].first.size() == 1){
                 if (old_segments[current_ID].links[current_end].first[0].first == old_seg.ID){
@@ -1497,6 +1533,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
                 all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
+                all_lengths.push_back(old_segments[current_ID].get_length());
             }
             if (old_segments[current_ID].links[current_end].first[0].first != old_seg.ID){
                 circular_as_expected = false;
@@ -1513,16 +1550,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     new_seq += seq;
                 }
                 double new_coverage = 0;
+                int new_length = 0;
+                int idx = 0;
                 for (double coverage : all_coverages){
-                    new_coverage += coverage;
+                    new_coverage += coverage*all_lengths[idx];
+                    new_length += all_lengths[idx];
+                    idx++;
                 }
-                new_coverage = new_coverage/all_coverages.size();
+                new_coverage = new_coverage/new_length;
                 string name = new_name;
                 if (rename){
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }
-                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_coverage));
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
                 new_segments[new_segments.size()-1].seq = new_seq;
 
                 //add the links

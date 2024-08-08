@@ -43,20 +43,22 @@ class Segment{
 
         Segment(){};
 
-        Segment(std::string name, int ID, long int pos_in_file, double coverage){
+        Segment(std::string name, int ID, long int pos_in_file, int length, double coverage){
             this->name = name;
             this->ID = ID;
             this->pos_in_file = pos_in_file;
+            this->length = length;
             this->coverage = coverage;
             this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
 
-        Segment(std::string name, int ID, std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>> links, long int pos_in_file, double coverage){
+        Segment(std::string name, int ID, std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>> links, long int pos_in_file, int length, double coverage){
             this->name = name;
             this->ID = ID;
             this->links = links;
             this->pos_in_file = pos_in_file;
+            this->length = length;
             this->coverage = coverage;
             this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
@@ -67,6 +69,7 @@ class Segment{
         std::vector<std::pair<int,bool>> get_consensus_right(){return this->consensus_right;}
         long int get_pos_in_file(){return this->pos_in_file;}
         double get_coverage(){return this->coverage;}
+        int get_length(){return this->length;}
 
         std::string get_seq(std::string& gfa_file){
             
@@ -123,6 +126,7 @@ class Segment{
 
         long int pos_in_file;
         double coverage;
+        int length;
 
         bool haploid;
 

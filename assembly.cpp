@@ -149,8 +149,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
     unordered_map<string,float> coverages;
     create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages);
-    add_coverages_to_graph(merged_gfa, coverages);
-    
+        
     cout << "    - Untangling the graph with GraphUnzip" << endl;
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
