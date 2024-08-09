@@ -208,15 +208,20 @@ void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overl
             }
 
             int overlap = 30;
-            string end1 = seq1.substr(seq1.size()-30, 30); 
-            while (overlap < seq1.size() && overlap < seq2.size() && overlap < max_overlap && end1 != seq2.substr(overlap-30, 30) ){
-                overlap++;
-                // cout << "overlapping " << end1 << " and " << seq2.substr(overlap-30, 30) << "\n";
+            if (seq1.size() < 30 || seq2.size() < 30){ //can happen if they could not be reconstructed
+                overlap = 0;
             }
-            if (overlap == seq1.size() || overlap == seq2.size() || overlap == max_overlap){
-                // cerr << "ERROR: no overlap found between " << name1 << " and " << name2 << "\n";
-                // exit(1);
-                overlap = default_overlap;
+            else{
+                string end1 = seq1.substr(seq1.size()-30, 30); 
+                while (overlap < seq1.size() && overlap < seq2.size() && overlap < max_overlap && end1 != seq2.substr(overlap-30, 30) ){
+                    overlap++;
+                    // cout << "overlapping " << end1 << " and " << seq2.substr(overlap-30, 30) << "\n";
+                }
+                if (overlap == seq1.size() || overlap == seq2.size() || overlap == max_overlap){
+                    // cerr << "ERROR: no overlap found between " << name1 << " and " << name2 << "\n";
+                    // exit(1);
+                    overlap = default_overlap;
+                }
             }
             // cout << "overlap between " << name1 << " and " << name2 << " is " << overlap << "\n";
             out << "L\t" << name1 << "\t" << orientation1 << "\t" << name2 << "\t" << orientation2 << "\t" << overlap << "M\n";
