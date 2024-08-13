@@ -1163,7 +1163,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             int new_length = 0;
             int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage*all_lengths[idx];
+                new_coverage += all_coverages[idx]*all_lengths[idx];
                 new_length += all_lengths[idx];
                 idx++;
             }
@@ -1247,7 +1247,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             int new_length = 0;
             int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage*all_lengths[idx];
+                new_coverage += all_coverages[idx]*all_lengths[idx];
                 new_length += all_lengths[idx];
                 idx++;
             }
@@ -1330,7 +1330,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int new_length = 0;
                 int idx = 0;
                 for (double coverage : all_coverages){
-                    new_coverage += coverage*all_lengths[idx];
+                    new_coverage += all_coverages[idx]*all_lengths[idx];
                     new_length += all_lengths[idx];
                     idx++;
                 }

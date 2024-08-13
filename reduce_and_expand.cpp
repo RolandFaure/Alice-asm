@@ -100,7 +100,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
     }
 
     std::streamoff file_size = input.tellg();
-    unsigned long long size_of_chunk = 100000000;
+    unsigned long long size_of_chunk = 100000;
     input.close();
 
     //clear the output file

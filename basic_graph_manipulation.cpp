@@ -1221,7 +1221,7 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
             //try to find a DP: tag
             string tag;
             while (ss >> tag){
-                if (tag.substr(0, 3) == "DP:"){
+                if (tag.substr(0, 3) == "DP:" || tag.substr(0, 3) == "dp:" || tag.substr(0, 3) == "km:"){
                     coverage = std::stof(tag.substr(5, tag.size() - 5));
                 }
             }
@@ -1391,7 +1391,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             int new_length = 0;
             int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage*all_lengths[idx];
+                new_coverage += all_coverages[idx]*all_lengths[idx];
                 new_length += all_lengths[idx];
                 idx++;
             }
@@ -1475,7 +1475,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             int new_length = 0;
             int idx = 0;
             for (double coverage : all_coverages){
-                new_coverage += coverage*all_lengths[idx];
+                new_coverage += all_coverages[idx]*all_lengths[idx];
                 new_length += all_lengths[idx];
                 idx++;
             }
@@ -1558,7 +1558,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int new_length = 0;
                 int idx = 0;
                 for (double coverage : all_coverages){
-                    new_coverage += coverage*all_lengths[idx];
+                    new_coverage += all_coverages[idx]*all_lengths[idx];
                     new_length += all_lengths[idx];
                     idx++;
                 }
