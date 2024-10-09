@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.8";
-string date = "2024-08-13";
+string version = "0.6.9";
+string date = "2024-10-09";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -151,7 +151,7 @@ int main(int argc, char** argv)
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;
-    string assembler = "bcalm";
+    string assembler = "custom";
     string path_to_bcalm = "bcalm";
     string path_to_hifiasm = "hifiasm_meta";
     string path_to_spades = "spades.py";
@@ -164,7 +164,7 @@ int main(int argc, char** argv)
     string path_to_megahit = "megahit";
     string assembler_parameters = "";
     bool rescue = false;
-    bool contiguity = true;
+    bool contiguity = false;
     int min_abundance = 5;
     int order = 101;
     int compression = 20;
@@ -180,7 +180,7 @@ int main(int argc, char** argv)
         clipp::option("-t", "--threads").doc("number of threads [1]") & clipp::opt_value("t", num_threads),
 
         //Compression options
-        clipp::option("-l", "--order").doc("order of MSR compression (odd) [201]") & clipp::opt_value("o", order),
+        clipp::option("-l", "--order").doc("order of MSR compression (odd) [101]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
 
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
         clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
 
         //Other assemblers options
-        clipp::option("-a", "--assembler").doc("assembler to use {bcalm, hifiasm, spades, raven, gatb-minia, megahit} [bcalm]") & clipp::opt_value("a", assembler),
+        clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
         clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
         clipp::option("--hifiasm_meta").doc("path to hifiasm_meta [hifiasm_meta]") & clipp::opt_value("h", path_to_hifiasm),
@@ -232,7 +232,6 @@ int main(int argc, char** argv)
 //    :__:  
 
 
-    //Show the bottle left, then the cake right
     cout << "   _______ _                     _ _                                            _     _              "           << "      " << "           " << endl;
     cout << "  |__   __| |              /\\   | (_)              /\\                          | |   | |             "         << "      " << "           " << endl;
     cout << "     | |  | |__   ___     /  \\  | |_  ___ ___     /  \\   ___ ___  ___ _ __ ___ | |__ | | ___ _ __    "         << "  ::  " << "   _.mnm._ " << endl;
@@ -255,12 +254,12 @@ int main(int argc, char** argv)
     }
 
     if (order % 2 == 0){
-        cerr << "WARNING: order (-l) must be odd, changing l to " << order-1 << "\n";
+        cerr << "WARNING: order (-l) must be odd because of lousy software engineering, changing l to " << order-1 << "\n";
         order = order-1;
     }
     int context_length = (order-1)/2;
 
-    if (assembler != "bcalm" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven" && assembler != "megahit"){
+    if (assembler != "custom" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven" && assembler != "megahit"){
         cerr << "ERROR: assembler must be bcalm or hifiasm or spades or gatb-mina or raven or flye \n";
         exit(1);
     }
@@ -313,13 +312,13 @@ int main(int argc, char** argv)
 
     cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
-    reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
+    //reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
 
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
-    if (assembler == "bcalm"){
+    if (assembler == "custom"){
         assembly_bcalm(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
     }
     else if (assembler == "hifiasm"){
@@ -345,6 +344,9 @@ int main(int argc, char** argv)
     }
 
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";
+
+    cout << "EXITING HERE\n";
+    exit(0);
 
     //now let's parse the gfa file and decompress it
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";

@@ -118,9 +118,9 @@
 
 // };
 
-void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::unordered_map<std::string, int> &segment_IDs);
-void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename);
-void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
+// void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::unordered_map<std::string, int> &segment_IDs);
+// void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename);
+// void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 
 
 #endif

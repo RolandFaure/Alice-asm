@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <chrono>
 
 using std::string;
 using std::cerr;
@@ -56,7 +57,7 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
 void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
-
+    
     cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
 
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
@@ -67,12 +68,14 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         cout << "       - Unitig generation with bcalm" << endl;
         string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm > "+tmp_folder+"bcalm.log 2>&1";
+        auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());
         if (bcalm_ok != 0){
             cerr << "ERROR: bcalm failed\n";
             cout << bcalm_command << endl;
             exit(1);
         }
+        auto time_bcalm = std::chrono::high_resolution_clock::now();
 
         // convert to gfa
         cout << "       - Converting result to GFA" << endl;
@@ -80,11 +83,13 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         string unitig_file_gfa = tmp_folder+"bcalm.unitigs.gfa";
         string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
         system(convert_command.c_str());
+        auto time_convert = std::chrono::high_resolution_clock::now();
 
         // shave the resulting graph
         cout << "       - Shaving the graph of small dead ends" << endl;
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa);
+        pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa);
+        auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
         cout << "       - Merging resulting contigs" << endl;
@@ -94,11 +99,13 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         load_GFA(shaved_gfa, segments, segments_IDs);
         merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true); //the last bool is to rename the contigs
         output_graph(merged_gfa, shaved_gfa, merged_segments);
+        auto time_merge = std::chrono::high_resolution_clock::now();
 
         // merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
         cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
+        cout << "       - Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_bcalm - time_start).count() << "s, convert " << std::chrono::duration_cast<std::chrono::seconds>(time_convert - time_bcalm).count() << "s, shave " << std::chrono::duration_cast<std::chrono::seconds>(time_shave - time_convert).count() << "s, merge " << std::chrono::duration_cast<std::chrono::seconds>(time_merge - time_shave).count() << "s" << endl;
         
         //open both compressed_file and bcalm.unitigs.shaved.merged.unzipped.gfa
         ofstream input_compressed(read_file, std::ios_base::app);
@@ -127,6 +134,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
 
     cout << " - Untangling the final compressed assembly\n";
 
+    auto time_start = std::chrono::high_resolution_clock::now();
     if (contiguity){
         string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
         pop_bubbles(merged_gfa, size_longest_read, shaved_and_popped_gfa);
@@ -139,26 +147,34 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
         merged_gfa = shaved_and_popped_merged;
     }
+    auto time_pop = std::chrono::high_resolution_clock::now();
 
     //sort the gfa to have S lines before L lines
     cout << "    - Sorting the GFA" << endl;
     sort_GFA(merged_gfa);
 
+    auto time_sort = std::chrono::high_resolution_clock::now();
+
     //untangle the graph to improve contiguity
     cout << "    - Aligning the reads to the graph" << endl;
     string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
     unordered_map<string,float> coverages;
-    create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages);    
+    create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages);   
+    auto time_gaf = std::chrono::high_resolution_clock::now(); 
     cout << "    - Untangling the graph with GraphUnzip" << endl;
+    
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
+    cout << "command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
         exit(1);
     }
+    auto time_unzip = std::chrono::high_resolution_clock::now();
 
     cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << "\n" << endl;
+    cout << " Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_pop - time_start).count() << "s, pop " << std::chrono::duration_cast<std::chrono::seconds>(time_sort - time_pop).count() << "s, sort " << std::chrono::duration_cast<std::chrono::seconds>(time_gaf - time_sort).count() << "s, gaf " << std::chrono::duration_cast<std::chrono::seconds>(time_unzip - time_gaf).count() << "s, unzip " << std::chrono::duration_cast<std::chrono::seconds>(time_unzip - time_start).count() << "s" << endl;
 }
 
 /**

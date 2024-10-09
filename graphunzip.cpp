@@ -14,29 +14,29 @@ using std::stringstream;
 using robin_hood::unordered_map;
 using std::set;
 
-string reverse_complement(string& seq){
-    string rc (seq.size(), 'N');
-    for (int i = seq.size() - 1 ; i >= 0; i--){
-        switch (seq[i]){
-            case 'A':
-                rc[seq.size() - 1 - i] = 'T';
-                break;
-            case 'T':
-                rc[seq.size() - 1 - i] = 'A';
-                break;
-            case 'C':
-                rc[seq.size() - 1 - i] = 'G';
-                break;
-            case 'G':
-                rc[seq.size() - 1 - i] = 'C';
-                break;
-            default:
-                rc[seq.size() - 1 - i] = 'N';
-                break;
-        }
-    }
-    return rc;
-}
+// string reverse_complement(string& seq){
+//     string rc (seq.size(), 'N');
+//     for (int i = seq.size() - 1 ; i >= 0; i--){
+//         switch (seq[i]){
+//             case 'A':
+//                 rc[seq.size() - 1 - i] = 'T';
+//                 break;
+//             case 'T':
+//                 rc[seq.size() - 1 - i] = 'A';
+//                 break;
+//             case 'C':
+//                 rc[seq.size() - 1 - i] = 'G';
+//                 break;
+//             case 'G':
+//                 rc[seq.size() - 1 - i] = 'C';
+//                 break;
+//             default:
+//                 rc[seq.size() - 1 - i] = 'N';
+//                 break;
+//         }
+//     }
+//     return rc;
+// }
 
 void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
 
@@ -44,10 +44,10 @@ void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
         return;
     }
     if (left){
-        neighbors_left.push_back({new_neighbor, 1});
+        neighbors_left.push_back(new_neighbor);
     }
     else{
-        neighbors_right.push_back({new_neighbor, 1});
+        neighbors_right.push_back(new_neighbor);
     }
 }
 
@@ -57,57 +57,20 @@ void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
  */
 void Segment::compute_consensuses(){
 
-    //go through the nighbors left and discard all reads that are subreads of another read
+    //right of the contig
 
-    //first sort the neighbors by decreasing length
-    std::sort(neighbors_left.begin(), neighbors_left.end(), [](pair<vector<pair<int,bool>>,int> a, pair<vector<pair<int,bool>>,int> b){return a.first.size() > b.first.size();});
+    //first sort the neighbors by decreasing length. This way, a path seen after can never include a path seen before
+    std::sort(neighbors_right.begin(), neighbors_right.end(), [](vector<pair<int,bool>> a, vector<pair<int,bool>> b){return a.size() > b.size();});
 
-    vector<pair<vector<pair<int,bool>>, int>> new_neighbors_left;
-    //iteratively go through the neighbors and check if they are subreads of existing neighbors
-    for (int n1 = 0 ; n1 < neighbors_left.size() ; n1++){
-        int nb_of_supra_reads = 0;
-        int idx_of_supra_read = -1;
-        for (int n2 = 0 ; n2<new_neighbors_left.size() ; n2++){
-            bool is_subread = true;
-            for (int c = 0 ; c < neighbors_left[n1].first.size() ; c++){
-
-                if (new_neighbors_left[n2].first[c] != neighbors_left[n1].first[c]){
-                    is_subread = false;
-                    break;
-                }
-            }
-            if (is_subread){
-                nb_of_supra_reads++;
-                idx_of_supra_read = n2;
-            }
-        }
-        if (nb_of_supra_reads == 0){
-            new_neighbors_left.push_back(neighbors_left[n1]);
-        }
-        else if (nb_of_supra_reads == 1){ //add 1 to the strength of the supraread
-            if (new_neighbors_left[idx_of_supra_read].second == 1){ //i.e. this is the second read confirming this only -> don't put too much confidence in the last contigs of the path
-                new_neighbors_left[idx_of_supra_read].first = neighbors_left[n1].first;
-            }
-            new_neighbors_left[idx_of_supra_read].second++;
-        }
-        //else it is a subread of several possibility, don't increment the strengths
-    }
-    neighbors_left = new_neighbors_left;
-
-    //go through the nighbors right and discard all reads that are subreads of another read
-
-    //first sort the neighbors by decreasing length
-    std::sort(neighbors_right.begin(), neighbors_right.end(), [](pair<vector<pair<int,bool>>,int> a, pair<vector<pair<int,bool>>,int> b){return a.first.size() > b.first.size();});
-
-    vector<pair<vector<pair<int,bool>>, int>> new_neighbors_right;
-    //iteratively go through the neighbors and check if they are subreads of existing neighbors
+    vector<vector<pair<int,bool>>> all_paths_right; //inventoriate a subset of paths which contains all the other paths
+    //iteratively go through the neighbors and check if they are subreads of inventoried paths. If not, add them to the list of all paths
     for (int n1 = 0 ; n1 < neighbors_right.size() ; n1++){
         int nb_of_supra_reads = 0;
         int idx_of_supra_read = -1;
-        for (int n2 = 0 ; n2<new_neighbors_right.size() ; n2++){
+        for (int n2 = 0 ; n2<all_paths_right.size() ; n2++){
             bool is_subread = true;
-            for (int c = 0 ; c < neighbors_right[n1].first.size() ; c++){
-                if (new_neighbors_right[n2].first[c] != neighbors_right[n1].first[c]){
+            for (int c = 0 ; c < neighbors_right[n1].size() ; c++){
+                if (all_paths_right[n2][c] != neighbors_right[n1][c]){
                     is_subread = false;
                     break;
                 }
@@ -118,124 +81,194 @@ void Segment::compute_consensuses(){
             }
         }
         if (nb_of_supra_reads == 0){
-            new_neighbors_right.push_back(neighbors_right[n1]);
+            all_paths_right.push_back(neighbors_right[n1]);
         }
-        else if (nb_of_supra_reads == 1){ //add 1 to the strength of the supraread
-            if (new_neighbors_right[idx_of_supra_read].second == 1){ //i.e. this is the second read confirming this only -> don't put too much confidence in the last contigs of the path
-                new_neighbors_right[idx_of_supra_read].first = neighbors_right[n1].first;
+    }
+
+    //now inventoriate how many reads support each path
+    for (auto new_path : all_paths_right){
+        neighbors_right_with_strengths.push_back({});
+        for (auto contig : new_path){
+            neighbors_right_with_strengths[neighbors_right_with_strengths.size() - 1].push_back({contig, {0,0}});
+        }
+    }
+    for (int n1 = 0 ; n1 < neighbors_right.size() ; n1++){
+        for (int n2 = 0 ; n2<all_paths_right.size() ; n2++){
+            for (int c = 0 ; c < neighbors_right[n1].size() ; c++){
+                if (all_paths_right[n2][c] != neighbors_right[n1][c]){
+                    neighbors_right_with_strengths[n2][c].second.second++;
+                    break;
+                }
+                else{
+                    neighbors_right_with_strengths[n2][c].second.first++;
+                }
             }
-            new_neighbors_right[idx_of_supra_read].second++;
-        }
-        //else it is a subread of several possibility, don't increment the strengths
-    }
-    neighbors_right = new_neighbors_right;
-
-    this->haploid = true;
-
-    //go through the remaining reads: if there are more than one strong then not haploid, else set the only strong read as the consensus
-    vector<int> strengths_left;
-    for (auto neighbor : neighbors_left){
-        strengths_left.push_back(neighbor.second);
-    }
-    //find the two strongest neighbors
-    int max_strength = 0;
-    int idx_max = -1;
-    int second_max_strength = 0;
-    int idx_second_max = -1;
-    for (int s = 0 ; s < strengths_left.size() ; s++){
-        if (strengths_left[s] > max_strength){
-            second_max_strength = max_strength;
-            idx_second_max = idx_max;
-            max_strength = strengths_left[s];
-            idx_max = s;
-        }
-        else if (strengths_left[s] > second_max_strength){
-            second_max_strength = strengths_left[s];
-            idx_second_max = s;
         }
     }
 
-    if (second_max_strength-1 > 0.2*(max_strength-1) || second_max_strength > 4){
-        this->haploid = false;
-    }
-    else{
-        if (idx_max != -1){
-            this->consensus_left = neighbors_left[idx_max].first;
+    // if (this->name == "8997"){
+    //     cout << "****here are the neighbors right with their strengths: " << endl;
+    //     for (auto neighbor : neighbors_right_with_strengths){
+    //         for (auto contig : neighbor){
+    //             cout << contig.first.first << " ";
+    //         }
+    //         cout << endl;
+    //         for (auto contig : neighbor){
+    //             cout << contig.second.first << "/" << contig.second.second << " ";
+    //         }
+    //         cout << endl;
+    //     }
+    // }
+
+    //go through the neighbors with strengths and see if there is a consensus
+    bool haploid_right = false;
+    for (auto neighbor : neighbors_right_with_strengths){
+        bool consensus_here = true;
+        for (pair<pair<int,bool>,pair<int,int>> contig : neighbor){
+            if (0.2*(contig.second.first-1) > contig.second.second-1 && contig.second.second < 5){ //then it is relatively consensual
+                if (contig.second.first > 1){
+                    consensus_right.push_back(contig.first);
+                }
+            }
+            else{
+                consensus_right = {};
+                consensus_here = false;
+                break;
+            }
         }
-        else{
-            this->consensus_left = {};
+        if (consensus_here){
+            haploid_right = true;
+            break;
         }
     }
 
+    //left of the contig
 
-    //go through the remaining reads: if there are more than one strong then not haploid, else set the only strong read as the consensus
-    vector<int> strengths_right;
-    for (auto neighbor : neighbors_right){
-        strengths_right.push_back(neighbor.second);
-    }
-    //find the two strongest neighbors
-    max_strength = 0;
-    idx_max = -1;
-    second_max_strength = 0;
-    idx_second_max = -1;
-    for (int s = 0 ; s < strengths_right.size() ; s++){
-        if (strengths_right[s] > max_strength){
-            second_max_strength = max_strength;
-            idx_second_max = idx_max;
-            max_strength = strengths_right[s];
-            idx_max = s;
+    //first sort the neighbors by decreasing length. This way, a path seen after can never include a path seen before
+    std::sort(neighbors_left.begin(), neighbors_left.end(), [](vector<pair<int,bool>> a, vector<pair<int,bool>> b){return a.size() > b.size();});
+
+    vector<vector<pair<int,bool>>> all_paths_left; //inventoriate a subset of paths which contains all the other paths
+    //iteratively go through the neighbors and check if they are subreads of inventoried paths. If not, add them to the list of all paths
+    for (int n1 = 0 ; n1 < neighbors_left.size() ; n1++){
+        int nb_of_supra_reads = 0;
+        int idx_of_supra_read = -1;
+        for (int n2 = 0 ; n2<all_paths_left.size() ; n2++){
+            bool is_subread = true;
+            for (int c = 0 ; c < neighbors_left[n1].size() ; c++){
+                if (all_paths_left[n2][c] != neighbors_left[n1][c]){
+                    is_subread = false;
+                    break;
+                }
+            }
+            if (is_subread){
+                nb_of_supra_reads++;
+                idx_of_supra_read = n2;
+            }
         }
-        else if (strengths_right[s] > second_max_strength){
-            second_max_strength = strengths_right[s];
-            idx_second_max = s;
+        if (nb_of_supra_reads == 0){
+            all_paths_left.push_back(neighbors_left[n1]);
         }
     }
 
-    if ((second_max_strength-1) > 0.2*(max_strength-1) || second_max_strength > 4){
-        this->haploid = false;
-    }
-    else{
-        if (idx_max != -1){
-            this->consensus_right = neighbors_right[idx_max].first;
-        }
-        else{
-            this->consensus_right = {};
+    //now inventoriate how many reads support each path
+    for (auto new_path : all_paths_left){
+        neighbors_left_with_strengths.push_back({});
+        for (auto contig : new_path){
+            neighbors_left_with_strengths[neighbors_left_with_strengths.size() - 1].push_back({contig, {0,0}});
         }
     }
+
+    for (int n1 = 0 ; n1 < neighbors_left.size() ; n1++){
+        for (int n2 = 0 ; n2<all_paths_left.size() ; n2++){
+            for (int c = 0 ; c < neighbors_left[n1].size() ; c++){
+                if (all_paths_left[n2][c] != neighbors_left[n1][c]){
+                    neighbors_left_with_strengths[n2][c].second.second++;
+                    break;
+                }
+                else{
+                    neighbors_left_with_strengths[n2][c].second.first++;
+                }
+            }
+        }
+    }
+
+    //go through the neighbors with strengths and see if there is a consensus
+    bool haploid_left = false;
+    for (auto neighbor : neighbors_left_with_strengths){
+        bool consensus_here = true;
+        for (pair<pair<int,bool>,pair<int,int>> contig : neighbor){
+            if (0.2*(contig.second.first-1) > contig.second.second-1 && contig.second.second < 5){ //then it is relatively consensual
+                if (contig.second.first > 1){
+                    consensus_left.push_back(contig.first);
+                }
+            }
+            else{
+                consensus_left = {};
+                consensus_here = false;
+                break;
+            }
+        }
+        if (consensus_here){
+            haploid_left = true;
+            break;
+        }
+    }
+
+    if (neighbors_left.size() == 0){
+        haploid_left = true;
+        consensus_left = {};
+    }
+    if (neighbors_right.size() == 0){
+        haploid_right = true;
+        consensus_right = {};
+    }
+
+    this->haploid = haploid_right && haploid_left;
 }
 
-vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_left(){
+vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_left(int min_coverage){
     vector<vector<pair<int,bool>>> strong_neighbors;
-    int max_strength = 0;
-    for (auto neighbor : neighbors_left){
-        if (neighbor.second > max_strength){
-            max_strength = neighbor.second;
+    
+    for (vector<pair<pair<int,bool>,pair<int,int>>> neighbor : neighbors_left_with_strengths){
+        vector<pair<int,bool>> strong_neighbor;
+        for (pair<pair<int,bool>,pair<int,int>> contig : neighbor){
+            if (contig.second.first >= min_coverage && (contig.second.second == 0 || contig.second.first > 4)){
+                strong_neighbor.push_back(contig.first);
+            }
+            else{
+                break;
+            }
+        }
+        if (strong_neighbor.size() > 0){
+            strong_neighbors.push_back(strong_neighbor);
         }
     }
-    for (auto neighbor : neighbors_left){
-        if (neighbor.second > 1  && (neighbor.second > 0.2*max_strength || neighbor.second > 4)){
-            strong_neighbors.push_back(neighbor.first);
-        }
-    }
+    
     return strong_neighbors;
 }
 
-vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_right(){
+vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_right(int min_coverage){
     vector<vector<pair<int,bool>>> strong_neighbors;
-    int max_strength = 0;
-    for (auto neighbor : neighbors_right){
-        if (neighbor.second > max_strength){
-            max_strength = neighbor.second;
+    
+    for (vector<pair<pair<int,bool>,pair<int,int>>> neighbor : neighbors_right_with_strengths){
+        vector<pair<int,bool>> strong_neighbor;
+        for (pair<pair<int,bool>,pair<int,int>> contig : neighbor){
+            if (contig.second.first >= min_coverage && (contig.second.second == 0 || contig.second.first > 4)){
+                strong_neighbor.push_back(contig.first);
+            }
+            else{
+                break;
+            }
+        }
+        if (strong_neighbor.size() > 0){
+            strong_neighbors.push_back(strong_neighbor);
         }
     }
-    for (auto neighbor : neighbors_right){
-        if (neighbor.second > 1 && (neighbor.second > 0.2*max_strength || neighbor.second > 4)){
-            strong_neighbors.push_back(neighbor.first);
-        }
-    }
+    
     return strong_neighbors;
 }
 
+/*
 void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, int> &segment_IDs){
     //load the segments from the GFA file
     
@@ -309,6 +342,7 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
     }
     gfa.close();
 }
+*/
 
 void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, int> &segments_IDs){
     //load the paths from the GAF file
@@ -406,17 +440,11 @@ void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, 
 
             for (int contig = 0 ; contig < pair_path.size()  ; contig++){
                 if (pair_path[contig].second){
-                    //push back the vector beginning at contig, excluding contig
-                    if (contig != pair_path.size() - 1){
-                        segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), false);
-                    }
+                    segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), false);
                     segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(reverse_path_contigs.begin() + reverse_path_contigs.size() - contig, reverse_path_contigs.end()), true);
                 } 
                 else{
-                    //push back the vector beginning at contig
-                    if (contig != pair_path.size() - 1){
-                        segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), true);
-                    }
+                    segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), true);
                     segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(reverse_path_contigs.begin() + reverse_path_contigs.size() - contig, reverse_path_contigs.end()), false);
                 }
 
@@ -437,33 +465,47 @@ void determine_haploid_contigs(vector<Segment> &segments, int min_coverage){
     for (auto s = 0 ; s < segments.size() ; s++){
     
         segments[s].compute_consensuses();
-        // if (segments[s].name == "4062"){
-        //     cout << "neighbors left: " << endl;
-        //     for (pair<vector<pair<int,bool>>,int> neighbor : segments[s].get_neighbors_left()){
-        //         for (pair<int,bool> contig : neighbor.first){
-        //             cout << segments[contig.first].name << " ";
-        //         }
-        //         cout << " strength: " << neighbor.second << endl;
-        //     }
-        //     cout << "neighbors right: " << endl;
-        //     for (pair<vector<pair<int,bool>>,int> neighbor : segments[s].get_neighbors_right()){
-        //         for (pair<int,bool> contig : neighbor.first){
-        //             cout << segments[contig.first].name << " ";
-        //         }
-        //         cout << " strength: " << neighbor.second << endl;
-        //     }
-        //     cout << "consensus left: " << endl;
-        //     for (pair<int,bool> contig : segments[s].get_consensus_left()){
-        //         cout << segments[contig.first].name << " ";
-        //     }
-        //     cout << endl;
-        //     cout << "consensus right: " << endl;
-        //     for (pair<int,bool> contig : segments[s].get_consensus_right()){
-        //         cout << segments[contig.first].name << " ";
-        //     }
-        //     cout << endl;
-        //     cout << "haploid: " << segments[s].is_haploid() << endl;
-        // }
+        if (segments[s].name == "4972" && false){
+
+            cout << "****here are the neighbors right with their strengths: " << endl;
+            auto neighbors_right_with_strengths = segments[s].get_neighbors_right_with_strengths();
+            for (auto neighbor : neighbors_right_with_strengths){
+                for (auto contig : neighbor){
+                    cout << contig.first.first << " ";
+                }
+                cout << endl;
+                for (auto contig : neighbor){
+                    cout << contig.second.first << "/" << contig.second.second << " ";
+                }
+                cout << endl;
+            }
+            cout << "****here are the neighbors left with their strengths: " << endl;
+            auto neighbors_left_with_strengths = segments[s].get_neighbors_left_with_strengths();
+            for (auto neighbor : neighbors_left_with_strengths){
+                for (auto contig : neighbor){
+                    cout << contig.first.first << " ";
+                }
+                cout << endl;
+                for (auto contig : neighbor){
+                    cout << contig.second.first << "/" << contig.second.second << " ";
+                }
+                cout << endl;
+            }
+            
+            cout << "haploid: " << segments[s].is_haploid() << endl;
+
+            cout << "consensus left: ";
+            for (auto contig : segments[s].get_consensus_left()){
+                cout << contig.first << " ";
+            }
+            cout << endl;
+
+            cout << "consensus right: ";
+            for (auto contig : segments[s].get_consensus_right()){
+                cout << contig.first << " ";
+            }
+            cout << endl;
+        }
     }    
 }
 
@@ -473,13 +515,16 @@ void determine_haploid_contigs(vector<Segment> &segments, int min_coverage){
  * @param old_segments 
  * @param new_segments 
  * @param min_coverage 
+ * @param unordered_map<int, vector<set<int>>> already_built_bridges; //associates to each haploid contig two sets, one of the contigs it is connected to on the left, one on the right
+
  */
-void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, unordered_map<int, std::vector<int>>& old_ID_to_new_IDs, int min_coverage){
+void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, unordered_map<int, std::vector<int>>& old_ID_to_new_IDs, unordered_map<int, vector<set<int>>> &already_built_bridges, int min_coverage, bool contiguity){
 
     new_segments = {};
 
-     //associates all old contigs ids to their new IDs (can be multiple if contig is duplicated)
+    //associates all old contigs ids to their new IDs (can be multiple if contig is duplicated)
     int new_ID = 0;
+
 
     //begin by building bridges between haploid contigs
     for (auto old_segment = 0 ; old_segment < old_segments.size() ; old_segment++){
@@ -502,114 +547,58 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
 
             //now see if it already has neighbors left and right and create them until the next haploid contig if not
 
-            //left
-            vector<pair<int,bool>> cons_left = old_segments[old_segment].get_consensus_left();
+            //right
+            vector<pair<int,bool>> cons_right = old_segments[old_segment].get_consensus_right();
             bool there_is_a_bridge = false;
             double coverage_bridge = old_segments[old_segment].get_coverage();
             int length_bridge = old_segments[old_segment].get_length();
-            for (auto contig_and_orientation : cons_left){
-                length_bridge += old_segments[contig_and_orientation.first].get_length();
-                if (old_segments[contig_and_orientation.first].is_haploid()){
-                    there_is_a_bridge = true;
-                    coverage_bridge = (old_segments[contig_and_orientation.first].get_coverage() + old_segments[old_segment].get_coverage())/2;
-                    break;
-                }
-            }
-            if (there_is_a_bridge){
-                int contig_in_cons = 0;
-                int previous_ID = ID_of_new_contig;
-                int previous_old_ID = old_segment;
-                int previous_end = 0;
-                int ID_of_new_contig_left;
-                while (true){
-
-                    int end_of_contig_left = 0;
-                    if (!cons_left[contig_in_cons].second){
-                        end_of_contig_left = 1;
-                    }
-
-                    //create the contig if needed
-                    if (old_ID_to_new_IDs.find(cons_left[contig_in_cons].first) == old_ID_to_new_IDs.end()){
-                        new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
-                        old_ID_to_new_IDs[cons_left[contig_in_cons].first] = {new_ID};
-                        new_ID++;
-                        old_segments[cons_left[contig_in_cons].first].decrease_coverage(coverage_bridge);
-                    }
-                    else{
-                        //check if the link already exists
-                        bool link_exists = false;
-                        int next_ID;
-                        for (int potential_valid_new_ids : old_ID_to_new_IDs[cons_left[contig_in_cons].first]){
-                            for (pair<int,int> link : new_segments[potential_valid_new_ids].links[end_of_contig_left].first){
-                                if (link.first == previous_ID && link.second == previous_end){
-                                    link_exists = true;
-                                    next_ID = potential_valid_new_ids;
-                                }
-                            }
-                        }
-
-                        if (link_exists){
-                            //go to the next contig
-                            if (old_segments[cons_left[contig_in_cons].first].is_haploid()){
-                                break;
-                            }
-                            previous_end = 1-end_of_contig_left;
-                            previous_ID = next_ID;
-                            previous_old_ID = cons_left[contig_in_cons].first;
-                            contig_in_cons++;
-                            continue;
-                        }
-                        else if (!old_segments[cons_left[contig_in_cons].first].is_haploid()){
-                            new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_left[contig_in_cons].first].size()) , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
-                            old_ID_to_new_IDs[cons_left[contig_in_cons].first].push_back(new_ID);
-                            new_ID++;
-                        }
-                    }
-                    
-
-                    int ID_of_new_contig_left = old_ID_to_new_IDs[cons_left[contig_in_cons].first][old_ID_to_new_IDs[cons_left[contig_in_cons].first].size() - 1];
-
-                    //add the link
-                    //find the CIGAR in the old segment
-                    string cigar = "*";
-                    int idx = 0;
-                    for (pair<int,int> link : old_segments[cons_left[contig_in_cons].first].links[end_of_contig_left].first){
-                        if (link.first == previous_old_ID && link.second == previous_end){
-                            cigar = old_segments[cons_left[contig_in_cons].first].links[end_of_contig_left].second[idx];
-                        }
-                        idx++;
-                    }
-                    new_segments[previous_ID].links[previous_end].first.push_back({ID_of_new_contig_left, end_of_contig_left});
-                    new_segments[previous_ID].links[previous_end].second.push_back(cigar);
-                    new_segments[ID_of_new_contig_left].links[end_of_contig_left].first.push_back({previous_ID, previous_end});
-                    new_segments[ID_of_new_contig_left].links[end_of_contig_left].second.push_back(cigar);
-
-                    //go to the next contig
-                    if (old_segments[cons_left[contig_in_cons].first].is_haploid()){
-                        break;
-                    }
-                    previous_end = 1-end_of_contig_left;
-                    previous_ID = ID_of_new_contig_left;
-                    previous_old_ID = cons_left[contig_in_cons].first;
-                    contig_in_cons++;
-
-                }
-            }
-
-            //right
-            vector<pair<int,bool>> cons_right = old_segments[old_segment].get_consensus_right();
-            there_is_a_bridge = false;
-            coverage_bridge = old_segments[old_segment].get_coverage();
-            length_bridge = old_segments[old_segment].get_length();
+            int otherEndOfBridge = 0;
+            int endOfOtherEndOfBridge = 0;
             for (auto contig_and_orientation : cons_right){
                 length_bridge += old_segments[contig_and_orientation.first].get_length();
                 if (old_segments[contig_and_orientation.first].is_haploid()){
-                    there_is_a_bridge = true;
-                    coverage_bridge = (old_segments[contig_and_orientation.first].get_coverage() + old_segments[old_segment].get_coverage())/2;
+                    //in case contiguity mode is on, check that the bridge is reciprocal
+                    bool reciprocal = false;
+                    if (contig_and_orientation.second == 1 && contiguity){
+                        // if (old_segments[old_segment].name == "4925"){
+                        //     cout << "checked againts: ";
+                        //     for (auto neighbor : old_segments[contig_and_orientation.first].get_consensus_left()){
+                        //         cout << neighbor.first << " ";
+                        //     }
+                        // }
+                        for (auto neighbor : old_segments[contig_and_orientation.first].get_consensus_left()){
+                            if (neighbor.first == old_segment){
+                                reciprocal = true;
+                            }
+                        }
+                    }
+                    if (contig_and_orientation.second == 0 && contiguity){
+                        // if (old_segments[old_segment].name == "4925"){
+                        //     cout << "checked2 againts: ";
+                        //     for (auto neighbor : old_segments[contig_and_orientation.first].get_consensus_right()){
+                        //         cout << neighbor.first << " ";
+                        //     }
+                        // }
+                        for (auto neighbor : old_segments[contig_and_orientation.first].get_consensus_right()){
+                            if (neighbor.first == old_segment){
+                                reciprocal = true;
+                            }
+                        }
+                    }
+
+                    if (!contiguity || reciprocal){
+                        there_is_a_bridge = true;
+                        coverage_bridge = std::min(old_segments[contig_and_orientation.first].get_original_coverage() , old_segments[old_segment].get_original_coverage());
+                        otherEndOfBridge = contig_and_orientation.first;
+                        endOfOtherEndOfBridge = contig_and_orientation.second;
+                    }
                     break;
                 }
             }
-            if(there_is_a_bridge){
+            // if (old_segments[old_segment].name == "4925"){
+            //     cout << "there is a bridge right: " << there_is_a_bridge << " with " << otherEndOfBridge << " and " << endOfOtherEndOfBridge << endl;
+            // }
+            if(there_is_a_bridge && already_built_bridges[old_segment][1].find(otherEndOfBridge) == already_built_bridges[old_segment][1].end()){
 
                 int contig_in_cons = 0;
                 int previous_ID = ID_of_new_contig;
@@ -622,40 +611,22 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                         end_of_contig_right = 1;
                     }
 
-                    //create the contig if needed
-                    if (old_ID_to_new_IDs.find(cons_right[contig_in_cons].first) == old_ID_to_new_IDs.end()){
-                        new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
-                        old_ID_to_new_IDs[cons_right[contig_in_cons].first] = {new_ID};
+                    //create the contig
+                    if (!old_segments[cons_right[contig_in_cons].first].is_haploid()){
+                        double coverage_of_this_contig = std::min(coverage_bridge, old_segments[cons_right[contig_in_cons].first].get_coverage());
+                        new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_right[contig_in_cons].first].size()) , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_of_this_contig));
+                        if (old_ID_to_new_IDs.find(cons_right[contig_in_cons].first) == old_ID_to_new_IDs.end()){
+                            old_ID_to_new_IDs[cons_right[contig_in_cons].first] = {};
+                        }
+                        old_ID_to_new_IDs[cons_right[contig_in_cons].first].push_back(new_ID);
+                        old_segments[cons_right[contig_in_cons].first].decrease_coverage(coverage_of_this_contig);
                         new_ID++;
-                        old_segments[cons_right[contig_in_cons].first].decrease_coverage(coverage_bridge);
                     }
                     else{
-                        //check if the link already exists
-                        bool link_exists = false;
-                        int next_ID;
-                        for (int potential_valid_new_ids : old_ID_to_new_IDs[cons_right[contig_in_cons].first]){
-                            for (pair<int,int> link : new_segments[potential_valid_new_ids].links[end_of_contig_right].first){
-                                if (link.first == previous_ID && link.second == previous_end){
-                                    link_exists = true;
-                                    next_ID = potential_valid_new_ids;
-                                }
-                            }
-                        }
-
-                        if (link_exists){
-                            //go to the next contig
-                            if (old_segments[cons_right[contig_in_cons].first].is_haploid()){
-                                break;
-                            }
-                            previous_end = 1-end_of_contig_right;
-                            previous_ID = next_ID;
-                            previous_old_ID = cons_right[contig_in_cons].first;
-                            contig_in_cons++;
-                            continue;
-                        }
-                        else if (!old_segments[cons_right[contig_in_cons].first].is_haploid()){
-                            new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_right[contig_in_cons].first].size()) , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
-                            old_ID_to_new_IDs[cons_right[contig_in_cons].first].push_back(new_ID);
+                        //create the haploid contig only if not already created
+                        if (old_ID_to_new_IDs.find(cons_right[contig_in_cons].first) == old_ID_to_new_IDs.end()){
+                            new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
+                            old_ID_to_new_IDs[cons_right[contig_in_cons].first] = {new_ID};
                             new_ID++;
                         }
                     }
@@ -679,18 +650,116 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
 
                     //go to the next contig
                     if (old_segments[cons_right[contig_in_cons].first].is_haploid()){
+                        already_built_bridges[cons_right[contig_in_cons].first][end_of_contig_right].insert(old_segment);
+                        already_built_bridges[old_segment][1].insert(cons_right[contig_in_cons].first);
                         break;
                     }
                     previous_end = 1-end_of_contig_right;
                     previous_ID = ID_of_new_contig_right;
                     previous_old_ID = cons_right[contig_in_cons].first;
                     contig_in_cons++;
+                }
+            }   
 
+            //left
+            vector<pair<int,bool>> cons_left = old_segments[old_segment].get_consensus_left();
+            there_is_a_bridge = false;
+            coverage_bridge = old_segments[old_segment].get_coverage();
+            length_bridge = old_segments[old_segment].get_length();
+            for (auto contig_and_orientation : cons_left){
+                length_bridge += old_segments[contig_and_orientation.first].get_length();
+                if (old_segments[contig_and_orientation.first].is_haploid()){
+                    bool reciprocal = false;
+
+                    if (contig_and_orientation.second == 1 && contiguity){
+                        for (auto neighbor : old_segments[contig_and_orientation.first].get_consensus_left()){
+                            if (neighbor.first == old_segment){
+                                reciprocal = true;
+                            }
+                        }
+                    }
+                    if (contig_and_orientation.second == 0 && contiguity){
+                        for (auto neighbor : old_segments[contig_and_orientation.first].get_consensus_right()){
+                            if (neighbor.first == old_segment){
+                                reciprocal = true;
+                            }
+                        }
+                    }
+
+                    if (!contiguity || reciprocal){
+                        there_is_a_bridge = true;
+                        coverage_bridge = std::min(old_segments[contig_and_orientation.first].get_original_coverage() , old_segments[old_segment].get_original_coverage());
+                        otherEndOfBridge = contig_and_orientation.first;
+                        endOfOtherEndOfBridge = contig_and_orientation.second;
+                    }
+                    break;
                 }
             }
 
-        }
+            if(there_is_a_bridge && already_built_bridges[old_segment][0].find(otherEndOfBridge) == already_built_bridges[old_segment][0].end()){
 
+                int contig_in_cons = 0;
+                int previous_ID = ID_of_new_contig;
+                int previous_old_ID = old_segment;
+                int previous_end = 0;
+                while (true){
+
+                    int end_of_contig_left = 0;
+                    if (!cons_left[contig_in_cons].second){
+                        end_of_contig_left = 1;
+                    }
+
+                    //create the contig
+                    if (!old_segments[cons_left[contig_in_cons].first].is_haploid()){
+                        double coverage_of_this_contig = std::min(coverage_bridge, old_segments[cons_left[contig_in_cons].first].get_coverage());
+                        new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_"+std::to_string(old_ID_to_new_IDs[cons_left[contig_in_cons].first].size()) , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_of_this_contig));
+                        if (old_ID_to_new_IDs.find(cons_left[contig_in_cons].first) == old_ID_to_new_IDs.end()){
+                            old_ID_to_new_IDs[cons_left[contig_in_cons].first] = {};
+                        }
+                        old_ID_to_new_IDs[cons_left[contig_in_cons].first].push_back(new_ID);
+                        old_segments[cons_left[contig_in_cons].first].decrease_coverage(coverage_of_this_contig);
+                        new_ID++;
+                    }
+                    else{
+                        //create the haploid contig only if not already created
+                        if (old_ID_to_new_IDs.find(cons_left[contig_in_cons].first) == old_ID_to_new_IDs.end()){
+                            new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
+                            old_ID_to_new_IDs[cons_left[contig_in_cons].first] = {new_ID};
+                            new_ID++;
+                        }
+                    }
+
+                    int ID_of_new_contig_left = old_ID_to_new_IDs[cons_left[contig_in_cons].first][old_ID_to_new_IDs[cons_left[contig_in_cons].first].size() - 1];
+
+                    //add the link
+                    //find the CIGAR in the old segment
+                    string cigar = "*";
+                    int idx = 0;
+                    for (auto link : old_segments[cons_left[contig_in_cons].first].links[end_of_contig_left].first){
+                        if (link.first == previous_old_ID && link.second == previous_end){
+                            cigar = old_segments[cons_left[contig_in_cons].first].links[end_of_contig_left].second[idx];
+                        }
+                        idx++;
+                    }
+
+                    new_segments[previous_ID].links[previous_end].first.push_back({ID_of_new_contig_left, end_of_contig_left});
+                    new_segments[previous_ID].links[previous_end].second.push_back(cigar);
+                    new_segments[ID_of_new_contig_left].links[end_of_contig_left].first.push_back({previous_ID, previous_end});
+                    new_segments[ID_of_new_contig_left].links[end_of_contig_left].second.push_back(cigar);
+
+                    //go to the next contig
+                    if (old_segments[cons_left[contig_in_cons].first].is_haploid()){
+                        already_built_bridges[cons_left[contig_in_cons].first][end_of_contig_left].insert(old_segment);
+                        already_built_bridges[old_segment][0].insert(cons_left[contig_in_cons].first);
+                        break;
+                    }
+                    previous_end = 1-end_of_contig_left;
+                    previous_ID = ID_of_new_contig_left;
+                    previous_old_ID = cons_left[contig_in_cons].first;
+                    contig_in_cons++;
+                }
+            }        
+        }
     }
 }
 
@@ -704,7 +773,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
  * @param all_paths
  * @return vector<vector<pair<int,bool>>> all the non represented paths
  */
-vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_segments, vector<Segment> &new_segments, unordered_map<int, std::vector<int>>& old_ID_to_new_IDs, int min_coverage){
+vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_segments, vector<Segment> &new_segments, unordered_map<int, std::vector<int>>& old_ID_to_new_IDs, unordered_map<int, vector<set<int>>> &already_built_bridges, int min_coverage){
 
     //first index represented paths
     vector<vector<pair<int,bool>>> represented_paths;
@@ -723,13 +792,22 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
             int idx_of_last_haploid_contig = 0;
             for (auto contig_and_orientation : consensus_left){
                 if (old_segments[contig_and_orientation.first].is_haploid() && idx_of_last_haploid_contig != 0){
-                    there_is_a_bridge = true;
+                    if (already_built_bridges[old_segment][0].find(contig_and_orientation.first) != already_built_bridges[old_segment][0].end()){
+                        there_is_a_bridge = true;
+                    }
                     break;
                 }
                 idx_of_last_haploid_contig++;
             }
             if (there_is_a_bridge){
-                represented_paths.push_back(vector<pair<int,bool>>(consensus_left.begin(), consensus_left.begin() + idx_of_last_haploid_contig + 1));
+                auto represented_path = vector<pair<int,bool>>(consensus_left.begin(), consensus_left.begin() + idx_of_last_haploid_contig + 1);
+                represented_paths.push_back(represented_path);
+                std::reverse(represented_path.begin(), represented_path.end());
+                //reverse the orientations
+                for (auto &contig : represented_path){
+                    contig.second = !contig.second;
+                }
+                represented_paths.push_back(represented_path);
 
                 //fill where_is_this_contig_represented
                 int number_of_haploid_contigs = 0;
@@ -739,7 +817,9 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                     if (where_is_this_contig_represented.find(contig_and_orientation.first) == where_is_this_contig_represented.end()){
                         where_is_this_contig_represented[contig_and_orientation.first] = {};
                     }
-                    where_is_this_contig_represented[contig_and_orientation.first].push_back({represented_paths.size() - 1, idx});
+                    int symmetrical_idx = represented_paths[represented_paths.size() - 1].size() - 1 - idx;
+                    where_is_this_contig_represented[contig_and_orientation.first].push_back({represented_paths.size() - 1, symmetrical_idx});
+                    where_is_this_contig_represented[contig_and_orientation.first].push_back({represented_paths.size() - 2, idx});
 
                     if (old_segments[contig_and_orientation.first].is_haploid()){
                         number_of_haploid_contigs++;
@@ -760,7 +840,9 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
             idx_of_last_haploid_contig = 0;
             for (auto contig_and_orientation : consensus_right){
                 if (old_segments[contig_and_orientation.first].is_haploid() && idx_of_last_haploid_contig != 0){
-                    there_is_a_bridge = true;
+                    if (already_built_bridges[old_segment][1].find(contig_and_orientation.first) != already_built_bridges[old_segment][1].end()){
+                        there_is_a_bridge = true;
+                    }
                     break;
                 }
                 idx_of_last_haploid_contig++;
@@ -768,7 +850,14 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
 
             if (there_is_a_bridge){
 
-                represented_paths.push_back(vector<pair<int,bool>>(consensus_right.begin(), consensus_right.begin() + idx_of_last_haploid_contig + 1));
+                auto represented_path = vector<pair<int,bool>>(consensus_right.begin(), consensus_right.begin() + idx_of_last_haploid_contig + 1);
+                represented_paths.push_back(represented_path);
+                std::reverse(represented_path.begin(), represented_path.end());
+                //reverse the orientations
+                for (auto &contig : represented_path){
+                    contig.second = !contig.second;
+                }
+                represented_paths.push_back(represented_path);
 
                 //fill where_is_this_contig_represented
                 int number_of_haploid_contigs = 0;
@@ -778,7 +867,9 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                     if (where_is_this_contig_represented.find(contig_and_orientation.first) == where_is_this_contig_represented.end()){
                         where_is_this_contig_represented[contig_and_orientation.first] = {};
                     }
-                    where_is_this_contig_represented[contig_and_orientation.first].push_back({represented_paths.size() - 1, idx});
+                    int symmetrical_idx = represented_paths[represented_paths.size() - 1].size() - 1 - idx;
+                    where_is_this_contig_represented[contig_and_orientation.first].push_back({represented_paths.size() - 2, idx});
+                    where_is_this_contig_represented[contig_and_orientation.first].push_back({represented_paths.size() - 1, symmetrical_idx});
 
                     if (old_segments[contig_and_orientation.first].is_haploid()){
                         number_of_haploid_contigs++;
@@ -806,27 +897,10 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
     vector<vector<pair<int,bool>>> unrepresented_paths;
     int idx = 0;
     for (Segment s : old_segments){
-        vector<vector<pair<int,bool>>> paths_segment = s.get_strong_neighbors_left();
+        vector<vector<pair<int,bool>>> paths_segment = s.get_strong_neighbors_left(min_coverage);
 
         int number_of_left_paths = paths_segment.size();
-        auto neighbors_right = s.get_strong_neighbors_right();
-
-        // if (s.name == "706"){
-        //     cout << "strong neighbors left: " << endl;
-        //     for (vector<pair<int,bool>> neighbor : paths_segment){
-        //         for (pair<int,bool> contig : neighbor){
-        //             cout << old_segments[contig.first].name << " ";
-        //         }
-        //         cout << endl;
-        //     }
-        //     cout << "strong neighbors right: " << endl;
-        //     for (vector<pair<int,bool>> neighbor : neighbors_right){
-        //         for (pair<int,bool> contig : neighbor){
-        //             cout << old_segments[contig.first].name << " ";
-        //         }
-        //         cout << endl;
-        //     }
-        // }
+        vector<vector<pair<int,bool>>> neighbors_right = s.get_strong_neighbors_right(min_coverage);
 
         paths_segment.insert(paths_segment.end(), neighbors_right.begin(), neighbors_right.end());
 
@@ -847,19 +921,20 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
             }
             for (pair<int,bool> contig : path){
 
+                // if (s.name == "446"){
+                //     cout << "checking if paeeth " << idx_here << " ";
+                //     for (pair<int,bool> contig : path_until_haploid_contig){
+                //         cout << old_segments[contig.first].name << " ";
+                //     }
+                //     cout << " is represented" << endl;
+                // }
+
                 if (!old_segments[contig.first].is_haploid()){
                     path_until_haploid_contig.push_back(contig);
                 }
                 else{
                     path_until_haploid_contig.push_back(contig);
                     bool found = false;
-                    // if (s.name == "4953--1"){
-                    //     cout << "checking if path " << idx_here << " ";
-                    //     for (pair<int,bool> contig : path_until_haploid_contig){
-                    //         cout << old_segments[contig.first].name << " ";
-                    //     }
-                    //     cout << " is represented" << endl;
-                    // }
                     if (where_is_this_contig_represented.find(contig.first) != where_is_this_contig_represented.end()){
                         for (pair<int,int> path_and_pos : where_is_this_contig_represented[contig.first]){
                             vector<pair<int,bool>> path_to_check;
@@ -869,10 +944,15 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                             else {
                                 path_to_check = vector<pair<int,bool>>(represented_paths[path_and_pos.first].end()-std::min(path_until_haploid_contig.size(),represented_paths[path_and_pos.first].size()), represented_paths[path_and_pos.first].end());
                             }
-                            // if (s.name == "4953--1"){
-                            //     cout << "comparing to ";
+                            // if (s.name == "446"){
+                            //     cout << "represented path: ";
+                            //     for (pair<int,bool> contig : represented_paths[path_and_pos.first]){
+                            //         cout << old_segments[contig.first].name << " ";
+                            //     }
+                            //     cout << endl;
+                            //     cout << "path to check: ";
                             //     for (pair<int,bool> contig : path_to_check){
-                            //         cout << old_segments[contig.first].name << " " << contig.second << " ; ";
+                            //         cout << old_segments[contig.first].name << " ";
                             //     }
                             //     cout << endl;
                             // }
@@ -882,59 +962,57 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                         }
                     }
                     if (!found){
-                        // check if 2392 is in the path
-                        // for (pair<int,bool> contig : path_until_haploid_contig){
-                        //     if (old_segments[contig.first].name == "5425"){
-                        //         cout << "Here is a non represented path contianing 12851: ";
-                        //         for (pair<int,bool> contig : path_until_haploid_contig){
-                        //             cout << old_segments[contig.first].name << " ";
-                        //         }
-                        //         cout << " (computed from segment " << s.name << endl;
-                        //     }
-                        // }
-
                         unrepresented_paths.push_back(path_until_haploid_contig);
+                        for (pair<int,bool> contig : path_until_haploid_contig){
+                            if (old_segments[contig.first].name == "1530"){
+                                cout << "Here is a nzzon represented path contianing 9661: ";
+                                for (pair<int,bool> contig : path_until_haploid_contig){
+                                    cout << old_segments[contig.first].name << " ";
+                                }
+                                cout << " (computed from segment " << s.name << endl;
+                            }
+                        }
                     }
-                    // else{
-                    //     cout << "path found: ";
-                    //     for (pair<int,bool> contig : path_until_haploid_contig){
-                    //         cout << contig.first << " ";
-                    //     }
-                    //     cout << endl;
-                    // }
                     path_until_haploid_contig = {contig};
                 }
             }
             //check the last path
             if (path_until_haploid_contig.size() > 0){
-                if (where_is_this_contig_represented.find(path_until_haploid_contig.back().first) == where_is_this_contig_represented.end()){
-                    // is_represented = false;
-                }
                 bool found = false;
-                // if (s.name == "4953--1"){
-                //     cout << "checking if paeeth " << idx_here << " ";
-                //     for (pair<int,bool> contig : path_until_haploid_contig){
-                //         cout << old_segments[contig.first].name << " ";
-                //     }
-                //     cout << " is represented" << endl;
-                // }
-                for (pair<int,int> path_and_pos : where_is_this_contig_represented[path_until_haploid_contig.back().first]){
-                    auto path_to_check = vector<pair<int,bool>>(represented_paths[path_and_pos.first].begin(), represented_paths[path_and_pos.first].begin()+std::min(path_until_haploid_contig.size(),represented_paths[path_and_pos.first].size()));
-                    // cout << "comparing to ";
-                    // for (pair<int,bool> contig : path_to_check){
-                    //     cout << contig.first << " ";
+
+                for (pair<int,int> path_and_pos : where_is_this_contig_represented[path_until_haploid_contig[0].first]){
+                    vector<pair<int,bool>> path_to_check;
+
+                    // if (s.name == "446"){
+                    //     cout << "represented path: ";
+                    //     for (pair<int,bool> contig : represented_paths[path_and_pos.first]){
+                    //         cout << old_segments[contig.first].name << " ";
+                    //     }
+                    //     cout << endl;
                     // }
-                    // cout << endl;
-                    if (path_until_haploid_contig == path_to_check){
-                        found = true;
+
+                    if (represented_paths[path_and_pos.first].size() >= path_and_pos.second + path_until_haploid_contig.size()){
+                        path_to_check = vector<pair<int,bool>>(represented_paths[path_and_pos.first].begin()+path_and_pos.second, represented_paths[path_and_pos.first].begin() + path_and_pos.second + path_until_haploid_contig.size());
+                    
+                        // if (s.name == "13278"){
+                        //     cout << "path to check: ";
+                        //     for (pair<int,bool> contig : path_to_check){
+                        //         cout << old_segments[contig.first].name << " ";
+                        //     }
+                        //     cout << endl;
+                        // }
+                        
+                        if (path_until_haploid_contig == path_to_check){
+                            found = true;
+                        }
                     }
                 }
                 if (!found){
                     unrepresented_paths.push_back(path_until_haploid_contig);
                     //check if 2392 is in the path
                     // for (pair<int,bool> contig : path_until_haploid_contig){
-                    //     if (old_segments[contig.first].name == "5425"){
-                    //         cout << "Here is a non represented path contianing 12851: ";
+                    //     if (old_segments[contig.first].name == "1530"){
+                    //         cout << "Here is a nzzon represented path contianing 9661: ";
                     //         for (pair<int,bool> contig : path_until_haploid_contig){
                     //             cout << old_segments[contig.first].name << " ";
                     //         }
@@ -1030,6 +1108,13 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
                 idx ++;
             }
 
+            // if ("10336_0" == new_segments[new_ID1].name){
+            //     cout << "adding link between " << new_segments[new_ID1].name << " and " << new_segments[new_ID2].name << " with cigar " << cigar << endl;
+            // }
+            // else if ("10336_0" == new_segments[new_ID2].name){
+            //     cout << "adding2 link between " << new_segments[new_ID1].name << " and " << new_segments[new_ID2].name << " with cigar " << cigar << endl;
+            // }
+
             if (links_to_add.find({{pair<int,int>(new_ID2, end2), pair<int,int>(new_ID1, end1)}, cigar}) == links_to_add.end()){
                 links_to_add.insert({{pair<int,int>(new_ID1, end1), pair<int,int>(new_ID2, end2)}, cigar});
             }
@@ -1051,6 +1136,133 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
 }
 
 /**
+ * @brief Takes in a graph and duplicates contigs that can be duplicated to improve completeness
+ * 
+ * @param segments The graph
+ * @param min_relative_coverage The minimum relative coverage to consider a neighbor as sufficiently solid to entail duplication
+ */
+void duplicate_contigs(vector<Segment> &segments, float min_relative_coverage, float min_absolute_coverage, float relative_lengths_difference){
+
+    //the basic idea of this function is that if a contig is the unique neighbor of several contigs, it can be duplicated to be next to all of them
+
+    int number_of_changes = 1;
+
+    while (number_of_changes > 0){
+        number_of_changes = 0;
+        int index_segment = 0;
+        int original_segments_size = segments.size();
+        while (index_segment < original_segments_size){
+
+            Segment s = segments[index_segment];
+            for (int end : {0,1}){
+
+                if (s.links[end].first.size() <= 1){
+                    continue;
+                }
+
+                //std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>  links;
+                bool duplicable = true;
+                float highest_coverage = 0;
+                float lowest_coverage = 10000;
+                float smallest_length = 1000000;
+                // cout << "checking2 segment " << s.name << " at end " << end << " " << s.links.size() << endl;
+                for (int n = 0 ; n < s.links[end].first.size() ; n++){
+                    if (segments[s.links[end].first[n].first].links[s.links[end].first[n].second].first.size() != 1){
+                        duplicable = false;
+                        break;
+                    }
+                    if (segments[s.links[end].first[n].first].get_coverage() < min_absolute_coverage){
+                        duplicable = false;
+                        break;
+                    }
+                    if (s.links[end].first[n].first == s.ID){ //self loop, do NOT duplicate
+                        duplicable = false;
+                        break;
+                    }
+                    if (segments[s.links[end].first[n].first].get_coverage() > highest_coverage){
+                        highest_coverage = segments[s.links[end].first[n].first].get_coverage();
+                    }
+                    if (segments[s.links[end].first[n].first].get_coverage() < lowest_coverage || lowest_coverage == 0){
+                        lowest_coverage = segments[s.links[end].first[n].first].get_coverage();
+                    }
+                    if (segments[s.links[end].first[n].first].get_length() < smallest_length){
+                        smallest_length = segments[s.links[end].first[n].first].get_length();
+                    }
+                }
+                //don't duplicate because of a very small bubble
+                if (highest_coverage*min_relative_coverage > lowest_coverage || smallest_length < relative_lengths_difference*s.get_length()){ 
+                    duplicable = false;
+                }
+                //check that the coverage are coherent with a duplication
+                double total_coverage = 0;
+                double max_coverage = 0;
+                if (duplicable){
+                    for (int n = 0 ; n < s.links[end].first.size() ; n++){
+                        total_coverage += segments[s.links[end].first[n].first].get_coverage();
+                        if (segments[s.links[end].first[n].first].get_coverage() > max_coverage){
+                            max_coverage = segments[s.links[end].first[n].first].get_coverage();
+                        }
+                    }
+                    if (s.get_coverage() <= 0.8*total_coverage || s.get_coverage() <= max_coverage){
+                        duplicable = false;
+                    }
+                }
+                
+
+                if (duplicable){
+                    // number_of_changes++;
+                    // cout << "I should duplicate " << s.name << " at end " << end << endl;
+
+                    //create all the new contigs
+                    for (int n = 0 ; n < s.links[end].first.size() ; n++){
+                        string new_name = s.name + "_dup" + std::to_string(n);
+                        double coverage_of_this_neighbor = s.get_coverage() * segments[s.links[end].first[n].first].get_coverage() / total_coverage;
+                        segments.push_back(Segment(new_name, segments.size(), s.get_pos_in_file(), s.get_length(), coverage_of_this_neighbor));
+                        segments[segments.size()-1].seq = s.seq;
+                        //now add the link to the contig at the end
+                        segments[segments.size()-1].links[end].first.push_back({s.links[end].first[n].first, s.links[end].first[n].second});
+                        segments[segments.size()-1].links[end].second.push_back(s.links[end].second[n]);
+                        segments[s.links[end].first[n].first].links[s.links[end].first[n].second].first.push_back({segments.size()-1, end});
+                        segments[s.links[end].first[n].first].links[s.links[end].first[n].second].second.push_back(s.links[end].second[n]);
+                        //add all the links on the other side
+                        for (int m = 0 ; m < s.links[1-end].first.size() ; m++){
+                            segments[segments.size()-1].links[1-end].first.push_back({s.links[1-end].first[m].first, s.links[1-end].first[m].second});
+                            segments[segments.size()-1].links[1-end].second.push_back(s.links[1-end].second[m]);
+                            segments[s.links[1-end].first[m].first].links[s.links[1-end].first[m].second].first.push_back({segments.size()-1, 1-end});
+                            segments[s.links[1-end].first[m].first].links[s.links[1-end].first[m].second].second.push_back(s.links[1-end].second[m]);
+                        }
+                    }
+
+                    //delete all the links of the contig
+                    for (int delete_end : {0,1}){
+                        for (int n = 0 ; n < s.links[delete_end].first.size() ; n++){
+                            int other_ID = s.links[delete_end].first[n].first;
+                            int other_end = s.links[delete_end].first[n].second;
+                            int idx = 0;
+                        
+                            for (pair<int,int> link : segments[other_ID].links[other_end].first){
+                                if (link.first == s.ID && link.second == delete_end){
+                                    segments[other_ID].links[other_end].first.erase(segments[other_ID].links[other_end].first.begin() + idx);
+                                    segments[other_ID].links[other_end].second.erase(segments[other_ID].links[other_end].second.begin() + idx);
+                                    // cout << "deleting link between " << s.name << " and " << segments[other_ID].name << endl;
+                                    break;
+                                }
+                                idx++;
+                            }
+                        }
+                    }
+                    segments[index_segment].links = {{{},{}},{{},{}}};
+                    // cout << "deleting semgent " << s.name << endl;
+                    segments[index_segment].name = "delete_me";
+                } 
+            }
+            index_segment++;
+        }
+    }
+
+}
+
+/**
  * @brief Merge all old_segments into new_segments
  * 
  * @param old_segments 
@@ -1059,6 +1271,7 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
  * @param rename rename the contigs in short names or keep the old names with underscores in between
  * @return * void 
  */
+/*
 void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file, bool rename){
 
     set<int> already_looked_at_segments; //old IDs of segments that have already been looked at and merged (don't want to merge them twice)
@@ -1350,7 +1563,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     idx_link++;
                 }
 
-                old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
+                old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
                 old_ID_to_new_ID[{current_ID, current_end}] = {new_segments.size() - 1, 1};
             }
             else{
@@ -1365,7 +1578,9 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         new_segments[old_ID_to_new_ID[link.first.first].first].links[old_ID_to_new_ID[link.first.first].second].second.push_back(link.second);
     }
 }
+*/
 
+/*
 void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments){
     ofstream gfa(gfa_output);
     for (Segment s : segments){
@@ -1397,9 +1612,11 @@ void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments
     }
     gfa.close();
 }
+*/
 
 int main(int argc, char *argv[])
 {
+
 
     //HS_GraphUnzip <gfa_input> <gaf_file> <threads> <gfa_output> <exhaustive>
     if (argc != 9){
@@ -1423,6 +1640,7 @@ int main(int argc, char *argv[])
 
     ofstream log(logfile);
 
+
     //load the segments from the GFA file
     unordered_map<string, int> segment_IDs;
     vector<Segment> segments; //segments is a dict of pairs
@@ -1439,17 +1657,32 @@ int main(int argc, char *argv[])
     // cout << "Now unzipping the graph" << endl;
     vector<Segment> unzipped_segments;
     unordered_map<int, std::vector<int>> old_ID_to_new_IDs;
+    unordered_map<int, vector<set<int>>> already_built_bridges;
+    for (auto old_segment = 0 ; old_segment < segments.size() ; old_segment++){
+       already_built_bridges[old_segment] = {set<int>(), set<int>()};
+    }
     determine_haploid_contigs(segments, min_coverage);
     // cout << "Haploid contigs determined" << endl;
     // cout << "Creating haploid contigs" << endl;
-    create_haploid_contigs(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage);
+    create_haploid_contigs(segments, unzipped_segments, old_ID_to_new_IDs, already_built_bridges, min_coverage, contiguity);
     // cout << "Haploid contigs created" << endl;
+
+    // //output the graph
+    output_graph("out_alice/tmp/haploid.gfa", gfa_input, unzipped_segments);
+    // exit(0);
+
     // cout << "Listing non represented paths" << endl;
-    vector<vector<pair<int,bool>>> non_represented_paths = list_non_represented_paths(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage);
+    vector<vector<pair<int,bool>>> non_represented_paths = list_non_represented_paths(segments, unzipped_segments, old_ID_to_new_IDs, already_built_bridges, min_coverage);
     // cout << "Non represented paths listed" << endl;
+
     // cout << "Adding non represented paths" << endl;
     add_unrepresented_paths(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage, non_represented_paths);
     // cout << "Non represented paths added" << endl;
+
+    //output the graph
+    output_graph("out_alice/tmp/before_merge.gfa", gfa_input, unzipped_segments);
+    // exit(0);
+
 
     // cout << "Graph unzipped" << endl;
 
@@ -1458,8 +1691,37 @@ int main(int argc, char *argv[])
     merge_adjacent_contigs(unzipped_segments, merged_segments, gfa_input, rename);
     // cout << "Adjacent contigs merged" << endl;
 
-    //output the graph
-    // cout << "Outputting the graph" << endl;
-    output_graph(gfa_output, gfa_input, merged_segments);
-    // cout << "Graph outputted" << endl;
+    output_graph("out_alice/tmp/before_dup.gfa", gfa_input, merged_segments);
+
+    cout << "Duplicating contigs" << endl;
+    duplicate_contigs(merged_segments, 0.1, 5, 0.2);
+    cout << "Contigs duplicated" << endl;
+
+    output_graph("out_alice/tmp/after_dup.gfa", gfa_input, merged_segments);
+
+    if (!contiguity){
+        // cout << "Outputting the graph" << endl;
+        output_graph(gfa_output, gfa_input, merged_segments);
+        // cout << "Graph outputted" << endl;
+    }
+    else{
+        string gfa_output_tmp = gfa_output + "_tmp.gfa";
+        output_graph(gfa_output_tmp, gfa_input, merged_segments);
+
+        string gfa_output_tmp2 = gfa_output + "_tmp2.gfa";
+        pop_and_shave_graph(gfa_output_tmp, 5, 100, true, 31, gfa_output_tmp2);
+        //now merge the contigs
+        segments.clear();
+        segment_IDs.clear();
+        load_GFA(gfa_output_tmp2, segments, segment_IDs);
+        vector<Segment> merged_segments;
+        merge_adjacent_contigs(segments, merged_segments, gfa_output_tmp2, rename);
+        output_graph(gfa_output, gfa_output_tmp2, merged_segments);
+
+        //remove the temporary files
+        remove(gfa_output_tmp.c_str());
+        remove(gfa_output_tmp2.c_str());
+    }
+
+    
 }

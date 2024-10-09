@@ -44,7 +44,8 @@ target_compile_options (aliceasm PRIVATE -march=x86-64)
 # target_compile_options (fastg2gfa PRIVATE -march=x86-64)
 # target_link_libraries(fastg2gfa PRIVATE z)
 
-file(GLOB SOURCE "graphunzip.cpp")
+file(GLOB SOURCE "graphunzip.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
+target_compile_options (aliceasm PRIVATE -g)
 add_executable(graphunzip ${SOURCE})
 
 

@@ -100,7 +100,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
     }
 
     std::streamoff file_size = input.tellg();
-    unsigned long long size_of_chunk = 100000;
+    unsigned long long size_of_chunk = 10000000;
     input.close();
 
     //clear the output file
@@ -121,13 +121,13 @@ void reduce(string input_file, string output_file, int context_length, int compr
         std::ofstream out(output_file_chunk);
         std::string line;
         bool next_line_is_seq = false;
-        int size_of_line = 0;
+        string name_line = "";
 
         while (std::getline(input, line))
         {
             if (line[0] == '>')
             {
-                out << line << "\n";
+                //out << line << "\n";
                 if (seq_num > output_limit && omp_get_thread_num() == 0){
                     #pragma omp critical
                     {
@@ -140,7 +140,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 }
                 seq_num++;
                 next_line_is_seq = true;
-                size_of_line = line.size();
+                name_line = line;
             }
             else if (next_line_is_seq){
                 //let's launch the foward and reverse rolling hash
@@ -148,25 +148,26 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 uint64_t hash_reverse = 0;
                 size_t pos_end = 0;
                 long pos_begin = -k;
-                int num_bases = 0;
+                bool first_base = true; //to output the name line when the first base is outputted (not before to avoid empty lines)
                 next_line_is_seq = false;
 
                 while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, homopolymer_compression)){
                     if (pos_begin>=0){
                         if (hash_foward<hash_reverse && hash_foward % compression == 0){
+                            if (first_base){
+                                first_base = false;
+                                out << name_line << "\n";
+                            }
                             out << "ACGT"[(hash_foward/compression)%4];
-                            num_bases++;
                         }
                         else if (hash_foward>=hash_reverse && hash_reverse % compression == 0){
+                            if (first_base){
+                                first_base = false;
+                                out << name_line << "\n";
+                            }
                             out << "TGCA"[(hash_reverse/compression)%4];
-                            string kmer = line.substr(pos_begin, pos_end-pos_begin);
-                            num_bases++;
                         }
                     }
-                }
-                if (num_bases == 0){ //just to make sure we don't have empty lines
-                    //go back to the beginning of the previous line and remove the name
-                    out.seekp(-1-size_of_line-1, std::ios_base::cur);
                 }
                 out << "\n";
 
@@ -176,12 +177,8 @@ void reduce(string input_file, string output_file, int context_length, int compr
             }
         }
 
-        auto size_of_file = out.tellp(); //to remove the last name of read if the last read was of length 0 
         input.close();
         out.close();
-
-        //resize the file to the actual size
-        std::filesystem::resize_file(output_file_chunk, size_of_file);
 
         //append the chunk to the final output
         #pragma omp critical

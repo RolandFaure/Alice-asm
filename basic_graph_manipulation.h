@@ -49,6 +49,7 @@ class Segment{
             this->pos_in_file = pos_in_file;
             this->length = length;
             this->coverage = coverage;
+            this->original_coverage = coverage;
             this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
@@ -60,6 +61,7 @@ class Segment{
             this->pos_in_file = pos_in_file;
             this->length = length;
             this->coverage = coverage;
+            this->original_coverage = coverage;
             this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
@@ -69,6 +71,7 @@ class Segment{
         std::vector<std::pair<int,bool>> get_consensus_right(){return this->consensus_right;}
         long int get_pos_in_file(){return this->pos_in_file;}
         double get_coverage(){return this->coverage;}
+        double get_original_coverage(){return this->original_coverage;}
         int get_length(){return this->length;}
 
         std::string get_seq(std::string& gfa_file){
@@ -86,7 +89,12 @@ class Segment{
             std::string nothing, name, seq;
             ss >> nothing >> name >> seq;
             gfa.close();
-            return seq;
+            if (seq[0] != 'D'){ //in case of contigs of length 0, we dont want to return "DP:f:54.045"
+                return seq;
+            }
+            else{
+                return "";
+            }
         }
 
         void add_neighbor(std::vector<std::pair<int,bool>> new_neighbor, bool left);
@@ -100,11 +108,14 @@ class Segment{
 
         void compute_consensuses();
 
-        std::vector<std::vector<std::pair<int,bool>>> get_strong_neighbors_left();
-        std::vector<std::vector<std::pair<int,bool>>> get_strong_neighbors_right();
+        std::vector<std::vector<std::pair<int,bool>>> get_strong_neighbors_left(int min_coverage);
+        std::vector<std::vector<std::pair<int,bool>>> get_strong_neighbors_right(int min_coverage);
 
-        std::vector<std::pair<std::vector<std::pair<int,bool>>, int>> get_neighbors_left(){return neighbors_left;}
-        std::vector<std::pair<std::vector<std::pair<int,bool>>, int>> get_neighbors_right(){return neighbors_right;}
+        std::vector<std::vector<std::pair<int,bool>>> get_neighbors_left(){return neighbors_left;}
+        std::vector<std::vector<std::pair<int,bool>>> get_neighbors_right(){return neighbors_right;}
+
+        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> > get_neighbors_left_with_strengths(){return neighbors_left_with_strengths;}
+        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> > get_neighbors_right_with_strengths(){return neighbors_right_with_strengths;}
 
         //the hash of the segment is the hash of the name
         size_t hash() const{
@@ -118,14 +129,15 @@ class Segment{
         std::vector<std::pair<int,bool>> consensus_left;
         std::vector<std::pair<int,bool>> consensus_right;
 
-        std::vector<std::vector<std::pair<int,bool>>> representative_neighbors_left;
-        std::vector<std::vector<std::pair<int,bool>>> representative_neighbors_right;
+        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>>> neighbors_left_with_strengths; //first pair is the path, second pair is the number of reads supporting and disagreeing with the path
+        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>>> neighbors_right_with_strengths; //first pair is the path, second pair is the number of reads supporting and disagreeing with the path
 
-        std::vector<std::pair<std::vector<std::pair<int,bool>>, int>> neighbors_left; //each path is a std::vector of std::pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
-        std::vector<std::pair<std::vector<std::pair<int,bool>>, int>> neighbors_right; //each path is a std::vector of std::pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
+        std::vector<std::vector<std::pair<int,bool>>> neighbors_left; //each path is a std::vector of std::pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
+        std::vector<std::vector<std::pair<int,bool>>> neighbors_right; //each path is a std::vector of std::pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
 
         long int pos_in_file;
         double coverage;
+        double original_coverage; //same thing as coverage but cannot be decreased
         int length;
 
         bool haploid;
