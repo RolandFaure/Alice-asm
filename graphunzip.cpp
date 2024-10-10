@@ -1668,7 +1668,7 @@ int main(int argc, char *argv[])
     // cout << "Haploid contigs created" << endl;
 
     // //output the graph
-    output_graph("out_alice/tmp/haploid.gfa", gfa_input, unzipped_segments);
+    // output_graph("out_alice/tmp/haploid.gfa", gfa_input, unzipped_segments);
     // exit(0);
 
     // cout << "Listing non represented paths" << endl;
@@ -1680,7 +1680,7 @@ int main(int argc, char *argv[])
     // cout << "Non represented paths added" << endl;
 
     //output the graph
-    output_graph("out_alice/tmp/before_merge.gfa", gfa_input, unzipped_segments);
+    // output_graph("out_alice/tmp/before_merge.gfa", gfa_input, unzipped_segments);
     // exit(0);
 
 
@@ -1691,13 +1691,13 @@ int main(int argc, char *argv[])
     merge_adjacent_contigs(unzipped_segments, merged_segments, gfa_input, rename);
     // cout << "Adjacent contigs merged" << endl;
 
-    output_graph("out_alice/tmp/before_dup.gfa", gfa_input, merged_segments);
+    // output_graph("out_alice/tmp/before_dup.gfa", gfa_input, merged_segments);
 
     cout << "Duplicating contigs" << endl;
     duplicate_contigs(merged_segments, 0.1, 5, 0.2);
     cout << "Contigs duplicated" << endl;
 
-    output_graph("out_alice/tmp/after_dup.gfa", gfa_input, merged_segments);
+    // output_graph("out_alice/tmp/after_dup.gfa", gfa_input, merged_segments);
 
     if (!contiguity){
         // cout << "Outputting the graph" << endl;

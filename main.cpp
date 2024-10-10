@@ -312,7 +312,7 @@ int main(int argc, char** argv)
 
     cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
-    //reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
+    reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
 
@@ -345,8 +345,8 @@ int main(int argc, char** argv)
 
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";
 
-    cout << "EXITING HERE\n";
-    exit(0);
+    // cout << "EXITING HERE\n";
+    // exit(0);
 
     //now let's parse the gfa file and decompress it
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";
