@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.9";
-string date = "2024-10-09";
+string version = "0.6.10";
+string date = "2024-10-15";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -307,12 +307,15 @@ int main(int argc, char** argv)
     }
 
     string compressed_file = tmp_folder+"compressed.fa";
+    string sampled_file = tmp_folder+"sampled.fa";
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
     int km = 31; //size of the kmer used to do the expansion. Must be >21
 
     cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
+    auto time_start = std::chrono::high_resolution_clock::now();
     reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
+    auto time_reduced = std::chrono::high_resolution_clock::now();
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
 
@@ -343,16 +346,16 @@ int main(int argc, char** argv)
         assembly_megahit(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_megahit, path_fastg2gfa, assembler_parameters);
     }
 
+    auto time_assembled = std::chrono::high_resolution_clock::now();
+
     cout << "==== Step 3: Inflating back the assembly to non-compressed space ====\n";
 
-    // cout << "EXITING HERE\n";
-    // exit(0);
 
     //now let's parse the gfa file and decompress it
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";
 
-    unordered_map<string, pair<unsigned long long, unsigned long long>> kmers;
-    std::set<string> kmers_needed;
+    unordered_map<uint64_t, pair<unsigned long long, unsigned long long>> kmers;
+    std::set<uint64_t> kmers_needed;
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
     list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
     string kmer_file = tmp_folder+"kmers.txt";
@@ -374,8 +377,13 @@ int main(int argc, char** argv)
         command = "rm -r " + tmp_folder + " 2> trash.log";
         system(command.c_str());
     }
+    auto time_end = std::chrono::high_resolution_clock::now();
 
     cout << "\nDone, the final assembly is in " << output_file << "\n" << endl;
+    cout << "Timing:\n";
+    cout << "Compression: " << std::chrono::duration_cast<std::chrono::seconds>(time_reduced - time_start).count() << "s\n";
+    cout << "Assembly: " << std::chrono::duration_cast<std::chrono::seconds>(time_assembled - time_reduced).count() << "s\n";
+    cout << "Decompression: " << std::chrono::duration_cast<std::chrono::seconds>(time_end - time_assembled).count() << "s\n";
     cout << "Total time: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() << "s\n";
 
     return 0;

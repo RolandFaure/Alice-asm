@@ -353,7 +353,8 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             int pos_to_look_at = 0;
             size_t pos_end = 0;
             long pos_begin = -km;
-            while(roll(hash_foward, hash_reverse, km, line, pos_end, pos_begin, false)){
+            long pos_middle = -(km+1)/2;
+            while(roll(hash_foward, hash_reverse, km, line, pos_end, pos_begin, pos_middle, false)){
                 if (pos_begin == pos_to_look_at){
 
                     unsigned long kmer = hash_foward; 
@@ -375,7 +376,6 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second - km;
                         if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
                             pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
-                            // cout << "dqddf" << endl;
                         }
                         // cout << "found in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second <<" " << pos_nth << "\n";
                     }
@@ -616,8 +616,9 @@ int explore_neighborhood(string contig, int endOfContig, unordered_map<string, p
  * @param contiguity //to collapse more bubbles
  * @param k
  * @param gfa_out 
+ * @param extra_coverage //to retreat to the coverage because it comes from extra contigs added to the reads from previous assembly rounds
  */
-void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out){
+void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out, int extra_coverage){
 
     if (min_length == -1){ //then no length is sufficient to keep a contig, it has to be done on the coverage
         //set min_length to the max int
@@ -654,7 +655,8 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                 cerr << "ERROR: no depth found for contig " << name << "\n";
                 exit(1);
             }
-            float depth = std::stof(depth_string.substr(5, depth_string.size()-5));
+            double depth = std::stof(depth_string.substr(5, depth_string.size()-5));
+            depth = std::max(1.0, depth- extra_coverage);
             coverage[name] = depth;
             pos_of_contig_seq_in_file[name] = pos;
             length_of_contigs[name] = sequence.size();
@@ -859,7 +861,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
             if (to_keep.find(name) != to_keep.end()){
-                out << line << "\n";
+                out << "S\t" << name << "\t" << sequence << "\tLN:i:" << sequence.size() << "\tkm:f:" << coverage[name] << "\n";
             }
         }
         else if (line[0] == 'L'){

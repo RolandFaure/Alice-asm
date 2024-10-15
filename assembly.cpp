@@ -62,6 +62,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
 
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
     vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km)
+    int round = 0; 
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
@@ -85,10 +86,10 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         system(convert_command.c_str());
         auto time_convert = std::chrono::high_resolution_clock::now();
 
-        // shave the resulting graph
+        // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
         cout << "       - Shaving the graph of small dead ends" << endl;
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa);
+        pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance);
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
@@ -128,6 +129,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         }
         input_compressed.close();
         input_graph.close();
+        round++;
     }
 
     cout << " =>Done with the iterative assembly, the graph is in " << merged_gfa << "\n" << endl;
@@ -165,7 +167,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
-    cout << "command of graphunzip : " << command_unzip << endl;
+    cout << "    - Command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
         cerr << "ERROR: unzip failed\n";
@@ -174,7 +176,6 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     auto time_unzip = std::chrono::high_resolution_clock::now();
 
     cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << "\n" << endl;
-    cout << " Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_pop - time_start).count() << "s, pop " << std::chrono::duration_cast<std::chrono::seconds>(time_sort - time_pop).count() << "s, sort " << std::chrono::duration_cast<std::chrono::seconds>(time_gaf - time_sort).count() << "s, gaf " << std::chrono::duration_cast<std::chrono::seconds>(time_unzip - time_gaf).count() << "s, unzip " << std::chrono::duration_cast<std::chrono::seconds>(time_unzip - time_start).count() << "s" << endl;
 }
 
 /**

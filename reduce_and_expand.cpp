@@ -30,46 +30,11 @@ using std::ofstream;
 using std::unordered_set;
 
 /**
- * @brief Take the read, and output several subreads splitting the read on non ACGT characters
- * 
- * @param original_read_file 
- * @param new_read_file 
- */
-void split_reads_on_non_ACGT_characters(string original_read_file, string new_read_file){
-    ifstream input(original_read_file);
-    ofstream out(new_read_file);
-    string line;
-    string name_of_read;
-    while (std::getline(input, line)){
-        if (line[0] == '>'){
-            // out << line << "\n";
-            name_of_read = line;
-        }
-        else{
-            int last_non_ACGT = 0;
-            for (int i = 0; i < line.size(); i++){
-                if (line[i] != 'A' && line[i] != 'C' && line[i] != 'G' && line[i] != 'T'){
-                    if (i - last_non_ACGT > 0){
-                        out << ">" << std::to_string(last_non_ACGT) << name_of_read << "\n";
-                        out << line.substr(last_non_ACGT, i - last_non_ACGT) << "\n";
-                    }
-                    last_non_ACGT = i+1;
-                }
-            }
-            if (line.size() - last_non_ACGT > 0){
-                out << name_of_read << "\n";
-                out << line.substr(last_non_ACGT, line.size() - last_non_ACGT) << "\n";
-            }
-            out << "\n";
-        }
-    }
-}
-
-/**
  * @brief MSR the input sequencing
  * 
  * @param input_file 
  * @param output_file 
+ * @param sample_input_file Subsample of the input reads that strive to represent all sequences
  * @param context_length 
  * @param compression 
  * @param km 
@@ -79,16 +44,10 @@ void split_reads_on_non_ACGT_characters(string original_read_file, string new_re
 void reduce(string input_file, string output_file, int context_length, int compression, int num_threads, bool homopolymer_compression) {
 
     //first split the reads on non ACGT characters, since only ACGT characters are compressible
-    string new_read_file = output_file + "_split";
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
     cout << "[" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "] Splitting the reads on non ACGT characters" << endl;
-    split_reads_on_non_ACGT_characters(input_file, new_read_file);
-    //actualize the time
-    time_t now3 = time(0);
-    tm *ltm3 = localtime(&now3);
-    cout << "[" << 1+ ltm3->tm_mday << "/" << 1 + ltm3->tm_mon << "/" << 1900 + ltm3->tm_year << " " << ltm3->tm_hour << ":" << ltm3->tm_min << ":" << ltm3->tm_sec << "] Reads split" << endl;
-    input_file = new_read_file;
+
 
     int k = 2*context_length + 1;
 
@@ -122,6 +81,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
         std::string line;
         bool next_line_is_seq = false;
         string name_line = "";
+        unordered_map<uint64_t, short> number_of_kmer_occurences; //count the number of occurence of some kmers to know if the read is in an "already seen" context
 
         while (std::getline(input, line))
         {
@@ -147,18 +107,51 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 uint64_t hash_foward = 0;
                 uint64_t hash_reverse = 0;
                 size_t pos_end = 0;
+                long pos_middle = -6666; //special value to not compute the middle position
                 long pos_begin = -k;
                 bool first_base = true; //to output the name line when the first base is outputted (not before to avoid empty lines)
                 next_line_is_seq = false;
+                int number_of_hashed_bases = 0;
+                bool this_sequence_has_not_been_seen_before = false; //to keep only "new" sequences to accelerate decompression in the future
 
-                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, homopolymer_compression)){
-                    if (pos_begin>=0){
+                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
+                    if (line[pos_end] != 'A' && line[pos_end] != 'C' && line[pos_end] != 'G' && line[pos_end] != 'T'){
+                        //then finish outputting the line and create a new one
+                        if (!first_base){
+                            out << "\n";
+                            first_base = true;
+                            name_line = name_line + "^n";
+                        }
+                        //reinitialize the rolling hash
+                        number_of_hashed_bases = 0;
+
+                    }
+                    if (number_of_hashed_bases >= k){
                         if (hash_foward<hash_reverse && hash_foward % compression == 0){
                             if (first_base){
                                 first_base = false;
                                 out << name_line << "\n";
                             }
                             out << "ACGT"[(hash_foward/compression)%4];
+
+                            if ((hash_foward / compression) % 10 == 0){
+                                // if (name_line == ">SRR13128013.1 1 length=2993"){
+                                //     cout << "hash fw in read SRR13128013.1 1 length=2993 " << hash_foward << " for kmer " << line.substr(pos_begin, pos_end-pos_begin) << "\n";
+                                // }
+                                // else if (name_line == ">SRR13128013.26581 26581 length=7693"){
+                                //     cout << "hash fw in read SRR13128013.20422 20422 length=16769 " << hash_foward << "\n";
+                                // }
+                                #pragma omp critical
+                                {
+                                    number_of_kmer_occurences[hash_foward]++;
+                                    if (number_of_kmer_occurences[hash_foward] == 2){ //if it is exactly the second time we see this kmer, then we know that this sequence has not been seen before (once is error)
+                                        this_sequence_has_not_been_seen_before = true;
+                                    }
+                                    else if (this_sequence_has_not_been_seen_before == true){
+                                        number_of_kmer_occurences[hash_foward]++; //to make sure it is at least 2, i.e. does not need to be kept in another read
+                                    }
+                                }
+                            }
                         }
                         else if (hash_foward>=hash_reverse && hash_reverse % compression == 0){
                             if (first_base){
@@ -166,8 +159,28 @@ void reduce(string input_file, string output_file, int context_length, int compr
                                 out << name_line << "\n";
                             }
                             out << "TGCA"[(hash_reverse/compression)%4];
+
+                            if ((hash_reverse / compression) % 10 == 0){
+                                // if (name_line == ">SRR13128013.1 1 length=2993"){
+                                //     cout << "hash rv in read SRR13128013.1 1 length=2993 " << hash_reverse << "\n";
+                                // }
+                                // else if (name_line == ">SRR13128013.26581 26581 length=7693"){
+                                //     cout << "hash rv in read SRR13128013.20422 20422 length=16769 " << hash_reverse << "\n";
+                                // }
+                                #pragma omp critical
+                                {
+                                    number_of_kmer_occurences[hash_reverse]++;
+                                    if (number_of_kmer_occurences[hash_reverse] == 2){ //if it is exactly the second time we see this kmer, then we know that this sequence has not been seen before (once is error)
+                                        this_sequence_has_not_been_seen_before = true;
+                                    }
+                                    else if (this_sequence_has_not_been_seen_before == true){
+                                        number_of_kmer_occurences[hash_reverse]++; //to make sure it is at least 2, i.e. does not need to be kept in another read
+                                    }
+                                }
+                            }
                         }
                     }
+                    number_of_hashed_bases++;
                 }
                 out << "\n";
 
@@ -193,7 +206,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
  * @brief List the kmers that will be needed for expansion... basically this is like the expand function but without the expansion
  * 
  */
-void list_kmers_needed_for_expansion(string asm_reduced, int km, std::set<string> &kmers_needed){
+void list_kmers_needed_for_expansion(string asm_reduced, int km, std::set<uint64_t> &kmers_needed){
     ifstream input(asm_reduced);
 
     int length_of_central_kmers = 1;
@@ -348,18 +361,21 @@ void list_kmers_needed_for_expansion(string asm_reduced, int km, std::set<string
             int i = 0;
             for (i = 0; i <= sequence.size()-km; i+= km-20-1){ //-20 because we only take the central part of each kmer
                 string kmer = sequence.substr(i, km);
-                kmers_needed.insert(kmer);
+                uint64_t hash_foward_kmer = hash_string(km, kmer, false);
+                kmers_needed.insert(hash_foward_kmer);
             }
             
             // create the beginning of the sequence if there was no left extension
             if (left_seq.find(name) == left_seq.end()){
                 string first_kmer = sequence.substr(0, km);
-                kmers_needed.insert(first_kmer);
+                uint64_t hash_foward_kmer = hash_string(km, first_kmer, false);
+                kmers_needed.insert(hash_foward_kmer);
             }
 
             // finish the sequence
             string last_kmer = sequence.substr(sequence.size()-km, km);
-            kmers_needed.insert(last_kmer);
+            uint64_t hash_foward_kmer = hash_string(km, last_kmer, false);
+            kmers_needed.insert(hash_foward_kmer);
  
         }
     }
@@ -383,8 +399,8 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
     int context_length, 
     int compression, 
     int km, 
-    std::set<string> &kmers_in_assembly,
-    unordered_map<string, pair<unsigned long long,unsigned long long>>& kmers,
+    std::set<uint64_t> &kmers_in_assembly,
+    unordered_map<uint64_t, pair<unsigned long long,unsigned long long>>& kmers,
     string kmers_file, 
     int num_threads, 
     bool homopolymer_compression){
@@ -393,8 +409,8 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
     std::ofstream out(kmers_file);
     out.close();
 
-    unordered_map<string, unordered_map<string, int>> kmer_count;
-    unordered_map<string, bool> confirmed_kmers;
+    unordered_map<uint64_t, unordered_map<string, int>> kmer_count; //associates a kmer to a map of all potential uncompressed kmers it corresponds to and their count
+    unordered_map<uint64_t, bool> confirmed_kmers;
 
     int k = 2*context_length + 1;
 
@@ -410,7 +426,7 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
     #pragma omp parallel for
     for (int chunk = 0 ; chunk <= file_size/size_of_chunk ; chunk++){
 
-        unordered_map<string, pair<pair<string,string>, bool>> kmers_to_output; //kmers to write in the kmers file from this chunk: associates a kmer to central seq, full seq and and whether it is a confirmed hit when this record was written
+        unordered_map<uint64_t, pair<pair<string,string>, bool>> kmers_to_output; //kmers to write in the kmers file from this chunk: associates a kmer to central seq, full seq and and whether it is a confirmed hit when this record was written
 
         std::ifstream input(reads_file);
         input.seekg(chunk*size_of_chunk);
@@ -446,23 +462,38 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                 long pos_begin = -k;
                 long pos_middle = -(k+1)/2;
                 next_line_is_seq = false;
+                int number_of_hashed_bases = 0;
+
+                size_t pos_end_compressed = 0;
+                long pos_begin_compressed = -km;
+                long pos_middle_compressed = -6666;
 
                 vector<int> positions_sampled (0);
-                std::string kmer = string(km, 'N');
-                string rkmer;
+                uint64_t hash_foward_compressed, hash_reverse_compressed; //rolling hash of the compressed kmer
+                string compressed_read = "";
+                compressed_read.reserve(line.size()/compression);
+
                 while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
-                    if (pos_begin>=0){
+                    if (number_of_hashed_bases >= k){
+
+                        if (line[pos_end] != 'A' && line[pos_end] != 'C' && line[pos_end] != 'G' && line[pos_end] != 'T'){
+                            //then finish outputting the line and create a new one
+                            positions_sampled.clear();
+                            number_of_hashed_bases = 0;
+                        }
 
                         if ((hash_foward<hash_reverse && hash_foward % compression == 0) || (hash_foward>=hash_reverse && hash_reverse % compression == 0)){
 
                             if (hash_foward<hash_reverse){
-                                kmer = kmer.substr(1,kmer.size()-1) + "ACGT"[(hash_foward/compression)%4];
+                                compressed_read += "ACGT"[(hash_foward/compression)%4];
                             }
                             else{
-                                kmer = kmer.substr(1,kmer.size()-1) + "TGCA"[(hash_reverse/compression)%4];
+                                compressed_read += "TGCA"[(hash_reverse/compression)%4];
                             }
 
-                            rkmer = reverse_complement(kmer); 
+                            //roll the compressed kmer
+                            roll(hash_foward_compressed, hash_reverse_compressed, km, compressed_read, pos_end_compressed, pos_begin_compressed, pos_middle_compressed, false);
+                            
                             positions_sampled.push_back(pos_middle);
 
                             // if (kmer == "GTACCACTGACCTTACATATCGATTGTTTAA"){
@@ -481,53 +512,55 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                             //     exit(1);
                             // }
 
-                            if (positions_sampled.size() >= km && (kmers_in_assembly.find(kmer) != kmers_in_assembly.end() || kmers_in_assembly.find(rkmer) != kmers_in_assembly.end())){
+                            if (positions_sampled.size() >= km){
+
+                                if (kmers_in_assembly.find(hash_foward_compressed) != kmers_in_assembly.end() || kmers_in_assembly.find(hash_reverse_compressed) != kmers_in_assembly.end()){
                                 
-                                string canonical_kmer = min(kmer, rkmer);
+                                    #pragma omp critical
+                                    {
+                                        uint64_t canonical_kmer = std::min(hash_foward_compressed, hash_reverse_compressed);
+                                        if (confirmed_kmers[canonical_kmer] == false){
 
-                                #pragma omp critical
-                                {
-                                    if (confirmed_kmers[canonical_kmer] == false){
+                                            string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
+                                            string reverse_central_seq = reverse_complement(central_seq);
+                                            string canonical_central_seq = min(central_seq, reverse_central_seq);
 
+                                            if (kmer_count.find(canonical_kmer) == kmer_count.end()){
+                                                kmer_count[canonical_kmer] = {};
+                                                string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
 
-                                        string central_seq = line.substr(positions_sampled[positions_sampled.size()-km+10], positions_sampled[positions_sampled.size()-1-10] - positions_sampled[positions_sampled.size()-km+10]+1);
-                                        string reverse_central_seq = reverse_complement(central_seq);
-                                        string canonical_central_seq = min(central_seq, reverse_central_seq);
+                                                // kmers[kmer] = {std::make_pair(start_central_kmer, length_central_kmer), std::make_pair(start_full_kmer, length_full_kmer)}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
+                                                // kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
 
-                                        if (kmer_count.find(canonical_kmer) == kmer_count.end()){
-                                            kmer_count[canonical_kmer] = {};
-                                            string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                                kmers_to_output[hash_foward_compressed] = {{central_seq, full_seq}, false};
+                                                kmers_to_output[hash_reverse_compressed] = {{reverse_complement(central_seq), reverse_complement(full_seq)},false};
 
-                                            // kmers[kmer] = {std::make_pair(start_central_kmer, length_central_kmer), std::make_pair(start_full_kmer, length_full_kmer)}; //first member is the central, "sure" part, the second is the full sequence, but potentially with a little noise at the ends
-                                            // kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
+                                                confirmed_kmers[hash_foward_compressed] = false;
+                                                confirmed_kmers[hash_reverse_compressed] = false;
+                                            }
 
-                                            kmers_to_output[kmer] = {{central_seq, full_seq}, false};
-                                            kmers_to_output[rkmer] = {{reverse_complement(central_seq), reverse_complement(full_seq)},false};
-
-                                            confirmed_kmers[kmer] = false;
-                                            confirmed_kmers[rkmer] = false;
-                                        }
-
-                                        if (kmer_count[canonical_kmer].find(canonical_central_seq) == kmer_count[canonical_kmer].end()){
-                                            kmer_count[canonical_kmer][canonical_central_seq] = 0;
-                                        }
-                                        kmer_count[canonical_kmer][canonical_central_seq]++;
-                                        
-                                        if (kmer_count[canonical_kmer][canonical_central_seq] > 3){
-                                            string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
-                                            // kmers[kmer] = {central_seq, full_seq};
-                                            // kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
-                                            kmers_to_output[kmer] = {{central_seq, full_seq}, true};
-                                            kmers_to_output[rkmer] = {{reverse_complement(central_seq), reverse_complement(full_seq)}, true};
-                                            confirmed_kmers[kmer] = true;
-                                            confirmed_kmers[rkmer] = true;
-                                            kmer_count[canonical_kmer].clear();
+                                            if (kmer_count[canonical_kmer].find(canonical_central_seq) == kmer_count[canonical_kmer].end()){
+                                                kmer_count[canonical_kmer][canonical_central_seq] = 0;
+                                            }
+                                            kmer_count[canonical_kmer][canonical_central_seq]++;
+                                            
+                                            if (kmer_count[canonical_kmer][canonical_central_seq] > 3){
+                                                string full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                                // kmers[kmer] = {central_seq, full_seq};
+                                                // kmers[rkmer] = {reverse_complement(central_seq), reverse_complement(full_seq)};
+                                                kmers_to_output[hash_foward_compressed] = {{central_seq, full_seq}, true};
+                                                kmers_to_output[hash_reverse_compressed] = {{reverse_complement(central_seq), reverse_complement(full_seq)}, true};
+                                                confirmed_kmers[hash_foward_compressed] = true;
+                                                confirmed_kmers[hash_reverse_compressed] = true;
+                                                kmer_count[canonical_kmer].clear();
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }   
+                    }
+                    number_of_hashed_bases++;
                 }
                 //if we went beyond chunk+1 * size_of_chunk, we can stop
                 if (input.tellg() > (chunk+1)*size_of_chunk){
@@ -567,7 +600,7 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
  * 
  * @param kmers dictionnary mapping compressed kmers to their positions in the kmer file
  */
-void expand(string asm_reduced, string output, int km, string kmers_file, unordered_map<string, pair<unsigned long long,unsigned long long>>& kmers){
+void expand(string asm_reduced, string output, int km, string kmers_file, unordered_map<uint64_t, pair<unsigned long long,unsigned long long>>& kmers){
 
     ifstream input(asm_reduced);
 
@@ -698,6 +731,8 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
 
     input.open(asm_reduced);
     long long position_in_file;
+    int number_of_missing_kmers = 0;
+
     while (std::getline(input, line))
     {
         if (line[0] == 'S')
@@ -733,10 +768,11 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
             int length_of_central_kmers = 1 ;
             for (i = 0; i <= sequence.size()-km; i+= km-20-1){ //-20 because we only take the central part of each kmer
                 string kmer = sequence.substr(i, km);
-                if (kmers.find(kmer) != kmers.end()){
+                uint64_t hash_foward_kmer = hash_string(km, kmer, false);
+                if (kmers.find(hash_foward_kmer) != kmers.end()){
 
                     //retrieve the central and full sequence from the kmers file
-                    kmers_input.seekg(kmers[kmer].first);
+                    kmers_input.seekg(kmers[hash_foward_kmer].first);
                     std::getline(kmers_input, line);
                     string central_seq = line;
 
@@ -750,6 +786,7 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
                 }
                 else{
                     cerr << "WARNING (code 554) not found kmer " << kmer  << "\n";
+                    number_of_missing_kmers++;
                     // cerr << line << endl;
                     // exit(1);
                     //create a sequence of Ns of sze length_of_central_kmers
@@ -760,10 +797,11 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
             // create the beginning of the sequence if there was no left extension
             if (left_seq.find(name) == left_seq.end()){
                 string first_kmer = sequence.substr(0, km);
-                if (kmers.find(first_kmer) != kmers.end()){
+                uint64_t hash_foward_kmer = hash_string(km, first_kmer, false);
+                if (kmers.find(hash_foward_kmer) != kmers.end()){
 
                     //retrieve the full sequence from the kmers file
-                    kmers_input.seekg(kmers[first_kmer].second);
+                    kmers_input.seekg(kmers[hash_foward_kmer].second);
                     std::getline(kmers_input, line);
                     string full_kmer = line;
 
@@ -782,18 +820,20 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
                 }
                 else{
                     cerr << "WARNING (code 555) not found kmer " << first_kmer << "\n";
+                    number_of_missing_kmers++;  
                 }
             }
 
             // finish the sequence
             string last_kmer = sequence.substr(sequence.size()-km, km);
-            if (kmers.find(last_kmer) != kmers.end()){
+            uint64_t hash_foward_kmer = hash_string(km, last_kmer, false);
+            if (kmers.find(hash_foward_kmer) != kmers.end()){
                 //retrieve the full and central sequence from the kmers file
-                kmers_input.seekg(kmers[last_kmer].second);
+                kmers_input.seekg(kmers[hash_foward_kmer].second);
                 std::getline(kmers_input, line);
                 string full_kmer = line;
 
-                kmers_input.seekg(kmers[last_kmer].first);
+                kmers_input.seekg(kmers[hash_foward_kmer].first);
                 std::getline(kmers_input, line);
                 string central_kmer = line;
 
@@ -818,6 +858,7 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
             }
             else{
                 cerr << "WARNING (code 557) not found kmer " << last_kmer << "\n";
+                number_of_missing_kmers++;
             }
  
             out << "S\t" << name << "\t" << expanded_sequence;
@@ -830,6 +871,7 @@ void expand(string asm_reduced, string output, int km, string kmers_file, unorde
             out << line << "\n";
         }
     }
+    cout << "Number of missing kmers " << number_of_missing_kmers << endl;
 }
 
 

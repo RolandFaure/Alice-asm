@@ -963,15 +963,15 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                     }
                     if (!found){
                         unrepresented_paths.push_back(path_until_haploid_contig);
-                        for (pair<int,bool> contig : path_until_haploid_contig){
-                            if (old_segments[contig.first].name == "1530"){
-                                cout << "Here is a nzzon represented path contianing 9661: ";
-                                for (pair<int,bool> contig : path_until_haploid_contig){
-                                    cout << old_segments[contig.first].name << " ";
-                                }
-                                cout << " (computed from segment " << s.name << endl;
-                            }
-                        }
+                        // for (pair<int,bool> contig : path_until_haploid_contig){
+                            // if (old_segments[contig.first].name == "1530"){
+                            //     cout << "Here is a nzzon represented path contianing 9661: ";
+                            //     for (pair<int,bool> contig : path_until_haploid_contig){
+                            //         cout << old_segments[contig.first].name << " ";
+                            //     }
+                            //     cout << " (computed from segment " << s.name << endl;
+                            // }
+                        // }
                     }
                     path_until_haploid_contig = {contig};
                 }
@@ -1693,9 +1693,9 @@ int main(int argc, char *argv[])
 
     // output_graph("out_alice/tmp/before_dup.gfa", gfa_input, merged_segments);
 
-    cout << "Duplicating contigs" << endl;
+    // cout << "Duplicating contigs" << endl;
     duplicate_contigs(merged_segments, 0.1, 5, 0.2);
-    cout << "Contigs duplicated" << endl;
+    // cout << "Contigs duplicated" << endl;
 
     // output_graph("out_alice/tmp/after_dup.gfa", gfa_input, merged_segments);
 
@@ -1709,7 +1709,7 @@ int main(int argc, char *argv[])
         output_graph(gfa_output_tmp, gfa_input, merged_segments);
 
         string gfa_output_tmp2 = gfa_output + "_tmp2.gfa";
-        pop_and_shave_graph(gfa_output_tmp, 5, 100, true, 31, gfa_output_tmp2);
+        pop_and_shave_graph(gfa_output_tmp, 5, 100, true, 31, gfa_output_tmp2, 0);
         //now merge the contigs
         segments.clear();
         segment_IDs.clear();
