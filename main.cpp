@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.10";
-string date = "2024-10-15";
+string version = "0.6.11";
+string date = "2024-10-16";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -104,10 +104,12 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         }
     }
 
+    int gfatools_ok = system("gfatools version 2> trash.log > trash.log");
+
     std::cout << "_______________________________" << std::endl;
     std::cout << "|    Dependency     |  Found  |" << std::endl;
     std::cout << "|-------------------|---------|" << std::endl;
-    if (assembler == "bcalm")
+    if (assembler == "custom")
         std::cout << "|    bcalm          |   " << (bcalm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     else if (assembler == "hifiasm")
         std::cout << "|    hifiasm        |   " << (hifiasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
@@ -128,10 +130,11 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         std::cout << "|    megahit        |   " << (megahit_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
         std::cout << "|    fastg2gfa      |   " << (fastg2gfa_ok == 256 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     }
+    std::cout << "|    gfatools       |   " << (gfatools_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     std::cout << "-------------------------------" << std::endl;
 
 
-    if ((bcalm_ok != 0 && assembler == "bcalm") || 
+    if ((bcalm_ok != 0 && assembler == "custom") || 
         (hifiasm_ok != 0 && assembler == "hifiasm") || 
         (spades_ok != 0 && assembler == "spades") || 
         // (minia_ok != 0 && assembler == "gatb-minia") ||
@@ -139,7 +142,8 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         (flye_ok != 0 && assembler == "flye") ||
         ((minimap_ok != 0 || miniasm_ok != 0 || minipolish_ok != 0) && assembler == "miniasm") ||
         (megahit_ok != 0 && assembler == "megahit" && fastg2gfa_ok != 0) ||
-        (convertToGFA_ok != 0 || graphunzip_ok != 0)){
+        (convertToGFA_ok != 0 || graphunzip_ok != 0) ||
+        gfatools_ok != 0){
         std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
         exit(1);
     }
@@ -314,7 +318,7 @@ int main(int argc, char** argv)
     cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
     auto time_start = std::chrono::high_resolution_clock::now();
-    reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
+    // reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
     auto time_reduced = std::chrono::high_resolution_clock::now();
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
@@ -352,24 +356,35 @@ int main(int argc, char** argv)
 
 
     //now let's parse the gfa file and decompress it
-    cout << " - Parsing the reads to map compressed kmers with uncompressed sequences\n";
+    time_t now2 = time(0);
+    tm *ltm2 = localtime(&now2);
+    cout << " - Listing the kmers needed for the expansion [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     unordered_map<uint64_t, pair<unsigned long long, unsigned long long>> kmers;
     std::set<uint64_t> kmers_needed;
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
     list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
     string kmer_file = tmp_folder+"kmers.txt";
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " - Parsing the reads to map compressed kmers with uncompressed sequences [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, context_length, compression, km, kmers_needed, kmers, kmer_file, num_threads, homopolymer_compression);
-    cout << " - Reconstructing the uncompressed assembly" << endl;
+    
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " - Reconstructing the uncompressed assembly [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     expand(compressed_assembly, decompressed_assembly, km, kmer_file, kmers);
 
     string output_file = output_folder + "assembly.gfa";
-    cout << " - Computing the exact overlaps between the contigs\n";
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " - Computing the exact overlaps between the contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     compute_exact_CIGARs(decompressed_assembly, output_file, 150*compression, 70*compression);
 
     //convert to fasta
-    
-    cout << " - Converting the assembly to fasta\n";
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " - Converting the assembly to fasta [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     gfa_to_fasta(output_file, output_file.substr(0, output_file.find_last_of('.')) + ".fasta");
 
     //clean the tmp folder if the user wants

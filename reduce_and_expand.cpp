@@ -43,10 +43,9 @@ using std::unordered_set;
  **/
 void reduce(string input_file, string output_file, int context_length, int compression, int num_threads, bool homopolymer_compression) {
 
-    //first split the reads on non ACGT characters, since only ACGT characters are compressible
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
-    cout << "[" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "] Splitting the reads on non ACGT characters" << endl;
+    cout << "[" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "] Starting pipeline" << endl;
 
 
     int k = 2*context_length + 1;

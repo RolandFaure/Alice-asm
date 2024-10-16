@@ -368,9 +368,9 @@ void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, 
             field++;
         }
 
-        if (nb_lines % 100000 == 0){
-            cout << nb_lines << " lines read in load_GAF\r" << std::flush;
-        }
+        // if (nb_lines % 100000 == 0){
+        //     cout << nb_lines << " lines read in load_GAF\r" << std::flush;
+        // }
         // if (nb_lines > 1000000){
         //     cout << "NOT READING EVERYTHING FOR DEBGUGGING PUROSPS" << endl;
         //     break;

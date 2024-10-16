@@ -58,7 +58,10 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
  */
 void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
     
-    cout << " - Iterative DBG assemby of the compressed reads with increasing k\n";
+    time_t now2 = time(0);
+    tm *ltm2 = localtime(&now2);
+
+    cout << " - Iterative DBG assemby of the compressed reads with increasing k [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
     vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km)
@@ -66,7 +69,10 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
-        cout << "       - Unitig generation with bcalm" << endl;
+        now2 = time(0);
+        ltm2 = localtime(&now2);
+        cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+
         string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
@@ -79,7 +85,9 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         auto time_bcalm = std::chrono::high_resolution_clock::now();
 
         // convert to gfa
-        cout << "       - Converting result to GFA" << endl;
+        now2 = time(0);
+        ltm2 = localtime(&now2);
+        cout << "       - Converting result to GFA [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string unitig_file_fa = tmp_folder+"bcalm.unitigs.fa";
         string unitig_file_gfa = tmp_folder+"bcalm.unitigs.gfa";
         string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
@@ -87,19 +95,30 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         auto time_convert = std::chrono::high_resolution_clock::now();
 
         // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
-        cout << "       - Shaving the graph of small dead ends" << endl;
+        now2 = time(0);
+        ltm2 = localtime(&now2);
+        cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
         pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance);
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
-        cout << "       - Merging resulting contigs" << endl;
-        unordered_map<string, int> segments_IDs;
-        vector<Segment> segments;
-        vector<Segment> merged_segments;
-        load_GFA(shaved_gfa, segments, segments_IDs);
-        merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true); //the last bool is to rename the contigs
-        output_graph(merged_gfa, shaved_gfa, merged_segments);
+        now2 = time(0);
+        ltm2 = localtime(&now2);
+        cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+        if (round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages
+            unordered_map<string, int> segments_IDs;
+            vector<Segment> segments;
+            vector<Segment> merged_segments;
+            load_GFA(shaved_gfa, segments, segments_IDs);
+            merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true); //the last bool is to rename the contigs
+            output_graph(merged_gfa, shaved_gfa, merged_segments);
+        }
+        else{ //merge using gfatools asm -u: much faster, though it does not keep the coverages
+            string merged_gfa_tmp = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
+            string merge_command = "gfatools asm -u "+shaved_gfa+" > "+merged_gfa + " 2> "+tmp_folder+"gfatools.log";
+            system(merge_command.c_str());
+        }
         auto time_merge = std::chrono::high_resolution_clock::now();
 
         // merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
@@ -134,7 +153,9 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
 
     cout << " =>Done with the iterative assembly, the graph is in " << merged_gfa << "\n" << endl;
 
-    cout << " - Untangling the final compressed assembly\n";
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " - Untangling the final compressed assembly [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     auto time_start = std::chrono::high_resolution_clock::now();
     if (contiguity){
@@ -152,18 +173,24 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     auto time_pop = std::chrono::high_resolution_clock::now();
 
     //sort the gfa to have S lines before L lines
-    cout << "    - Sorting the GFA" << endl;
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Sorting the GFA [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     sort_GFA(merged_gfa);
 
     auto time_sort = std::chrono::high_resolution_clock::now();
 
     //untangle the graph to improve contiguity
-    cout << "    - Aligning the reads to the graph" << endl;
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
     unordered_map<string,float> coverages;
     create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages);   
     auto time_gaf = std::chrono::high_resolution_clock::now(); 
-    cout << "    - Untangling the graph with GraphUnzip" << endl;
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Untangling the graph with GraphUnzip [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
@@ -175,7 +202,9 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     }
     auto time_unzip = std::chrono::high_resolution_clock::now();
 
-    cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << "\n" << endl;
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " => Done untangling the graph, the final compressed graph is in " << final_gfa << " [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]\n" << endl;
 }
 
 /**
