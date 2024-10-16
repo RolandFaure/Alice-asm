@@ -318,7 +318,7 @@ int main(int argc, char** argv)
     cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
     auto time_start = std::chrono::high_resolution_clock::now();
-    // reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
+    reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
     auto time_reduced = std::chrono::high_resolution_clock::now();
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
