@@ -141,7 +141,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
                 std::stringstream ss(line);
                 ss >> dont_care >> name >> sequence;
                 for (int i = 0 ; i < min_abundance ; i++){
-                    input_compressed << ">" << name << "\n";
+                    input_compressed << ">false_read_" << name << "\n";
                     input_compressed << sequence << "\n";
                 }
             }

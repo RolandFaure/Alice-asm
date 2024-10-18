@@ -11,22 +11,22 @@ uint64_t hash_T = 0x295549f54be24456;
 // robin_hood::unordered_map<char, uint64_t> char_to_hash = {{'A', hash_A}, {'C', hash_C}, {'G', hash_G}, {'T', hash_T}};
 // robin_hood::unordered_map<char, uint64_t> char_to_hash_reverse = {{'A', hash_T}, {'C', hash_G}, {'G', hash_C}, {'T', hash_A}};
 
-void rol(uint64_t &x, int k){
+inline void rol(uint64_t &x, int k){
     x = (x << k) | (x >> (64-k));
 }
 
-void ror(uint64_t &x, int k){
+inline void ror(uint64_t &x, int k){
     x = (x >> k) | (x << (64-k));
 }
 
 //f(s[i+1,i+k]) = rol(f(s[i,i+k-1]),1) ^ rol(h(s[i]),k)  ^ h(s[i+k])
-void roll_forward(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
+inline void roll_forward(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
     rol(hash, 1);
     rol(old_char, k);
     hash = hash ^ old_char ^ new_char;
 }
 //r(s[i+1,i+k]) = ror(r(s[i,i+k-1]),1) ^ ror(h(~s[i]),1) ^ rol(h(~s[i+k]),k-1)
-void roll_reverse(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
+inline void roll_reverse(uint64_t &hash, uint64_t new_char, uint64_t old_char, int k){
     ror(hash, 1);
     ror(old_char, 1);
     rol(new_char, k-1);

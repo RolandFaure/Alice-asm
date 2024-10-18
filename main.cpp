@@ -35,8 +35,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.11";
-string date = "2024-10-16";
+string version = "0.6.12";
+string date = "2024-10-18";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -361,19 +361,26 @@ int main(int argc, char** argv)
     cout << " - Listing the kmers needed for the expansion [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     unordered_map<uint64_t, pair<unsigned long long, unsigned long long>> kmers;
-    std::set<uint64_t> kmers_needed;
+    std::unordered_set<uint64_t> central_kmers_needed;
+    std::unordered_set<uint64_t> full_kmers_needed;
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
-    list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
-    string kmer_file = tmp_folder+"kmers.txt";
+    string central_kmer_file = tmp_folder+"central_kmers.txt";
+    string full_kmer_file = tmp_folder+"full_kmers.txt";
+
+    //list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
+    expand_or_list_kmers_needed_for_expansion("index", compressed_assembly, km, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
+
     now2 = time(0);
     ltm2 = localtime(&now2);
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, context_length, compression, km, kmers_needed, kmers, kmer_file, num_threads, homopolymer_compression);
-    
+    go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, context_length, compression, km, central_kmers_needed, full_kmers_needed, kmers, central_kmer_file, full_kmer_file, num_threads, homopolymer_compression);
+
+
     now2 = time(0);
     ltm2 = localtime(&now2);
     cout << " - Reconstructing the uncompressed assembly [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    expand(compressed_assembly, decompressed_assembly, km, kmer_file, kmers);
+    //expand(compressed_assembly, decompressed_assembly, km, kmer_file, kmers);
+    expand_or_list_kmers_needed_for_expansion("expand", compressed_assembly, km, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
 
     string output_file = output_folder + "assembly.gfa";
     now2 = time(0);
