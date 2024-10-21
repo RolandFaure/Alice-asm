@@ -74,7 +74,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
         string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
-            + " -out "+tmp_folder+"bcalm > "+tmp_folder+"bcalm.log 2>&1";
+            + " -out "+tmp_folder+"bcalm"+std::to_string(kmer_len)+" > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());
         if (bcalm_ok != 0){
@@ -88,8 +88,8 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Converting result to GFA [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        string unitig_file_fa = tmp_folder+"bcalm.unitigs.fa";
-        string unitig_file_gfa = tmp_folder+"bcalm.unitigs.gfa";
+        string unitig_file_fa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.fa";
+        string unitig_file_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.gfa";
         string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
         system(convert_command.c_str());
         auto time_convert = std::chrono::high_resolution_clock::now();
@@ -98,7 +98,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        string shaved_gfa = tmp_folder+"bcalm.unitigs.shaved.gfa";
+        string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
         pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance);
         auto time_shave = std::chrono::high_resolution_clock::now();
 
@@ -115,7 +115,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
             output_graph(merged_gfa, shaved_gfa, merged_segments);
         }
         else{ //merge using gfatools asm -u: much faster, though it does not keep the coverages
-            string merged_gfa_tmp = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
+            string merged_gfa_tmp = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
             string merge_command = "gfatools asm -u "+shaved_gfa+" > "+merged_gfa + " 2> "+tmp_folder+"gfatools.log";
             system(merge_command.c_str());
         }

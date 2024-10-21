@@ -572,8 +572,8 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
     input.close();
 
     //open the kmers file
-    ifstream central_kmers_input(central_kmers_file);
-    ifstream full_kmers_input(full_kmers_file);
+    ifstream central_kmers_input(central_kmers_file); //not used in index mode
+    ifstream full_kmers_input(full_kmers_file); //not used in index mode
 
     input.open(asm_reduced);
     long long position_in_file;
@@ -741,4 +741,8 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
         cout << "Number of central kmers needed " << central_kmers_needed.size() << endl;
         cout << "Number of full kmers needed " <<  full_kmers_needed.size() << endl;
     }
+    out.close();
+    central_kmers_input.close();
+    full_kmers_input.close();
+
 }
