@@ -63,7 +63,6 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-    string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
     vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km)
     int round = 0; 
     for (auto kmer_len: values_of_k){
@@ -106,6 +105,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+        string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
         if (round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages
             unordered_map<string, int> segments_IDs;
             vector<Segment> segments;
@@ -151,6 +151,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         round++;
     }
 
+    string merged_gfa = tmp_folder+"bcalm"+std::to_string(values_of_k[values_of_k.size()-1])+".unitigs.shaved.merged.gfa";
     cout << " =>Done with the iterative assembly, the graph is in " << merged_gfa << "\n" << endl;
 
     now2 = time(0);

@@ -159,24 +159,24 @@ void reduce(string input_file, string output_file, int context_length, int compr
                             }
                             out << "TGCA"[(hash_reverse/compression)%4];
 
-                            if ((hash_reverse / compression) % 10 == 0){
-                                // if (name_line == ">SRR13128013.1 1 length=2993"){
-                                //     cout << "hash rv in read SRR13128013.1 1 length=2993 " << hash_reverse << "\n";
-                                // }
-                                // else if (name_line == ">SRR13128013.26581 26581 length=7693"){
-                                //     cout << "hash rv in read SRR13128013.20422 20422 length=16769 " << hash_reverse << "\n";
-                                // }
-                                #pragma omp critical
-                                {
-                                    number_of_kmer_occurences[hash_reverse]++;
-                                    if (number_of_kmer_occurences[hash_reverse] == 2){ //if it is exactly the second time we see this kmer, then we know that this sequence has not been seen before (once is error)
-                                        this_sequence_has_not_been_seen_before = true;
-                                    }
-                                    else if (this_sequence_has_not_been_seen_before == true){
-                                        number_of_kmer_occurences[hash_reverse]++; //to make sure it is at least 2, i.e. does not need to be kept in another read
-                                    }
-                                }
-                            }
+                            // if ((hash_reverse / compression) % 10 == 0){
+                            //     // if (name_line == ">SRR13128013.1 1 length=2993"){
+                            //     //     cout << "hash rv in read SRR13128013.1 1 length=2993 " << hash_reverse << "\n";
+                            //     // }
+                            //     // else if (name_line == ">SRR13128013.26581 26581 length=7693"){
+                            //     //     cout << "hash rv in read SRR13128013.20422 20422 length=16769 " << hash_reverse << "\n";
+                            //     // }
+                            //     #pragma omp critical
+                            //     {
+                            //         number_of_kmer_occurences[hash_reverse]++;
+                            //         if (number_of_kmer_occurences[hash_reverse] == 2){ //if it is exactly the second time we see this kmer, then we know that this sequence has not been seen before (once is error)
+                            //             this_sequence_has_not_been_seen_before = true;
+                            //         }
+                            //         else if (this_sequence_has_not_been_seen_before == true){
+                            //             number_of_kmer_occurences[hash_reverse]++; //to make sure it is at least 2, i.e. does not need to be kept in another read
+                            //         }
+                            //     }
+                            // }
                         }
                     }
                     number_of_hashed_bases++;
@@ -619,7 +619,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                     central_kmers_needed.insert(hash_foward_kmer);
                 }
                 else{
-                    if (kmers.find(hash_foward_kmer) != kmers.end()){
+                    if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].first != -1){
 
                         //retrieve the central and full sequence from the kmers file
                         central_kmers_input.seekg(kmers[hash_foward_kmer].first);
@@ -649,7 +649,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                     full_kmers_needed.insert(hash_foward_kmer);
                 }
                 else {
-                    if (kmers.find(hash_foward_kmer) != kmers.end()){
+                    if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].second != -1){
 
                         //retrieve the full sequence from the kmers file
                         full_kmers_input.seekg(kmers[hash_foward_kmer].second);
@@ -693,13 +693,13 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                     //retrieve the full and central sequence from the kmers file
                     
                     string end_of_seq;
-                    if (right_seq.find(name) != right_seq.end()){ //if there was a right extension just take the central part
+                    if (right_seq.find(name) != right_seq.end() && kmers[hash_foward_kmer].first != -1){ //if there was a right extension just take the central part
                         central_kmers_input.seekg(kmers[hash_foward_kmer].first);
                         std::getline(central_kmers_input, line);
                         end_of_seq = line;
                     }
                     else{
-                        full_kmers_input.seekg(kmers[hash_foward_kmer].second);
+                        full_kmers_input.seekg(kmers[hash_foward_kmer].second && kmers[hash_foward_kmer].second != -1);
                         std::getline(full_kmers_input, line);
                         end_of_seq = line;
                     }
