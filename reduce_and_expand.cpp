@@ -636,6 +636,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                         }
                     }
                     else{
+                        cout << "WARNING (code 743) missing kmer " << kmer << "\n";
                         number_of_missing_kmers++;
                         expanded_sequence += string(length_of_central_kmers, 'N');
                     }
@@ -671,6 +672,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                         expanded_sequence = beginning_of_seq.substr(0, beginning_of_seq.size()-overlap) + expanded_sequence;
                     }
                     else{
+                        cout << "WARNING (code 744) missing kmer " << first_kmer << "\n";
                         number_of_missing_kmers++;  
                     }
                 }
@@ -720,6 +722,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
 
                 }
                 else{
+                    cout << "WARNING (code 745) missing kmer " << last_kmer << "\n";
                     number_of_missing_kmers++;
                 }
             
