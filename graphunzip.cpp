@@ -907,9 +907,9 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
         int idx_here = 0;
         for (vector<pair<int,bool>> path : paths_segment){
 
-            if (idx % 100000 == 0){
-                cout << idx << " paths checked\r" << std::flush;
-            }
+            // if (idx % 100000 == 0){
+            //     cout << idx << " paths checked\r" << std::flush;
+            // }
 
             //check if the path is represented
             vector<pair<int,bool>> path_until_haploid_contig;

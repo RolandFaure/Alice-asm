@@ -578,6 +578,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
     input.open(asm_reduced);
     long long position_in_file;
     int number_of_missing_kmers = 0;
+    string line2;
 
     while (std::getline(input, line))
     {
@@ -623,8 +624,8 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
 
                         //retrieve the central and full sequence from the kmers file
                         central_kmers_input.seekg(kmers[hash_foward_kmer].first);
-                        std::getline(central_kmers_input, line);
-                        string central_seq = line;
+                        std::getline(central_kmers_input, line2);
+                        string central_seq = line2;
 
                         length_of_central_kmers = central_seq.size();
                         if (i == 0 || central_seq.size() == 0){
@@ -653,8 +654,8 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
 
                         //retrieve the full sequence from the kmers file
                         full_kmers_input.seekg(kmers[hash_foward_kmer].second);
-                        std::getline(full_kmers_input, line);
-                        string full_kmer = line;
+                        std::getline(full_kmers_input, line2);
+                        string full_kmer = line2;
 
                         string beginning_of_seq = full_kmer;
 
@@ -695,13 +696,13 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                     string end_of_seq;
                     if (right_seq.find(name) != right_seq.end() && kmers[hash_foward_kmer].first != -1){ //if there was a right extension just take the central part
                         central_kmers_input.seekg(kmers[hash_foward_kmer].first);
-                        std::getline(central_kmers_input, line);
-                        end_of_seq = line;
+                        std::getline(central_kmers_input, line2);
+                        end_of_seq = line2;
                     }
                     else{
                         full_kmers_input.seekg(kmers[hash_foward_kmer].second && kmers[hash_foward_kmer].second != -1);
-                        std::getline(full_kmers_input, line);
-                        end_of_seq = line;
+                        std::getline(full_kmers_input, line2);
+                        end_of_seq = line2;
                     }
                     //compute the overlap
                     int overlap = std::min(end_of_seq.size(), expanded_sequence.size());
