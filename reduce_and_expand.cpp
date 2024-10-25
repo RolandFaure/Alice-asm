@@ -346,7 +346,9 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                                             
                                         string full_seq="", reverse_full_seq="";
                                         if (full_kmer_in_assembly){
-                                            full_seq = line.substr(positions_sampled[positions_sampled.size()-km], positions_sampled[positions_sampled.size()-1] - positions_sampled[positions_sampled.size()-km]+1);
+                                            auto begin = std::max(0,positions_sampled[positions_sampled.size()-km] - k);
+                                            auto end = std::min((int)line.size()-1, positions_sampled[positions_sampled.size()-1] + k);
+                                            full_seq = line.substr(begin, end - begin +1);
                                             reverse_full_seq = reverse_complement(full_seq);
                                             canonical_seq = min(full_seq, reverse_full_seq);
                                         }
@@ -701,8 +703,8 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                         std::getline(central_kmers_input, line2);
                         end_of_seq = line2;
                     }
-                    else{
-                        full_kmers_input.seekg(kmers[hash_foward_kmer].second && kmers[hash_foward_kmer].second != -1);
+                    else if (kmers[hash_foward_kmer].second != -1){
+                        full_kmers_input.seekg(kmers[hash_foward_kmer].second);
                         std::getline(full_kmers_input, line2);
                         end_of_seq = line2;
                     }
@@ -717,7 +719,6 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                             size_of_compared_seq = overlap;
                         }
                     }
-
                     expanded_sequence += end_of_seq.substr(overlap, end_of_seq.size()-overlap);
 
                 }
