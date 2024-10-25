@@ -11,9 +11,10 @@ set(TARGET_H
     assembly.h,
     basic_graph_manipulation.h,
     clipp.h,
+    graphunzip.h,
     reduce_and_expand.h,
     rolling_hash.h,
-    graphunzip.h
+    test.h
    )
 
 # Local source files here
@@ -21,13 +22,14 @@ set(TARGET_SRC
     assembly.cpp,
     basic_graph_manipulation.cpp,
     main.cpp,
+    graphunzip.cpp,
     reduce_and_expand.cpp,
     rolling_hash.cpp,
-    graphunzip.cpp
+    test.cpp
     )
 
 
-file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
+file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp" "test.cpp")
 add_executable(aliceasm ${SOURCE})
 target_compile_options (aliceasm PRIVATE -fopenmp)
 target_compile_options (aliceasm PRIVATE -lz)

@@ -98,7 +98,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance);
+        pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance, num_threads);
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
@@ -106,19 +106,19 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-        if (round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages
+        if (true || round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages BUT gfatools does not seem to work well...
             unordered_map<string, int> segments_IDs;
             vector<Segment> segments;
             vector<Segment> merged_segments;
             load_GFA(shaved_gfa, segments, segments_IDs);
-            merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true); //the last bool is to rename the contigs
+            merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
             output_graph(merged_gfa, shaved_gfa, merged_segments);
         }
-        else{ //merge using gfatools asm -u: much faster, though it does not keep the coverages
-            string merged_gfa_tmp = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-            string merge_command = "gfatools asm -u "+shaved_gfa+" > "+merged_gfa + " 2> "+tmp_folder+"gfatools.log";
-            system(merge_command.c_str());
-        }
+        // else{ //merge using gfatools asm -u: much faster, though it does not keep the coverages
+        //     string merged_gfa_tmp = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
+        //     string merge_command = "gfatools asm -u "+shaved_gfa+" > "+merged_gfa + " 2> "+tmp_folder+"gfatools.log";
+        //     system(merge_command.c_str());
+        // }
         auto time_merge = std::chrono::high_resolution_clock::now();
 
         // merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
@@ -167,7 +167,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         vector<Segment> merged_segments;
         load_GFA(shaved_and_popped_gfa, segments, segments_IDs);
         string shaved_and_popped_merged = tmp_folder+"bcalm.unitigs.shaved.popped.merged.gfa";
-        merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true); //the last bool is to rename the contigs
+        merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true, num_threads); //the last bool is to rename the contigs
         output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
         merged_gfa = shaved_and_popped_merged;
     }

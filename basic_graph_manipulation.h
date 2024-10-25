@@ -13,7 +13,7 @@ void gfa_to_fasta(std::string gfa, std::string fasta);
 void sort_GFA(std::string gfa);
 
 void shave(std::string input_file, std::string output_file, int max_length);
-void pop_and_shave_graph(std::string gfa_in, int abundance_min, int min_length, bool contiguity, int k, std::string gfa_out, int extra_coverage);
+void pop_and_shave_graph(std::string gfa_in, int abundance_min, int min_length, bool contiguity, int k, std::string gfa_out, int extra_coverage, int num_threads);
 void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa_out);
 void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder);
 
@@ -145,7 +145,7 @@ class Segment{
 };
 
 void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::unordered_map<std::string, int> &segment_IDs);
-void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename);
+void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename, int num_threads);
 void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 
 

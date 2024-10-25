@@ -17,6 +17,7 @@
 #include "robin_hood.h"
 #include "assembly.h"
 #include "clipp.h"
+#include "test.h"
 
 using std::cout;
 using std::endl;
@@ -35,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.13";
+string version = "0.6.14";
 string date = "2024-10-22";
 string author = "Roland Faure";
 
@@ -167,6 +168,7 @@ int main(int argc, char** argv)
     string path_to_minipolish = "racon";
     string path_to_megahit = "megahit";
     string assembler_parameters = "";
+    string test_ref_gfa = "";
     bool rescue = false;
     bool contiguity = false;
     int min_abundance = 5;
@@ -208,6 +210,7 @@ int main(int argc, char** argv)
         
         //Other options
         clipp::option("--clean").set(clean).doc("remove the tmp folder at the end [off]"),
+        clipp::option("--test").doc("(developers only) to compare the result against this reference") & clipp::opt_value("t", test_ref_gfa),
         clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
 
     );
@@ -407,6 +410,11 @@ int main(int argc, char** argv)
     cout << "Assembly: " << std::chrono::duration_cast<std::chrono::seconds>(time_assembled - time_reduced).count() << "s\n";
     cout << "Decompression: " << std::chrono::duration_cast<std::chrono::seconds>(time_end - time_assembled).count() << "s\n";
     cout << "Total time: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() << "s\n";
+
+    if (test_ref_gfa != ""){
+        cout << "Comparing the result with the reference " << test_ref_gfa << endl;
+        test_assembly(output_file, test_ref_gfa);
+    }
 
     return 0;
 }
