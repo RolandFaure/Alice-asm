@@ -1,0 +1,10 @@
+S	11	AA	DP:f:34.0
+S	2	TT	DP:f:34.0	
+S	3	GG	DP:f:34.0	
+S	4	CC	DP:f:34.0
+S	5	TT	DP:f:34.0
+S	6	ACGT	DP:f:34.0
+S	7	CCCCAA	DP:f:34.0
+S	8	AAAACC	DP:f:34.0
+L	11	+	2	+	0M
+L	2	+	3	+	0M
