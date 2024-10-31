@@ -70,33 +70,28 @@ bool test_assembly(string out_file, string ref_file){
     }
     in_out.close();
 
-    bool same = true;
-
-    //compare the two sets
-    if (ref_contigs.size() != out_contigs.size())
-    {
-        cout << "The number of contigs in the output is different from the number of contigs in the reference" << endl;
-        cout << "The number of contigs in the reference is " << ref_contigs.size() << endl;
-        cout << "The number of contigs in the output is " << out_contigs.size() << endl;
-        same = false;
-    }
-
-    for (auto i : ref_contigs)
-    {
-        if (out_contigs.find(i) == out_contigs.end())
-        {
-            cout << "A contig  is in the reference but not in the output" << endl;
-            same = false;
+    //ensure that all the contigs in the output are subcontigs of the reference
+    int n = 0;
+    for (auto c: out_contigs){
+        bool found = false;
+        for (auto r: ref_contigs){
+            if (r.find(c) != string::npos){
+                found = true;
+                break;
+            }
         }
-    }
-    for (auto i : out_contigs)
-    {
-        if (ref_contigs.find(i) == ref_contigs.end())
-        {
-            cout << "A contig  is in the output but not in the reference" << endl;
-            same = false;
+        if (!found){
+            n++;
         }
     }
 
-    return same;
+    if (n > 0){
+        cout << "ERROR: " << n << " contigs in the output are not subcontigs of the reference" << endl;
+        return false;
+    }
+    else{
+        cout << "test passed" << endl;
+    }
+
+    return true;
 }

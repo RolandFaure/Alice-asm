@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <chrono>
+#include <omp.h>
 
 using std::cout;
 using std::endl;
@@ -714,6 +715,10 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
     int number_of_edits = 1;
     unordered_map<string, pair<bool, bool>> not_overcovered; //iteratively mark the contigs that are not overcovered left or right
     not_overcovered.reserve(linked.size());
+    omp_lock_t lock_contigs_to_keep;
+    omp_init_lock(&lock_contigs_to_keep);
+    omp_lock_t lock_not_overcovered_contigs;
+    omp_init_lock(&lock_not_overcovered_contigs);
     while (number_of_edits > 0){
         number_of_edits = 0;
 
@@ -763,7 +768,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                     }
                 }
 
-                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && coverage[contig] < 5*coverage[other_neighbor_of_contig_left]){
+                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
                     bubble = true;
                 }
      
@@ -786,14 +791,15 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                     overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
                 }
                 if (overcovered_right == 2){
-                    #pragma omp critical
-                    {
-                        if (not_overcovered.find(contig) != not_overcovered.end()){
-                            not_overcovered[contig].first = false;
-                            not_overcovered[contig].second = false;
-                        }
-                        not_overcovered[contig].second = true;
+                    omp_set_lock(&lock_not_overcovered_contigs);
+                    
+                    if (not_overcovered.find(contig) != not_overcovered.end()){
+                        not_overcovered[contig].first = false;
+                        not_overcovered[contig].second = false;
                     }
+                    not_overcovered[contig].second = true;
+
+                    omp_unset_lock(&lock_not_overcovered_contigs);
                 }
                 int overcovered_left = 2;
                 if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
@@ -804,27 +810,24 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                     overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
                 }
                 if (overcovered_left == 2){
-                    #pragma omp critical
-                    {
-                        if (not_overcovered.find(contig) != not_overcovered.end()){
-                            not_overcovered[contig].first = false;
-                            not_overcovered[contig].second = false;
-                        }
-                        not_overcovered[contig].first = true;
+                    omp_set_lock(&lock_not_overcovered_contigs);
+                    if (not_overcovered.find(contig) != not_overcovered.end()){
+                        not_overcovered[contig].first = false;
+                        not_overcovered[contig].second = false;
                     }
+                    not_overcovered[contig].first = true;
+                    omp_unset_lock(&lock_not_overcovered_contigs);
                 }
 
                 if (overcovered_left == 2 || overcovered_right == 2){ //if the contig is not overcovered on one side, keep it
-                    #pragma omp critical
-                    {
-                        to_keep.insert(contig);
-                    }
+                    omp_set_lock(&lock_contigs_to_keep);
+                    to_keep.insert(contig);
+                    omp_unset_lock(&lock_contigs_to_keep);
                 }
                 else if (overcovered_left == 0 && overcovered_right == 0 && ((coverage[contig] > abundance_min && abundance_min != -1) || length_of_contigs[contig] > min_length)){ //if the contig has two dead ends, keep it under conditiosn
-                    #pragma omp critical
-                    {
-                        to_keep.insert(contig);
-                    }
+                    omp_set_lock(&lock_contigs_to_keep);
+                    to_keep.insert(contig);
+                    omp_unset_lock(&lock_contigs_to_keep);
                 }
                 // else{
                 //     cout << "contig " << contig << " has overcovered neighborhood " << count << " " << linked.size() << "\n";
@@ -841,10 +844,9 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                 int overcovered_left = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, 5*k, coverage[contig], big_coverage, not_overcovered);
 
                 if (!(overcovered_left == 0 && overcovered_right == 1 || overcovered_left == 1 && overcovered_right == 0)){
-                    #pragma omp critical
-                    {
-                        to_keep.insert(contig);
-                    }
+                    omp_set_lock(&lock_contigs_to_keep);
+                    to_keep.insert(contig);
+                    omp_unset_lock(&lock_contigs_to_keep);
                 }
             }
 
@@ -860,16 +862,17 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                 }
                 if (best_contig != ""){
                     if (to_keep.find(best_contig) == to_keep.end()){
-                        #pragma omp critical
-                        {
-                            to_keep.insert(best_contig);
-                        }
+                        omp_set_lock(&lock_contigs_to_keep);
+                        to_keep.insert(best_contig);
+                        omp_unset_lock(&lock_contigs_to_keep);
                         number_of_edits++;
                     }
                 }
             }
         }
     }
+    omp_destroy_lock(&lock_contigs_to_keep);
+    omp_destroy_lock(&lock_not_overcovered_contigs);
 
     //now wirte the gfa file without the contigs to remove
     input.close();
@@ -1301,6 +1304,8 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
     unordered_map<pair<int,int>,pair<int,int>> old_ID_to_new_ID; //associates (old_id, old end) with (new_id, new_end)
     int number_of_merged_contigs = 0;
     set<pair<pair<pair<int,int>, pair<int,int>>,string>> links_to_add; //list of links to add, all in old IDs and old ends
+    omp_lock_t lock_new_segment; //locks the creating of new segments, including the additions to links_to_add
+    omp_init_lock(&lock_new_segment);
 
     #pragma omp parallel for num_threads(num_threads)
     for (int seg_idx = 0 ; seg_idx < old_segments.size() ; seg_idx++){
@@ -1421,34 +1426,35 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         //actually merge the contigs
         if (thread_safe){    
             if (dead_end_left && dead_end_right){
+
+                omp_set_lock(&lock_new_segment);
                 string name = old_seg.name;
                 if (rename){
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }
 
-                #pragma omp critical
-                {
-                    new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_length(), old_seg.get_coverage()));
-                    old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
-                    old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
-                
-                    //add the links
-                    int idx_link = 0;
-                    for (pair<int,int> link : old_seg.links[0].first){
-                        links_to_add.insert({{{old_seg.ID, 0}, link}, old_seg.links[0].second[idx_link]});
-                        idx_link++;
-                    }
-                    idx_link = 0;
-                    for (pair<int,int> link : old_seg.links[1].first){
-                        links_to_add.insert({{{old_seg.ID, 1}, link}, old_seg.links[1].second[idx_link]});
-                        idx_link++;
-                    }
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_length(), old_seg.get_coverage()));
+                old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
+                old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
+            
+                //add the links
+                int idx_link = 0;
+                for (pair<int,int> link : old_seg.links[0].first){
+                    links_to_add.insert({{{old_seg.ID, 0}, link}, old_seg.links[0].second[idx_link]});
+                    idx_link++;
                 }
+                idx_link = 0;
+                for (pair<int,int> link : old_seg.links[1].first){
+                    links_to_add.insert({{{old_seg.ID, 1}, link}, old_seg.links[1].second[idx_link]});
+                    idx_link++;
+                }
+                omp_unset_lock(&lock_new_segment);
+                
             }
             else if (dead_end_left && !dead_end_right){
                 //create the new contig
-                string new_name = "l";
+                string new_name = "";
                 for (string name : all_names){
                     new_name += name + "_";
                 }
@@ -1466,31 +1472,31 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     idx++;
                 }
                 new_coverage = new_coverage/new_length;
+
+                omp_set_lock(&lock_new_segment);
                 string name = new_name;
                 if (rename){
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }
 
-                #pragma omp critical
-                {
-                    new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
-                    new_segments[new_segments.size()-1].seq = new_seq;
-                    old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
-                    old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
+                new_segments[new_segments.size()-1].seq = new_seq;
+                old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
+                old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
 
-                    //add the links
-                    int idx_link = 0;
-                    for (pair<int,int> link : old_seg.links[0].first){
-                        links_to_add.insert({{{old_seg.ID, 0}, link}, old_seg.links[0].second[idx_link]});
-                        idx_link++;
-                    }
-                    idx_link = 0;
-                    for (pair<int,int> link : old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].first){
-                        links_to_add.insert({{{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}, link}, old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].second[idx_link]});
-                        idx_link++;
-                    }
+                //add the links
+                int idx_link = 0;
+                for (pair<int,int> link : old_seg.links[0].first){
+                    links_to_add.insert({{{old_seg.ID, 0}, link}, old_seg.links[0].second[idx_link]});
+                    idx_link++;
                 }
+                idx_link = 0;
+                for (pair<int,int> link : old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].first){
+                    links_to_add.insert({{{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}, link}, old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].second[idx_link]});
+                    idx_link++;
+                }
+                omp_unset_lock(&lock_new_segment);
             }
             else if (!dead_end_left && dead_end_right){
             
@@ -1513,34 +1519,35 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     idx++;
                 }
                 new_coverage = new_coverage/new_length;
+
+                omp_set_lock(&lock_new_segment);  
                 string name = new_name;
                 if (rename){
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }
 
-                #pragma omp critical
-                {   
-                    new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
-                    new_segments[new_segments.size()-1].seq = new_seq;
-                    old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
-                    old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
+                new_segments[new_segments.size()-1].seq = new_seq;
+                old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
+                old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
 
-                    //add the links
-                    int idx_link = 0;
-                    for (pair<int,int> link : old_seg.links[1].first){
-                        links_to_add.insert({{{old_seg.ID, 1}, link}, old_seg.links[1].second[idx_link]});
-                        idx_link++;
-                    }
-                    idx_link = 0;
-                    for (pair<int,int> link : old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].first){
-                        links_to_add.insert({{{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}, link}, old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].second[idx_link]});
-                        idx_link++;
-                    }
+                //add the links
+                int idx_link = 0;
+                for (pair<int,int> link : old_seg.links[1].first){
+                    links_to_add.insert({{{old_seg.ID, 1}, link}, old_seg.links[1].second[idx_link]});
+                    idx_link++;
                 }
+                idx_link = 0;
+                for (pair<int,int> link : old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].first){
+                    links_to_add.insert({{{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}, link}, old_segments[other_end_of_merged_contig_ID].links[other_end_of_merged_contig_end].second[idx_link]});
+                    idx_link++;
+                }
+                omp_unset_lock(&lock_new_segment);
             }
         }
     }
+    omp_destroy_lock(&lock_new_segment);
 
     //some contigs are left: the ones that were in circular rings... go through them and add them
     for (Segment old_seg : old_segments){
@@ -1598,6 +1605,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_coverage = new_coverage/new_length;
                 string name = new_name;
                 if (rename){
+
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }

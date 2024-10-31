@@ -47,13 +47,20 @@ target_compile_options (aliceasm PRIVATE -march=x86-64)
 # target_link_libraries(fastg2gfa PRIVATE z)
 
 file(GLOB SOURCE "graphunzip.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp")
+target_compile_options (aliceasm PRIVATE -fopenmp)
+target_compile_options (aliceasm PRIVATE -lz)
 target_compile_options (aliceasm PRIVATE -g)
+target_compile_options (aliceasm PRIVATE -lm)
+target_compile_options (aliceasm PRIVATE -std=c++17)
+target_compile_options (aliceasm PRIVATE -O3)
+target_compile_options (aliceasm PRIVATE -march=x86-64)
 add_executable(graphunzip ${SOURCE})
 
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(aliceasm PRIVATE OpenMP::OpenMP_CXX)
+    target_link_libraries(graphunzip PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
 

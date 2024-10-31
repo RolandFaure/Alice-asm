@@ -402,25 +402,25 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
         #pragma omp critical
         {
             //open kmer file
-            std::ofstream out(central_kmers_file, std::ios::app);
-            std::ofstream out2(full_kmers_file, std::ios::app);
+            std::ofstream out_central(central_kmers_file, std::ios::app);
+            std::ofstream out_full(full_kmers_file, std::ios::app);
             for (auto it = kmers_to_output.begin(); it != kmers_to_output.end(); it++){
                 if (it->second.second || confirmed_kmers.find(it->first) == confirmed_kmers.end()){ //else, it means that the kmer was not confirmed at the point where it was introduced but has been confirmed since (probably on another thread), let the confirmed kmer be written by the thread that confirmed it
-                    auto position_central= -1;
-                    auto position_full = -1;
+                    unsigned long long position_central= 1;
+                    unsigned long long position_full = 1;
                     if (it->second.first.first != ""){
-                        position_central = out.tellp();
-                        out << it->second.first.first << "\n";
+                        position_central = out_central.tellp();
+                        out_central << it->second.first.first << "\n";
                     }
                     if (it->second.first.second != ""){
-                        position_full = out2.tellp();
-                        out2 << it->second.first.second << "\n";
+                        position_full = out_full.tellp();
+                        out_full << it->second.first.second << "\n";
                     }
                     kmers[it->first] = {position_central, position_full};
                 }
             }
-            out.close();
-            out2.close();
+            out_central.close();
+            out_full.close();
         }
     }
 }
@@ -619,11 +619,13 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                 string kmer = sequence.substr(i, km);
                 uint64_t hash_foward_kmer = hash_string(km, kmer, false);
                 if (mode == "index"){
+                    if (name == "1"){
+                        cout << "Marking k-mer " << kmer << " for indexing" << endl;
+                    }
                     central_kmers_needed.insert(hash_foward_kmer);
                 }
                 else{
-                    if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].first != -1){
-
+                    if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].first != 1){
                         //retrieve the central and full sequence from the kmers file
                         central_kmers_input.seekg(kmers[hash_foward_kmer].first);
                         std::getline(central_kmers_input, line2);
@@ -638,7 +640,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                         }
                     }
                     else{
-                        cout << "WARNING (code 743) missing kmer " << kmer << "\n";
+                        // cout << "WARNING (code 743) missing kmer " << kmer << "\n";
                         number_of_missing_kmers++;
                         expanded_sequence += string(length_of_central_kmers, 'N');
                     }
@@ -653,7 +655,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                     full_kmers_needed.insert(hash_foward_kmer);
                 }
                 else {
-                    if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].second != -1){
+                    if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].second != 1){
 
                         //retrieve the full sequence from the kmers file
                         full_kmers_input.seekg(kmers[hash_foward_kmer].second);
@@ -674,7 +676,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                         expanded_sequence = beginning_of_seq.substr(0, beginning_of_seq.size()-overlap) + expanded_sequence;
                     }
                     else{
-                        cout << "WARNING (code 744) missing kmer " << first_kmer << "\n";
+                        // cout << "WARNING (code 744) missing kmer " << first_kmer << "\n";
                         number_of_missing_kmers++;  
                     }
                 }
@@ -698,12 +700,12 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                     //retrieve the full and central sequence from the kmers file
                     
                     string end_of_seq;
-                    if (right_seq.find(name) != right_seq.end() && kmers[hash_foward_kmer].first != -1){ //if there was a right extension just take the central part
+                    if (right_seq.find(name) != right_seq.end() && kmers[hash_foward_kmer].first != 1){ //if there was a right extension just take the central part
                         central_kmers_input.seekg(kmers[hash_foward_kmer].first);
                         std::getline(central_kmers_input, line2);
                         end_of_seq = line2;
                     }
-                    else if (kmers[hash_foward_kmer].second != -1){
+                    else if (kmers[hash_foward_kmer].second != 1){
                         full_kmers_input.seekg(kmers[hash_foward_kmer].second);
                         std::getline(full_kmers_input, line2);
                         end_of_seq = line2;
@@ -723,7 +725,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
 
                 }
                 else{
-                    cout << "WARNING (code 745) missing kmer " << last_kmer << "\n";
+                    // cout << "WARNING (code 745) missing kmer " << last_kmer << "\n";
                     number_of_missing_kmers++;
                 }
             
