@@ -335,7 +335,9 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
         if (line[0] == '@' || line[0] == '>')
         {
             name = line.substr(1, line.size()-1);
-            nextline = true;
+            if ("false" != name.substr(0, 5)){ //false reads are present e.g. when performing multi-k assembly
+                nextline = true;
+            }
         }
         else if (nextline){
             // if (name.substr(0, name.find_first_of(' ')) != "SRR21295163.5251"){

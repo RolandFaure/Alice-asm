@@ -63,7 +63,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-    vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km)
+    vector<int> values_of_k = {31}; //size of the kmer used to build the graph (min >= km) // for now, only one value of k because we have a problem with coverage above this
     int round = 0; 
     for (auto kmer_len: values_of_k){
         // launch bcalm        
@@ -72,7 +72,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
+        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min " + std::to_string(min_abundance) +" -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm"+std::to_string(kmer_len)+" > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());
@@ -93,7 +93,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         system(convert_command.c_str());
         auto time_convert = std::chrono::high_resolution_clock::now();
 
-        // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
+        // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k) -> this does not really work yet
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
