@@ -72,7 +72,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min " + std::to_string(min_abundance) +" -nb-cores "+std::to_string(num_threads)
+        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm"+std::to_string(kmer_len)+" > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());
@@ -98,7 +98,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, -1, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance, num_threads);
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance, num_threads);
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs

@@ -619,9 +619,6 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                 string kmer = sequence.substr(i, km);
                 uint64_t hash_foward_kmer = hash_string(km, kmer, false);
                 if (mode == "index"){
-                    if (name == "1"){
-                        cout << "Marking k-mer " << kmer << " for indexing" << endl;
-                    }
                     central_kmers_needed.insert(hash_foward_kmer);
                 }
                 else{

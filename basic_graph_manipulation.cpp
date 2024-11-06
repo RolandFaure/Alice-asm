@@ -532,7 +532,16 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
 int explore_neighborhood(string contig, int endOfContig, unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> &linked, unordered_map<string, float>& coverage, unordered_map<string, int>& length_of_contigs, int k, int length_left, double original_coverage, double big_coverage, unordered_map<string, pair<bool, bool>> &not_overcovered){
     
     if (length_left <= 0){
-        return 2;
+
+        if (coverage[contig] > big_coverage){
+            return 1;
+        }
+        else if (endOfContig == 1 && linked[contig].first.size() == 0 || endOfContig == 0 && linked[contig].second.size() == 0){
+            return 0;
+        }
+        else{
+            return 2;
+        }
     }
 
     bool overcovered_in_neighborhood = false;
@@ -714,13 +723,138 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
     unordered_set<string> to_keep; //kept contigs are the one with a coverage above abundance_min and their necessary neighbors for the contiguity
 
     //iterative cleaning of the graph
-    int number_of_edits = 1;
+
     unordered_map<string, pair<bool, bool>> not_overcovered; //iteratively mark the contigs that are not overcovered left or right
     not_overcovered.reserve(linked.size());
     omp_lock_t lock_contigs_to_keep;
     omp_init_lock(&lock_contigs_to_keep);
     omp_lock_t lock_not_overcovered_contigs;
     omp_init_lock(&lock_not_overcovered_contigs);
+
+    //decide which contig we really want to keep
+    #pragma omp parallel for num_threads(num_threads)
+    for (int c = 0 ; c < list_of_contigs.size() ; c++){
+
+        string contig = list_of_contigs[c];
+
+        //check if this is a badly covered bubble
+        bool bubble = false;
+        if (linked[contig].first.size() == 1 && linked[contig].second.size() == 1){
+
+            string neighbor_left = linked[contig].first[0].first;
+            char end_of_neighbor_left = linked[contig].first[0].second;
+            string neighbor_right = linked[contig].second[0].first;
+            char end_of_neighbor_right = linked[contig].second[0].second;
+
+            string other_neighbor_of_contig_left = "";
+            if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2){
+                for (auto l: linked[neighbor_left].first){
+                    if (l.first != contig){
+                        other_neighbor_of_contig_left = l.first;
+                    }
+                }
+            }
+            else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2){
+                for (auto l: linked[neighbor_left].second){
+                    if (l.first != contig){
+                        other_neighbor_of_contig_left = l.first;
+                    }
+                }
+            }
+
+            string other_neighbor_of_contig_right = "";
+            if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2){
+                for (auto l: linked[neighbor_right].first){
+                    if (l.first != contig){
+                        other_neighbor_of_contig_right = l.first;
+                    }
+                }
+            }
+            else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2){
+                for (auto l: linked[neighbor_right].second){
+                    if (l.first != contig){
+                        other_neighbor_of_contig_right = l.first;
+                    }
+                }
+            }
+
+            if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
+                bubble = true;
+            }
+    
+        }
+
+        if (bubble && ((coverage[contig] < abundance_min || abundance_min == -1) && length_of_contigs[contig] < min_length)) //pop it if 1) this is a bubble and 2) coverage less than 5x or the contig is shorter than min_length
+        {
+            //do nothing, and most importantly, do not add the contig to the to_keep set
+        }
+        else if (coverage[contig] > abundance_min) {//if contiguity mode is on, do not take contigs that have in all their neighborhood contigs with 20x their coverage (corresponds to poorly covered side of a bubble)
+            
+            int size_of_neighborhood = 7*k;
+            // cout << "launching..\n";
+            int overcovered_right = 2;
+            if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].second){
+                double big_coverage = 20*coverage[contig];
+                if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
+                    big_coverage = 3*coverage[contig];
+                }
+                overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
+            }
+            if (overcovered_right == 2){
+                omp_set_lock(&lock_not_overcovered_contigs);
+                
+                if (not_overcovered.find(contig) != not_overcovered.end()){
+                    not_overcovered[contig].first = false;
+                    not_overcovered[contig].second = false;
+                }
+                not_overcovered[contig].second = true;
+
+                omp_unset_lock(&lock_not_overcovered_contigs);
+            }
+            int overcovered_left = 2;
+            if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
+                double big_coverage = 20*coverage[contig];
+                if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
+                    big_coverage = 3*coverage[contig];
+                }
+                overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
+            }
+            if (overcovered_left == 2){
+                omp_set_lock(&lock_not_overcovered_contigs);
+                if (not_overcovered.find(contig) != not_overcovered.end()){
+                    not_overcovered[contig].first = false;
+                    not_overcovered[contig].second = false;
+                }
+                not_overcovered[contig].first = true;
+                omp_unset_lock(&lock_not_overcovered_contigs);
+            }
+
+            //now decide if the contig is to be kept
+            if (overcovered_left == 1 && overcovered_right == 1){ //overcovered on both sides, if contiguity mode is on pop it
+                if (!contiguity){
+                    omp_set_lock(&lock_contigs_to_keep);
+                    to_keep.insert(contig);
+                    omp_unset_lock(&lock_contigs_to_keep);
+                }
+            }
+            else if (overcovered_left == 0 && overcovered_right == 0 && length_of_contigs[contig] > min_length){ //if the contig has two dead ends, keep it under conditiosn that it is long enough
+                omp_set_lock(&lock_contigs_to_keep);
+                to_keep.insert(contig);
+                omp_unset_lock(&lock_contigs_to_keep);
+            }
+            else if (overcovered_left == 2 || overcovered_right == 2){ //if the contig is not overcovered on one side, keep it (and it also passed the abundance_min threshold)
+                omp_set_lock(&lock_contigs_to_keep);
+                to_keep.insert(contig);
+                omp_unset_lock(&lock_contigs_to_keep);
+            }
+            else if (overcovered_left == 1 && overcovered_right == 0 || overcovered_left == 0 && overcovered_right == 1){ //this means that this is a tip
+                //do nothing, and most importantly, do not add the contig to the to_keep set
+            }
+        }
+    }
+
+    //now add contigs that are necessary for the contiguity
+    int number_of_edits = 1;
     while (number_of_edits > 0){
         number_of_edits = 0;
 
@@ -729,131 +863,9 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
 
             string contig = list_of_contigs[c];
 
-            //check if this is a badly covered bubble
-            bool bubble = false;
-            if (linked[contig].first.size() == 1 && linked[contig].second.size() == 1){
-
-                string neighbor_left = linked[contig].first[0].first;
-                char end_of_neighbor_left = linked[contig].first[0].second;
-                string neighbor_right = linked[contig].second[0].first;
-                char end_of_neighbor_right = linked[contig].second[0].second;
-
-                string other_neighbor_of_contig_left = "";
-                if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2){
-                    for (auto l: linked[neighbor_left].first){
-                        if (l.first != contig){
-                            other_neighbor_of_contig_left = l.first;
-                        }
-                    }
-                }
-                else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2){
-                    for (auto l: linked[neighbor_left].second){
-                        if (l.first != contig){
-                            other_neighbor_of_contig_left = l.first;
-                        }
-                    }
-                }
-
-                string other_neighbor_of_contig_right = "";
-                if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2){
-                    for (auto l: linked[neighbor_right].first){
-                        if (l.first != contig){
-                            other_neighbor_of_contig_right = l.first;
-                        }
-                    }
-                }
-                else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2){
-                    for (auto l: linked[neighbor_right].second){
-                        if (l.first != contig){
-                            other_neighbor_of_contig_right = l.first;
-                        }
-                    }
-                }
-
-                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
-                    bubble = true;
-                }
-     
-            }
-
-            if (bubble && ((coverage[contig] < abundance_min || abundance_min == -1) && length_of_contigs[contig] < min_length)) //pop it if 1) this is a bubble and 2) coverage less than 5x or the contig is shorter than min_length
-            {
-                //do nothing, and most importantly, do not add the contig to the to_keep set
-            }
-            else if (contiguity) {//if contiguity mode is on, do not take contigs that have in all their neighborhood contigs with 20x their coverage (corresponds to poorly covered side of a bubble)
-                
-                int size_of_neighborhood = 5*k;
-                // cout << "launching..\n";
-                int overcovered_right = 2;
-                if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].second){
-                    double big_coverage = 20*coverage[contig];
-                    if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
-                        big_coverage = 3*coverage[contig];
-                    }
-                    overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
-                }
-                if (overcovered_right == 2){
-                    omp_set_lock(&lock_not_overcovered_contigs);
-                    
-                    if (not_overcovered.find(contig) != not_overcovered.end()){
-                        not_overcovered[contig].first = false;
-                        not_overcovered[contig].second = false;
-                    }
-                    not_overcovered[contig].second = true;
-
-                    omp_unset_lock(&lock_not_overcovered_contigs);
-                }
-                int overcovered_left = 2;
-                if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
-                    double big_coverage = 20*coverage[contig];
-                    if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
-                        big_coverage = 3*coverage[contig];
-                    }
-                    overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
-                }
-                if (overcovered_left == 2){
-                    omp_set_lock(&lock_not_overcovered_contigs);
-                    if (not_overcovered.find(contig) != not_overcovered.end()){
-                        not_overcovered[contig].first = false;
-                        not_overcovered[contig].second = false;
-                    }
-                    not_overcovered[contig].first = true;
-                    omp_unset_lock(&lock_not_overcovered_contigs);
-                }
-
-                if (overcovered_left == 2 || overcovered_right == 2){ //if the contig is not overcovered on one side, keep it
-                    omp_set_lock(&lock_contigs_to_keep);
-                    to_keep.insert(contig);
-                    omp_unset_lock(&lock_contigs_to_keep);
-                }
-                else if (overcovered_left == 0 && overcovered_right == 0 && ((coverage[contig] > abundance_min && abundance_min != -1) || length_of_contigs[contig] > min_length)){ //if the contig has two dead ends, keep it under conditiosn
-                    omp_set_lock(&lock_contigs_to_keep);
-                    to_keep.insert(contig);
-                    omp_unset_lock(&lock_contigs_to_keep);
-                }
-                // else{
-                //     cout << "contig " << contig << " has overcovered neighborhood " << count << " " << linked.size() << "\n";
-                //     // exit(1);
-                // }
-            }
-            else{
-                //check that this is not a complicated tip: dead end on one side and overcovered on the other
-                double big_coverage = 20*coverage[contig];
-                if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
-                    big_coverage = 3*coverage[contig];
-                }
-                int overcovered_right = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, 5*k, coverage[contig], big_coverage, not_overcovered);
-                int overcovered_left = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, 5*k, coverage[contig], big_coverage, not_overcovered);
-
-                if (!(overcovered_left == 0 && overcovered_right == 1 || overcovered_left == 1 && overcovered_right == 0)){
-                    omp_set_lock(&lock_contigs_to_keep);
-                    to_keep.insert(contig);
-                    omp_unset_lock(&lock_contigs_to_keep);
-                }
-            }
-
             if (to_keep.find(contig) != to_keep.end()){
-                //make sure the contig has at least one neighbor left and right (if not, take the one with the highest coverage)
+                //make sure the contig has at least one neighbor left and right (if not, take the one with the highest coverage) 
+                //this is the only way to keep contigs that are below abundance_min
                 float best_coverage = 0;
                 string best_contig = "";
                 for (auto l: linked[contig].second){
