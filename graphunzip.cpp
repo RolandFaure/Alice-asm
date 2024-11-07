@@ -1189,10 +1189,16 @@ void duplicate_contigs(vector<Segment> &segments, float min_relative_coverage, f
                         smallest_length = segments[s.links[end].first[n].first].get_length();
                     }
                 }
-                //don't duplicate because of a very small bubble
-                if (highest_coverage*min_relative_coverage > lowest_coverage || smallest_length < relative_lengths_difference*s.get_length()){ 
+                //don't duplicate because of bubble with very unbalanced coverage, it kind of looks like an error
+                if (highest_coverage*min_relative_coverage > lowest_coverage){
                     duplicable = false;
                 }
+                //if the bubble is very small, only duplicate if the coverages are really solid
+                if (smallest_length < relative_lengths_difference*s.get_length()){
+                    if (lowest_coverage < 2*min_relative_coverage*highest_coverage || lowest_coverage < 2*min_absolute_coverage){
+                        duplicable = false;
+                    }
+                } 
                 //check that the coverage are coherent with a duplication
                 double total_coverage = 0;
                 double max_coverage = 0;
@@ -1210,7 +1216,7 @@ void duplicate_contigs(vector<Segment> &segments, float min_relative_coverage, f
                 
 
                 if (duplicable){
-                    // number_of_changes++;
+                    number_of_changes++;
                     // cout << "I should duplicate " << s.name << " at end " << end << endl;
 
                     //create all the new contigs
@@ -1259,7 +1265,6 @@ void duplicate_contigs(vector<Segment> &segments, float min_relative_coverage, f
             index_segment++;
         }
     }
-
 }
 
 /*
@@ -1382,9 +1387,19 @@ int main(int argc, char *argv[])
     // output_graph("out_alice/tmp/after_dup.gfa", gfa_input, merged_segments);
 
     if (!contiguity){
-        // cout << "Outputting the graph" << endl;
-        output_graph(gfa_output, gfa_input, merged_segments);
-        // cout << "Graph outputted" << endl;
+        string gfa_output_tmp = gfa_output + "_tmp.gfa";
+        output_graph(gfa_output_tmp, gfa_input, merged_segments);
+
+        //now merge the contigs
+        segments.clear();
+        segment_IDs.clear();
+        load_GFA(gfa_output_tmp, segments, segment_IDs);
+        vector<Segment> new_merged_segments;
+        merge_adjacent_contigs(segments, new_merged_segments, gfa_output_tmp, rename, threads);
+        output_graph(gfa_output, gfa_output_tmp, new_merged_segments);
+
+        //remove the temporary files
+        remove(gfa_output_tmp.c_str());
     }
     else{
         string gfa_output_tmp = gfa_output + "_tmp.gfa";

@@ -868,13 +868,38 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                 //this is the only way to keep contigs that are below abundance_min
                 float best_coverage = 0;
                 string best_contig = "";
+                bool at_least_one_neighbor = false;
                 for (auto l: linked[contig].second){
                     if (coverage[l.first] > best_coverage){
                         best_coverage = coverage[l.first];
                         best_contig = l.first;
                     }
+                    if (to_keep.find(l.first) != to_keep.end()){
+                        at_least_one_neighbor = true;
+                    }
                 }
-                if (best_contig != ""){
+                if (best_contig != "" && !at_least_one_neighbor){
+                    if (to_keep.find(best_contig) == to_keep.end()){
+                        omp_set_lock(&lock_contigs_to_keep);
+                        to_keep.insert(best_contig);
+                        omp_unset_lock(&lock_contigs_to_keep);
+                        number_of_edits++;
+                    }
+                }
+
+                best_coverage = 0;
+                best_contig = "";
+                at_least_one_neighbor = false;
+                for (auto l: linked[contig].first){
+                    if (coverage[l.first] > best_coverage){
+                        best_coverage = coverage[l.first];
+                        best_contig = l.first;
+                    }
+                    if (to_keep.find(l.first) != to_keep.end()){
+                        at_least_one_neighbor = true;
+                    }
+                }
+                if (best_contig != "" && !at_least_one_neighbor){
                     if (to_keep.find(best_contig) == to_keep.end()){
                         omp_set_lock(&lock_contigs_to_keep);
                         to_keep.insert(best_contig);

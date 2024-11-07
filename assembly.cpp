@@ -194,7 +194,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     cout << "    - Untangling the graph with GraphUnzip [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
-    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 1 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
+    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + std::to_string(num_threads) + " 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
     cout << "    - Command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){

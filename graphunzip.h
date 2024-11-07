@@ -122,5 +122,7 @@
 // void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename);
 // void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 
+void duplicate_contigs(std::vector<Segment> &segments, float min_relative_coverage, float min_absolute_coverage, float relative_lengths_difference);
+
 
 #endif
