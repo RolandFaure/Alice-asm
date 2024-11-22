@@ -36,8 +36,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.19";
-string date = "2024-11-07";
+string version = "0.6.20";
+string date = "2024-11-22";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -290,7 +290,7 @@ int main(int argc, char** argv)
     
 
     string path_src = argv[0];
-    path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /reduce
+    path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /aliceasm
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
 
     std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
@@ -329,8 +329,7 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
-        assembly_bcalm(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
-
+        assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);

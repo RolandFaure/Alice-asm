@@ -742,8 +742,8 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
             cout << "WARNING for developers: Number of missing kmers " << number_of_missing_kmers << endl;
     }
     else{
-        cout << "Number of central kmers needed " << central_kmers_needed.size() << endl;
-        cout << "Number of full kmers needed " <<  full_kmers_needed.size() << endl;
+        // cout << "Number of central kmers needed " << central_kmers_needed.size() << endl;
+        // cout << "Number of full kmers needed " <<  full_kmers_needed.size() << endl;
     }
     out.close();
     central_kmers_input.close();

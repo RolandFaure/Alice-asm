@@ -788,7 +788,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
         {
             //do nothing, and most importantly, do not add the contig to the to_keep set
         }
-        else if (coverage[contig] > abundance_min) {//if contiguity mode is on, do not take contigs that have in all their neighborhood contigs with 20x their coverage (corresponds to poorly covered side of a bubble)
+        else if (coverage[contig] > abundance_min) {
             
             int size_of_neighborhood = 7*k;
             // cout << "launching..\n";
@@ -1252,6 +1252,147 @@ void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa
             out << line << "\n";
         }
     }
+}
+
+/**
+ * @brief simple function to trim tips and isolated nodes with a coverage below min_coverage and a length below min_length
+ * 
+ * @param gfa_in 
+ * @param min_coverage 
+ * @param min_length 
+ * @param gfa_out 
+ */
+void trim_tips_and_isolated_contigs(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out){
+    //load the graph
+    ifstream input(gfa_in);
+    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
+    unordered_map<string, long int> pos_of_contig_seq_in_file;
+    unordered_map<string, float> coverage;
+    unordered_map<string, int> length_of_contigs;
+
+    string line;
+    long int pos = 0;
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            string depth_string = "  ";
+            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
+                string nds;
+                ss >> nds;
+                depth_string = nds;
+            }
+
+            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
+                cerr << "ERROR: no depth found for contig " << name << "\n";
+                exit(1);
+            }
+            float depth = std::stof(depth_string.substr(5, depth_string.size()-5));
+            coverage[name] = depth;
+            pos_of_contig_seq_in_file[name] = pos;
+            length_of_contigs[name] = sequence.size();
+
+            if (linked.find(name) == linked.end()){
+                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            int i = 0;
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            if (linked.find(name1) == linked.end() || linked.find(name2) == linked.end()){
+                cerr << "ERROR: contig not found in linked in pop_bubbles: ";
+                cerr << name1 << " " << name2 << "\n";
+                exit(1);
+            }
+
+            char or1 = (orientation1 == "+" ? 1 : 0);
+            char or2 = (orientation2 == "+" ? 0 : 1);
+            auto neighbor = make_pair(name2, or2);
+            if (orientation1 == "+"){
+                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
+                    linked[name1].second.push_back(neighbor);
+                }
+            }
+            else{
+                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
+                    linked[name1].first.push_back(neighbor);
+                }
+            }
+
+            neighbor = make_pair(name1, or1);
+            if (orientation2 == "+"){
+                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
+                    linked[name2].first.push_back(neighbor);
+                }
+            }
+            else{
+                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
+                    linked[name2].second.push_back(neighbor);
+                }
+            }
+        }
+        pos += line.size() + 1;
+    }
+    input.close();
+    
+    //now trim the tips and isolated contigs with a coverage below min_coverage and a length below min_length
+    std::set<string> contigs_to_remove;
+    for (auto c: linked){
+        string contig_name = c.first;
+        if (coverage[contig_name] < min_coverage && length_of_contigs[contig_name] < min_length){
+            if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
+                contigs_to_remove.insert(contig_name);
+            }
+        }
+    }
+
+    //now write the gfa file without the contigs to remove
+    input.open(gfa_in);
+    ofstream out(gfa_out);
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            if (contigs_to_remove.find(name) == contigs_to_remove.end()){
+                out << line << "\n";
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            int i = 0;
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            if (contigs_to_remove.find(name1) == contigs_to_remove.end() && contigs_to_remove.find(name2) == contigs_to_remove.end()){
+                out << line << "\n";
+            }
+        }
+        else{
+            out << line << "\n";
+        }
+    }
+
 }
 
 void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, int> &segment_IDs){

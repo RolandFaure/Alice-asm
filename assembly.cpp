@@ -9,6 +9,7 @@
 #include <sstream>
 #include <filesystem>
 #include <chrono>
+#include <omp.h>
 
 using std::string;
 using std::cerr;
@@ -45,6 +46,170 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
 }
 
 /**
+ * @brief Recursive function to explore the neighborood of a contig
+ * 
+ * @param sequences 
+ * @param links 
+ * @param end 
+ * @param k 
+ * @return vector<string> 
+ */
+vector<string> recursively_list_all_k_mers_starting_from_this_unitig(unordered_map<string, string> &sequences, unordered_map<string, std::vector< vector<std::pair<string, bool>>>> links, string contig, int end, int k){
+    //recursively list all the kmers starting from this unitig
+    if (k == 0 || links.find(contig) == links.end()){
+        return {};
+    }
+
+    vector<string> list_of_kmers;
+    for (auto n: links[contig][end]){ //n is the neighbor (string, end)
+        if (sequences[n.first].size() >= k){
+            if (n.second == 0){
+                list_of_kmers.push_back(sequences[n.first].substr(0, k));
+            }
+            else{
+                string seq = sequences[n.first].substr(sequences[n.first].size() - k, k);
+                list_of_kmers.push_back(reverse_complement(seq));
+            }
+        }
+        else{
+            string first_bases;
+            if (n.second == 0){
+                first_bases = sequences[n.first];
+            }
+            else{
+                first_bases = reverse_complement(sequences[n.first]);
+            }
+            vector<string> kmers = recursively_list_all_k_mers_starting_from_this_unitig(sequences, links, n.first, 1-n.second, k - sequences[n.first].size());
+            for (string kmer: kmers){
+                list_of_kmers.push_back(first_bases+kmer);
+            }
+        }
+    }
+    return list_of_kmers;
+}
+
+/**
+ * @brief Output exactly num_copies times all k-mers of the unitigs in the reads_fa file
+ * 
+ * @param unitig_gfa graph of the unitigs (built with a smaller k)
+ * @param reads_fa 
+ * @param k 
+ * @param num_copies
+ * @param bcalm path to the bcalm executable
+ * @param num_threads
+ */
+void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int k, int num_copies, string bcalm, int num_threads){
+
+    //load all the links of the unitigs
+    ifstream gfa(unitig_gfa);
+    unordered_map<string, std::vector< vector<std::pair<string, bool>>>> links; //associates each contig to a set of its neighbors
+    unordered_map<string, string> sequences; //associates each contig to its sequence  
+    vector<string> contigs;
+    string line;
+    while (getline(gfa, line)){
+        string nothing;
+        if (line[0] == 'S'){
+            string name;
+            string seq;
+            std::stringstream ss(line);
+            ss >> nothing >> name >> seq;
+            links[name] = {{}, {}};
+            sequences[name] = seq;
+            contigs.push_back(name);
+        }
+        if (line[0] == 'L'){
+            string contig1;
+            string contig2;
+            string orientation1;
+            string orientation2;
+            std::stringstream ss(line);
+            ss >> nothing >> contig1 >> orientation1 >> contig2 >> orientation2;
+            int end1 = (int)(orientation1 == "+");
+            int end2 = (int)(orientation2 == "-");
+            links[contig1][end1].push_back({contig2, end2});
+            links[contig2][end2].push_back({contig1, end1});
+        }
+    }
+    gfa.close();
+
+    //explore the neighborhood of all unitigs so that all kmers are outputted
+    string tmp_fa = reads_fa + ".tmp";
+    ofstream out(tmp_fa);
+    string nothing;
+    //define a lock for the output
+    omp_lock_t lock;
+    omp_init_lock(&lock);
+    #pragma omp parallel for num_threads(num_threads)
+    for (auto contig_number = 0 ; contig_number < contigs.size() ; contig_number++){
+        string name = contigs[contig_number];
+        string seq = sequences[name];
+
+        int length_suffix = std::min(k-1, (int)seq.size());
+        string suffix = seq.substr(seq.size() - length_suffix, length_suffix);
+        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig(sequences, links, name, 1, k - 1);
+        
+        string rc_seq = reverse_complement(seq);
+        string rc_suffix = rc_seq.substr(rc_seq.size() - length_suffix, length_suffix);
+        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig(sequences, links, name, 0, k - 1);
+
+        omp_set_lock(&lock);
+        out << ">" << name << "\n";
+        out << seq << "\n";
+        int num_ext = 0;
+        for (string ext: extensions){
+            out << ">" << name << "_ext" << num_ext << "\n";
+            out << suffix + ext << "\n";
+            num_ext++;
+        }
+        out << ">" << name << "_rc\n";
+        out << rc_seq << "\n";
+        num_ext = 0;
+        for (string ext: rc_extensions){
+            out << ">" << name << "_rc_ext" << num_ext << "\n";
+            out << rc_suffix + ext << "\n";
+            num_ext++;
+        }
+        omp_unset_lock(&lock);
+    }
+
+    //now, to make sure all kmers are present only once, we run bcalm
+    string bcalm_command = bcalm + " -in " + tmp_fa + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out "+reads_fa+ " -nb-cores " + std::to_string(num_threads) +" > "+reads_fa+".log 2>&1";
+    auto bcalm_ok = system(bcalm_command.c_str());
+    if (bcalm_ok != 0){
+        cerr << "ERROR: bcalm failed in output_unitigs_for_next_k\n";
+        cout << bcalm_command << endl;
+        exit(1);
+    }
+
+    //duplicate the bcalm output num_copies times
+    ifstream in(reads_fa);
+    ofstream out2(tmp_fa);
+    for (int i = 0 ; i < num_copies ; i++){
+        while (getline(in, line)){
+            if (line[0] == '>'){
+                out2 << line << "_dup" << i << "\n";
+            }
+            else{
+                out2 << line << "\n";
+            }
+        }
+    }
+    in.close();
+    out2.close();
+
+    //move the tmp file to the final file
+    string command = "mv " + tmp_fa + " " + reads_fa;
+
+    //remove the tmp file
+    string remove_tmp = "rm " + tmp_fa;
+    system(remove_tmp.c_str());
+
+    //remove the log
+    string remove_log = "rm " + reads_fa + ".log";
+    system(remove_log.c_str());
+}
+
+/**
  * @brief Assemble the read file with k-iterative bcalm + graphunzip and output the final assembly in final_file
  * 
  * @param read_file Input read file
@@ -56,15 +221,19 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
+void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
     
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-    vector<int> values_of_k = {31}; //size of the kmer used to build the graph (min >= km) // for now, only one value of k because we have a problem with coverage above this
+    vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km) // for now, only one value of k because we have a problem with coverage above this
     int round = 0; 
+    string file_with_unitigs_from_past_k_and_reads = read_file+".with_unitigs_from_previous_k.fa";
+    //copy the reads to the file with unitigs
+    string command_copy = "cp " + read_file + " " + file_with_unitigs_from_past_k_and_reads;
+    system(command_copy.c_str());
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
@@ -72,7 +241,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-        string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
+        string bcalm_command = path_to_bcalm + " -in " + file_with_unitigs_from_past_k_and_reads + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm"+std::to_string(kmer_len)+" > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());
@@ -98,7 +267,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*min_abundance, num_threads);
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*2, num_threads); //round*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
@@ -106,7 +275,7 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         ltm2 = localtime(&now2);
         cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-        if (true || round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages BUT gfatools does not seem to work well...
+        if (true || round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages //BUT gfatools does not seem to work well so do this every time...
             unordered_map<string, int> segments_IDs;
             vector<Segment> segments;
             vector<Segment> merged_segments;
@@ -121,33 +290,17 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         // }
         auto time_merge = std::chrono::high_resolution_clock::now();
 
-        // merge_adjacent_contigs_BCALM(shaved_gfa, merged_gfa, kmer_len, path_to_bcalm, path_convertToGFA, tmp_folder);
-
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
-        cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
-        cout << "       - Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_bcalm - time_start).count() << "s, convert " << std::chrono::duration_cast<std::chrono::seconds>(time_convert - time_bcalm).count() << "s, shave " << std::chrono::duration_cast<std::chrono::seconds>(time_shave - time_convert).count() << "s, merge " << std::chrono::duration_cast<std::chrono::seconds>(time_merge - time_shave).count() << "s" << endl;
+        if (round < values_of_k.size()-1){
+            cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
+            cout << "       - Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_bcalm - time_start).count() << "s, convert " << std::chrono::duration_cast<std::chrono::seconds>(time_convert - time_bcalm).count() << "s, shave " << std::chrono::duration_cast<std::chrono::seconds>(time_shave - time_convert).count() << "s, merge " << std::chrono::duration_cast<std::chrono::seconds>(time_merge - time_shave).count() << "s" << endl;
         
-        //open both compressed_file and bcalm.unitigs.shaved.merged.unzipped.gfa
-        ofstream input_compressed(read_file, std::ios_base::app);
-        ifstream input_graph(merged_gfa);
-        string line;
-        while (std::getline(input_graph, line))
-        {
-            if (line[0] == 'S')
-            {
-                string name;
-                string dont_care;
-                string sequence;
-                std::stringstream ss(line);
-                ss >> dont_care >> name >> sequence;
-                for (int i = 0 ; i < min_abundance ; i++){
-                    input_compressed << ">false_read_" << name << "\n";
-                    input_compressed << sequence << "\n";
-                }
-            }
+            string file_with_higher_kmers = read_file + ".higher_k.fa";
+            output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, path_to_bcalm, num_threads);
+            //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
+            string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
         }
-        input_compressed.close();
-        input_graph.close();
+
         round++;
     }
 
@@ -194,7 +347,8 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
     cout << "    - Untangling the graph with GraphUnzip [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
-    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + std::to_string(num_threads) + " 1 " + final_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
+    string unzipped_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gfa";
+    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + std::to_string(num_threads) + " 0 " + unzipped_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
     cout << "    - Command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
@@ -202,6 +356,18 @@ void assembly_bcalm(std::string read_file, int min_abundance, bool contiguity, i
         exit(1);
     }
     auto time_unzip = std::chrono::high_resolution_clock::now();
+
+    //trim the tips and isolated contigs that result from the unzipping of the graph. Then merge the adjacent contigs
+    string tmp_gfa = tmp_folder+"tmp.gfa";
+    trim_tips_and_isolated_contigs(unzipped_gfa, min_abundance, 2*size_longest_read, tmp_gfa);
+    unordered_map<string, int> segments_IDs;
+    vector<Segment> segments;
+    vector<Segment> merged_segments;
+    load_GFA(tmp_gfa, segments, segments_IDs);
+    merge_adjacent_contigs(segments, merged_segments, tmp_gfa, true, num_threads); //the last bool is to rename the contigs
+    output_graph(final_gfa, tmp_gfa, merged_segments);
+    auto time_trim = std::chrono::high_resolution_clock::now();
+
 
     now2 = time(0);
     ltm2 = localtime(&now2);

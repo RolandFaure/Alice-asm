@@ -1060,6 +1060,16 @@ void add_unrepresented_paths(vector<Segment> &old_segments, vector<Segment> &new
         // }
         // cout << endl;
 
+        //compute the coverage of the path
+        double coverage = old_segments[path[0].first].get_coverage();
+        for (pair<int,bool> contig : path){
+            coverage = std::min(coverage, old_segments[contig.first].get_coverage());
+        }
+        //if the coverage is too low, we don't add the path
+        if (coverage < min_coverage){
+            continue;
+        }
+
         for (int contig = 0 ; contig < path.size() - 1 ; contig++){
 
             int old_ID1 = path[contig].first;
@@ -1193,11 +1203,9 @@ void duplicate_contigs(vector<Segment> &segments, float min_relative_coverage, f
                 if (highest_coverage*min_relative_coverage > lowest_coverage){
                     duplicable = false;
                 }
-                //if the bubble is very small, only duplicate if the coverages are really solid
+                //if the bubble is very small, dont duplicate
                 if (smallest_length < relative_lengths_difference*s.get_length()){
-                    if (lowest_coverage < 2*min_relative_coverage*highest_coverage || lowest_coverage < 2*min_absolute_coverage){
-                        duplicable = false;
-                    }
+                    duplicable = false;
                 } 
                 //check that the coverage are coherent with a duplication
                 double total_coverage = 0;
@@ -1304,7 +1312,6 @@ void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments
 int main(int argc, char *argv[])
 {
 
-
     //HS_GraphUnzip <gfa_input> <gaf_file> <threads> <gfa_output> <exhaustive>
     if (argc != 9){
         //if -h or --help is passed as an argument, print the help
@@ -1367,7 +1374,7 @@ int main(int argc, char *argv[])
     // cout << "Non represented paths added" << endl;
 
     //output the graph
-    // output_graph("out_alice/tmp/before_merge.gfa", gfa_input, unzipped_segments);
+    // output_graph("before_merge.gfa", gfa_input, unzipped_segments);
     // exit(0);
 
 
@@ -1380,7 +1387,7 @@ int main(int argc, char *argv[])
 
     // output_graph("out_alice/tmp/before_dup.gfa", gfa_input, merged_segments);
 
-    // cout << "Duplicating contigs" << endl;
+    // cout << "NOT Duplicating contigs" << endl;
     duplicate_contigs(merged_segments, 0.1, 5, 0.2);
     // cout << "Contigs duplicated" << endl;
 
