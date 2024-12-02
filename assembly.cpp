@@ -48,41 +48,30 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
 /**
  * @brief Recursive function to explore the neighborood of a contig
  * 
+ * @param prefix sequence to append to the beginning of returned kmers
  * @param sequences 
  * @param links 
  * @param end 
  * @param k 
+ * @param recursive_limit to limit the depth of recursion if some contigs have length 0
  * @return vector<string> 
  */
-vector<string> recursively_list_all_k_mers_starting_from_this_unitig(unordered_map<string, string> &sequences, unordered_map<string, std::vector< vector<std::pair<string, bool>>>> links, string contig, int end, int k){
+vector<string> recursively_list_all_k_mers_starting_from_this_unitig(string prefix, int overlap_in, unordered_map<string, string> &sequences, unordered_map<string, std::vector< vector<std::tuple<string, bool,int>>>> &links, string contig, int end, int k, int recursive_limit){
     //recursively list all the kmers starting from this unitig
-    if (k == 0 || links.find(contig) == links.end()){
-        return {};
+    if (sequences[contig].size() > k+overlap_in){ //then finish the k-mer here
+        return{prefix+sequences[contig].substr(overlap_in, k)};
     }
+    else if (links.find(contig) == links.end() || links[contig][end].size() == 0 || recursive_limit <= 0) {
+        return {prefix+sequences[contig].substr(overlap_in, sequences[contig].size()-overlap_in)};
+    }
+    prefix += sequences[contig].substr(overlap_in, sequences[contig].size()-overlap_in);
+    int new_k = k-sequences[contig].size()+overlap_in;
 
     vector<string> list_of_kmers;
-    for (auto n: links[contig][end]){ //n is the neighbor (string, end)
-        if (sequences[n.first].size() >= k){
-            if (n.second == 0){
-                list_of_kmers.push_back(sequences[n.first].substr(0, k));
-            }
-            else{
-                string seq = sequences[n.first].substr(sequences[n.first].size() - k, k);
-                list_of_kmers.push_back(reverse_complement(seq));
-            }
-        }
-        else{
-            string first_bases;
-            if (n.second == 0){
-                first_bases = sequences[n.first];
-            }
-            else{
-                first_bases = reverse_complement(sequences[n.first]);
-            }
-            vector<string> kmers = recursively_list_all_k_mers_starting_from_this_unitig(sequences, links, n.first, 1-n.second, k - sequences[n.first].size());
-            for (string kmer: kmers){
-                list_of_kmers.push_back(first_bases+kmer);
-            }
+    for (auto n: links[contig][end]){ //n is the neighbor (string, end,overlap)
+        vector<string> kmers = recursively_list_all_k_mers_starting_from_this_unitig(prefix, std::get<2>(n), sequences, links, std::get<0>(n), 1-std::get<1>(n), new_k, recursive_limit-1);
+        for (string kmer: kmers){
+            list_of_kmers.push_back(kmer);
         }
     }
     return list_of_kmers;
@@ -102,7 +91,7 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
 
     //load all the links of the unitigs
     ifstream gfa(unitig_gfa);
-    unordered_map<string, std::vector< vector<std::pair<string, bool>>>> links; //associates each contig to a set of its neighbors
+    unordered_map<string, std::vector< vector<std::tuple<string, bool, int>>>> links; //associates each contig to a set of its neighbors
     unordered_map<string, string> sequences; //associates each contig to its sequence  
     vector<string> contigs;
     string line;
@@ -122,12 +111,26 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
             string contig2;
             string orientation1;
             string orientation2;
+            string cigar;
             std::stringstream ss(line);
-            ss >> nothing >> contig1 >> orientation1 >> contig2 >> orientation2;
+            ss >> nothing >> contig1 >> orientation1 >> contig2 >> orientation2 >> cigar;
+            int length_of_overlap = 0;
+            //go through the CIGAR and find the first non-numerical character and define the overlap : THIS IS ONLY VALID IF THERE ARE ONLY PERFECT OVERLAPS!!!!
+            string overlap_str;
+            for (char c : cigar){
+                if (c < '0' || c > '9'){
+                    break;
+                }
+                overlap_str += c;
+            }
+            if (overlap_str.size() > 0){
+                length_of_overlap = std::atoi(overlap_str.c_str());
+            }
+
             int end1 = (int)(orientation1 == "+");
             int end2 = (int)(orientation2 == "-");
-            links[contig1][end1].push_back({contig2, end2});
-            links[contig2][end2].push_back({contig1, end1});
+            links[contig1][end1].push_back(std::make_tuple(contig2, end2, length_of_overlap));
+            links[contig2][end2].push_back(std::make_tuple(contig1, end1, length_of_overlap));
         }
     }
     gfa.close();
@@ -145,12 +148,13 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
         string seq = sequences[name];
 
         int length_suffix = std::min(k-1, (int)seq.size());
-        string suffix = seq.substr(seq.size() - length_suffix, length_suffix);
-        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig(sequences, links, name, 1, k - 1);
-        
+        //string suffix = seq.substr(seq.size() - length_suffix, length_suffix);
+        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 1, k-1 + length_suffix, 4*k); //k-1 + length_suffix to have k-1 on each side of the end of the contig
+
+
         string rc_seq = reverse_complement(seq);
-        string rc_suffix = rc_seq.substr(rc_seq.size() - length_suffix, length_suffix);
-        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig(sequences, links, name, 0, k - 1);
+        // string rc_suffix = rc_seq.substr(rc_seq.size() - length_suffix, length_suffix);
+        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 0, k-1 + length_suffix, 4*k);
 
         omp_set_lock(&lock);
         out << ">" << name << "\n";
@@ -158,7 +162,7 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
         int num_ext = 0;
         for (string ext: extensions){
             out << ">" << name << "_ext" << num_ext << "\n";
-            out << suffix + ext << "\n";
+            out << ext << "\n";
             num_ext++;
         }
         out << ">" << name << "_rc\n";
@@ -166,11 +170,13 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
         num_ext = 0;
         for (string ext: rc_extensions){
             out << ">" << name << "_rc_ext" << num_ext << "\n";
-            out << rc_suffix + ext << "\n";
+            out << ext << "\n";
             num_ext++;
         }
         omp_unset_lock(&lock);
     }
+    cout << "finished outputting tmp in " << tmp_fa << endl;
+    out.close();
 
     //now, to make sure all kmers are present only once, we run bcalm
     string bcalm_command = bcalm + " -in " + tmp_fa + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out "+reads_fa+ " -nb-cores " + std::to_string(num_threads) +" > "+reads_fa+".log 2>&1";

@@ -16,6 +16,6 @@ void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_thr
 void assembly_megahit(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_megahit, std::string path_fastg2gfa, std::string parameters);
 
 void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int k, int num_copies, std::string bcalm, int num_threads);
-std::vector<std::string> recursively_list_all_k_mers_starting_from_this_unitig(robin_hood::unordered_map<std::string, std::string> &sequences, robin_hood::unordered_map<std::string, std::vector< std::vector<std::pair<std::string, bool>>>> links, std::string contig, int end, int k);
+std::vector<std::string> recursively_list_all_k_mers_starting_from_this_unitig(std::string prefix, int overlap_in, robin_hood::unordered_map<std::string, std::string> &sequences, robin_hood::unordered_map<std::string, std::vector< std::vector<std::tuple<std::string, bool,int>>>> &links, std::string contig, int end, int k, int recursive_limit);
 
 #endif
