@@ -149,12 +149,11 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
 
         int length_suffix = std::min(k-1, (int)seq.size());
         //string suffix = seq.substr(seq.size() - length_suffix, length_suffix);
-        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 1, k-1 + length_suffix, 4*k); //k-1 + length_suffix to have k-1 on each side of the end of the contig
-
+        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 1, k-1 + length_suffix, 7); //k-1 + length_suffix to have k-1 on each side of the end of the contig //7 may not be enough, but it ensure that there are no more than 4^7 branching paths, which is already a lot
 
         string rc_seq = reverse_complement(seq);
         // string rc_suffix = rc_seq.substr(rc_seq.size() - length_suffix, length_suffix);
-        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 0, k-1 + length_suffix, 4*k);
+        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 0, k-1 + length_suffix, 7);
 
         omp_set_lock(&lock);
         out << ">" << name << "\n";
@@ -175,7 +174,6 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
         }
         omp_unset_lock(&lock);
     }
-    cout << "finished outputting tmp in " << tmp_fa << endl;
     out.close();
 
     //now, to make sure all kmers are present only once, we run bcalm
@@ -188,7 +186,7 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
     }
 
     //duplicate the bcalm output num_copies times
-    ifstream in(reads_fa);
+    ifstream in(reads_fa+".unitigs.fa");
     ofstream out2(tmp_fa);
     for (int i = 0 ; i < num_copies ; i++){
         while (getline(in, line)){
@@ -205,14 +203,15 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
 
     //move the tmp file to the final file
     string command = "mv " + tmp_fa + " " + reads_fa;
-
-    //remove the tmp file
-    string remove_tmp = "rm " + tmp_fa;
-    system(remove_tmp.c_str());
+    system(command.c_str());
 
     //remove the log
     string remove_log = "rm " + reads_fa + ".log";
     system(remove_log.c_str());
+
+    //remove the unitig file
+    string remove_unitigs = "rm " + reads_fa+".unitigs.fa";
+    system(remove_unitigs.c_str());
 }
 
 /**
