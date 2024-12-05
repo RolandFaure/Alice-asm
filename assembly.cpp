@@ -298,13 +298,18 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
         if (round < values_of_k.size()-1){
             cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
-            cout << "       - Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_bcalm - time_start).count() << "s, convert " << std::chrono::duration_cast<std::chrono::seconds>(time_convert - time_bcalm).count() << "s, shave " << std::chrono::duration_cast<std::chrono::seconds>(time_shave - time_convert).count() << "s, merge " << std::chrono::duration_cast<std::chrono::seconds>(time_merge - time_shave).count() << "s" << endl;
         
             string file_with_higher_kmers = read_file + ".higher_k.fa";
             output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, path_to_bcalm, num_threads);
             //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
             string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
         }
+
+        auto time_nextk = std::chrono::high_resolution_clock::now();
+
+        cout << "       - Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_bcalm - time_start).count() << "s, convert " << std::chrono::duration_cast<std::chrono::seconds>(time_convert - time_bcalm).count() 
+            << "s, shave " << std::chrono::duration_cast<std::chrono::seconds>(time_shave - time_convert).count() << "s, merge " << std::chrono::duration_cast<std::chrono::seconds>(time_merge - time_shave).count()  
+            << "s, output for next k: " << std::chrono::duration_cast<std::chrono::seconds>(time_nextk - time_merge).count() << "s"<< endl;
 
         round++;
     }

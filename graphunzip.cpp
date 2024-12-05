@@ -905,6 +905,9 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
         paths_segment.insert(paths_segment.end(), neighbors_right.begin(), neighbors_right.end());
 
         int idx_here = 0;
+        vector<vector<pair<int,bool>>> unrepresented_paths_tmp; //inventory missing paths, but wait to have a path left and right before concatenating this to the unrepresented paths
+        bool unrepresented_left = false;
+        bool unrepresented_right = false;
         for (vector<pair<int,bool>> path : paths_segment){
 
             // if (idx % 100000 == 0){
@@ -962,16 +965,13 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                         }
                     }
                     if (!found){
-                        unrepresented_paths.push_back(path_until_haploid_contig);
-                        // for (pair<int,bool> contig : path_until_haploid_contig){
-                            // if (old_segments[contig.first].name == "1530"){
-                            //     cout << "Here is a nzzon represented path contianing 9661: ";
-                            //     for (pair<int,bool> contig : path_until_haploid_contig){
-                            //         cout << old_segments[contig.first].name << " ";
-                            //     }
-                            //     cout << " (computed from segment " << s.name << endl;
-                            // }
-                        // }
+                        unrepresented_paths_tmp.push_back(path_until_haploid_contig);
+                        if (path_until_haploid_contig[0].second == true){
+                            unrepresented_right = true;
+                        }
+                        else {
+                            unrepresented_left = true;
+                        }
                     }
                     path_until_haploid_contig = {contig};
                 }
@@ -982,14 +982,6 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
 
                 for (pair<int,int> path_and_pos : where_is_this_contig_represented[path_until_haploid_contig[0].first]){
                     vector<pair<int,bool>> path_to_check;
-
-                    // if (s.name == "446"){
-                    //     cout << "represented path: ";
-                    //     for (pair<int,bool> contig : represented_paths[path_and_pos.first]){
-                    //         cout << old_segments[contig.first].name << " ";
-                    //     }
-                    //     cout << endl;
-                    // }
 
                     if (represented_paths[path_and_pos.first].size() >= path_and_pos.second + path_until_haploid_contig.size()){
                         path_to_check = vector<pair<int,bool>>(represented_paths[path_and_pos.first].begin()+path_and_pos.second, represented_paths[path_and_pos.first].begin() + path_and_pos.second + path_until_haploid_contig.size());
@@ -1008,19 +1000,21 @@ vector<vector<pair<int,bool>>> list_non_represented_paths(vector<Segment> &old_s
                     }
                 }
                 if (!found){
-                    unrepresented_paths.push_back(path_until_haploid_contig);
-                    //check if 2392 is in the path
-                    // for (pair<int,bool> contig : path_until_haploid_contig){
-                    //     if (old_segments[contig.first].name == "1530"){
-                    //         cout << "Here is a nzzon represented path contianing 9661: ";
-                    //         for (pair<int,bool> contig : path_until_haploid_contig){
-                    //             cout << old_segments[contig.first].name << " ";
-                    //         }
-                    //         cout << " (computed from segment " << s.name << endl;
-                    //     }
-                    // }
+                    unrepresented_paths_tmp.push_back(path_until_haploid_contig);
+                    if (path_until_haploid_contig[0].second == true){
+                        unrepresented_right = true;
+                    }
+                    else {
+                        unrepresented_left = true;
+                    }
                 }
             }
+
+            if (unrepresented_left && unrepresented_right) { //if there is no path either left or right, it looks like this contig is not represented in the haploid contigs right. If only left or right, this kind of looks like an erroneous path
+                unrepresented_paths.insert(unrepresented_paths.end(), unrepresented_paths_tmp.begin(), unrepresented_paths_tmp.end());
+                unrepresented_paths_tmp = {};
+            }
+
             idx_here++;
             idx++;
         }
@@ -1372,11 +1366,6 @@ int main(int argc, char *argv[])
     // cout << "Adding non represented paths" << endl;
     add_unrepresented_paths(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage, non_represented_paths);
     // cout << "Non represented paths added" << endl;
-
-    //output the graph
-    // output_graph("before_merge.gfa", gfa_input, unzipped_segments);
-    // exit(0);
-
 
     // cout << "Graph unzipped" << endl;
 

@@ -1351,8 +1351,8 @@ void trim_tips_and_isolated_contigs(std::string gfa_in, int min_coverage, int mi
     std::set<string> contigs_to_remove;
     for (auto c: linked){
         string contig_name = c.first;
-        if (coverage[contig_name] < min_coverage && length_of_contigs[contig_name] < min_length){
-            if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
+        if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
+            if (coverage[contig_name] < min_coverage && length_of_contigs[contig_name] < min_length){
                 contigs_to_remove.insert(contig_name);
             }
         }
