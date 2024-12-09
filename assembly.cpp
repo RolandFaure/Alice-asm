@@ -149,11 +149,11 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
 
         int length_suffix = std::min(k-1, (int)seq.size());
         //string suffix = seq.substr(seq.size() - length_suffix, length_suffix);
-        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 1, k-1 + length_suffix, 7); //k-1 + length_suffix to have k-1 on each side of the end of the contig //7 may not be enough, but it ensure that there are no more than 4^7 branching paths, which is already a lot
+        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 1, k-1 + length_suffix, 5); //k-1 + length_suffix to have k-1 on each side of the end of the contig //5 may not be enough, but it ensure that there are no more than 4^5 branching paths, which is already a lot
 
         string rc_seq = reverse_complement(seq);
         // string rc_suffix = rc_seq.substr(rc_seq.size() - length_suffix, length_suffix);
-        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 0, k-1 + length_suffix, 7);
+        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 0, k-1 + length_suffix, 5);
 
         omp_set_lock(&lock);
         out << ">" << name << "\n";
@@ -303,6 +303,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
             output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, path_to_bcalm, num_threads);
             //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
             string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
+            system(command_concatenate.c_str());
         }
 
         auto time_nextk = std::chrono::high_resolution_clock::now();
@@ -369,7 +370,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
 
     //trim the tips and isolated contigs that result from the unzipping of the graph. Then merge the adjacent contigs
     string tmp_gfa = tmp_folder+"tmp.gfa";
-    trim_tips_and_isolated_contigs(unzipped_gfa, min_abundance, 2*size_longest_read, tmp_gfa);
+    trim_tips_and_isolated_contigs(unzipped_gfa, min_abundance, 2*values_of_k[values_of_k.size()-1], tmp_gfa);
     unordered_map<string, int> segments_IDs;
     vector<Segment> segments;
     vector<Segment> merged_segments;

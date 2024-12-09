@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.23";
+string version = "0.6.24";
 string date = "2024-12-53";
 string author = "Roland Faure";
 
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
         //Compression options
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [101]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
-        clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
+        clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer and homodimer compression"),
 
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid (for custom Alice assembler) [5]") & clipp::opt_value("m", min_abundance),
@@ -262,10 +262,9 @@ int main(int argc, char** argv)
     }
 
     if (order % 2 == 0){
-        cerr << "WARNING: order (-l) must be odd because of lousy software engineering, changing l to " << order-1 << "\n";
+        cerr << "WARNING: order (-l) must be odd, changing l to " << order-1 << "\n";
         order = order-1;
     }
-    int context_length = (order-1)/2;
 
     if (assembler != "custom" && assembler != "hifiasm" && assembler != "spades" && assembler != "gatb-minia" && assembler != "raven" && assembler != "megahit"){
         cerr << "ERROR: assembler must be bcalm or hifiasm or spades or gatb-mina or raven or flye \n";
@@ -322,7 +321,7 @@ int main(int argc, char** argv)
     cout << "==== Step 1: MSR compression of the reads ====" << endl;
     
     auto time_start = std::chrono::high_resolution_clock::now();
-    reduce(input_file, compressed_file, context_length, compression, num_threads, homopolymer_compression);
+    reduce(input_file, compressed_file, order, compression, num_threads, homopolymer_compression);
     auto time_reduced = std::chrono::high_resolution_clock::now();
 
     cout << "Done compressing reads, the compressed reads are in " << compressed_file << "\n" << endl;
@@ -377,7 +376,7 @@ int main(int argc, char** argv)
     now2 = time(0);
     ltm2 = localtime(&now2);
     cout << " - Parsing the reads to map compressed kmers with uncompressed sequences [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, context_length, compression, km, central_kmers_needed, full_kmers_needed, kmers, central_kmer_file, full_kmer_file, num_threads, homopolymer_compression);
+    go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, order, compression, km, central_kmers_needed, full_kmers_needed, kmers, central_kmer_file, full_kmer_file, num_threads, homopolymer_compression);
 
 
     now2 = time(0);

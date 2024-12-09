@@ -41,14 +41,12 @@ using std::unordered_set;
  * @param min_abundance 
  * @param kmers maps a kmer to the uncompressed seq
  **/
-void reduce(string input_file, string output_file, int context_length, int compression, int num_threads, bool homopolymer_compression) {
+void reduce(string input_file, string output_file, int order, int compression, int num_threads, bool homopolymer_compression) {
 
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
     cout << "[" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "] Starting pipeline" << endl;
 
-
-    int k = 2*context_length + 1;
 
     std::ifstream input(input_file,std::ios::binary | std::ios::ate);
     if (!input.is_open())
@@ -107,13 +105,13 @@ void reduce(string input_file, string output_file, int context_length, int compr
                 uint64_t hash_reverse = 0;
                 size_t pos_end = 0;
                 long pos_middle = -6666; //special value to not compute the middle position
-                long pos_begin = -k;
+                long pos_begin = -order;
                 bool first_base = true; //to output the name line when the first base is outputted (not before to avoid empty lines)
                 next_line_is_seq = false;
                 int number_of_hashed_bases = 0;
                 bool this_sequence_has_not_been_seen_before = false; //to keep only "new" sequences to accelerate decompression in the future
 
-                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
+                while (roll(hash_foward, hash_reverse, order, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
                     if (line[pos_end] != 'A' && line[pos_end] != 'C' && line[pos_end] != 'G' && line[pos_end] != 'T'){
                         //then finish outputting the line and create a new one
                         if (!first_base){
@@ -125,7 +123,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
                         number_of_hashed_bases = 0;
 
                     }
-                    if (number_of_hashed_bases >= k){
+                    if (number_of_hashed_bases >= order){
                         if (hash_foward<hash_reverse && hash_foward % compression == 0){
                             if (first_base){
                                 first_base = false;
@@ -216,7 +214,7 @@ void reduce(string input_file, string output_file, int context_length, int compr
  */
 void go_through_the_reads_again_and_index_interesting_kmers(string reads_file, 
     string assemblyFile, 
-    int context_length, 
+    int order, 
     int compression, 
     int km, 
     std::unordered_set<uint64_t> &central_kmers_in_assembly,
@@ -235,8 +233,6 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
 
     unordered_map<uint64_t, unordered_map<string, int>> kmer_count; //associates a kmer to a map of all potential uncompressed kmers it corresponds to and their count
     unordered_set<uint64_t> confirmed_kmers;
-
-    int k = 2*context_length + 1;
 
     ifstream input2(reads_file, std::ios::binary | std::ios::ate);
     std::streamoff file_size = input2.tellg();
@@ -285,8 +281,8 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                 uint64_t hash_foward = 0;
                 uint64_t hash_reverse = 0;
                 size_t pos_end = 0;
-                long pos_begin = -k;
-                long pos_middle = -(k+1)/2;
+                long pos_begin = -order;
+                long pos_middle = -(order+1)/2;
                 next_line_is_seq = false;
                 int number_of_hashed_bases = 0;
 
@@ -299,8 +295,8 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                 string compressed_read = "";
                 compressed_read.reserve(line.size()/compression);
 
-                while (roll(hash_foward, hash_reverse, k, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
-                    if (number_of_hashed_bases >= k){
+                while (roll(hash_foward, hash_reverse, order, line, pos_end, pos_begin, pos_middle, homopolymer_compression)){
+                    if (number_of_hashed_bases >= order){
 
                         if (line[pos_end] != 'A' && line[pos_end] != 'C' && line[pos_end] != 'G' && line[pos_end] != 'T'){
                             //then finish outputting the line and create a new one
@@ -346,8 +342,8 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
                                             
                                         string full_seq="", reverse_full_seq="";
                                         if (full_kmer_in_assembly){
-                                            auto begin = std::max(0,positions_sampled[positions_sampled.size()-km] - k);
-                                            auto end = std::min((int)line.size()-1, positions_sampled[positions_sampled.size()-1] + k);
+                                            auto begin = std::max(0,positions_sampled[positions_sampled.size()-km] - order);
+                                            auto end = std::min((int)line.size()-1, positions_sampled[positions_sampled.size()-1] + order);
                                             full_seq = line.substr(begin, end - begin +1);
                                             reverse_full_seq = reverse_complement(full_seq);
                                             canonical_seq = min(full_seq, reverse_full_seq);
