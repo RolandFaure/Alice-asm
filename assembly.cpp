@@ -186,9 +186,9 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
     }
 
     //duplicate the bcalm output num_copies times
-    ifstream in(reads_fa+".unitigs.fa");
     ofstream out2(tmp_fa);
     for (int i = 0 ; i < num_copies ; i++){
+        ifstream in(reads_fa+".unitigs.fa");
         while (getline(in, line)){
             if (line[0] == '>'){
                 out2 << line << "_dup" << i << "\n";
@@ -197,8 +197,8 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
                 out2 << line << "\n";
             }
         }
+        in.close();
     }
-    in.close();
     out2.close();
 
     //move the tmp file to the final file
@@ -272,7 +272,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 5*kmer_len, contiguity, kmer_len, shaved_gfa, round*2, num_threads); //round*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, round*2, num_threads); //round*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs

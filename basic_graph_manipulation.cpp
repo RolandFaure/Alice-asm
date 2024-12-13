@@ -788,7 +788,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
         {
             //do nothing, and most importantly, do not add the contig to the to_keep set
         }
-        else if (coverage[contig] > abundance_min) {
+        else if (coverage[contig] > abundance_min || length_of_contigs[contig] > min_length){ 
             
             int size_of_neighborhood = 7*k;
             // cout << "launching..\n";
@@ -842,7 +842,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                 to_keep.insert(contig);
                 omp_unset_lock(&lock_contigs_to_keep);
             }
-            else if (overcovered_left == 2 || overcovered_right == 2){ //if the contig is not overcovered on one side, keep it (and it also passed the abundance_min threshold)
+            else if (overcovered_left == 2 || overcovered_right == 2){ //if the contig is not overcovered on one side, keep it (and it also passed the abundance_min or the min_length threshold)
                 omp_set_lock(&lock_contigs_to_keep);
                 to_keep.insert(contig);
                 omp_unset_lock(&lock_contigs_to_keep);
