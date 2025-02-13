@@ -46,38 +46,6 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
 }
 
 /**
- * @brief Recursive function to explore the neighborood of a contig
- * 
- * @param prefix sequence to append to the beginning of returned kmers
- * @param sequences 
- * @param links 
- * @param end 
- * @param k 
- * @param recursive_limit to limit the depth of recursion if some contigs have length 0
- * @return vector<string> 
- */
-vector<string> recursively_list_all_k_mers_starting_from_this_unitig(string prefix, int overlap_in, unordered_map<string, string> &sequences, unordered_map<string, std::vector< vector<std::tuple<string, bool,int>>>> &links, string contig, int end, int k, int recursive_limit){
-    //recursively list all the kmers starting from this unitig
-    if (sequences[contig].size() > k+overlap_in){ //then finish the k-mer here
-        return{prefix+sequences[contig].substr(overlap_in, k)};
-    }
-    else if (links.find(contig) == links.end() || links[contig][end].size() == 0 || recursive_limit <= 0) {
-        return {prefix+sequences[contig].substr(overlap_in, sequences[contig].size()-overlap_in)};
-    }
-    prefix += sequences[contig].substr(overlap_in, sequences[contig].size()-overlap_in);
-    int new_k = k-sequences[contig].size()+overlap_in;
-
-    vector<string> list_of_kmers;
-    for (auto n: links[contig][end]){ //n is the neighbor (string, end,overlap)
-        vector<string> kmers = recursively_list_all_k_mers_starting_from_this_unitig(prefix, std::get<2>(n), sequences, links, std::get<0>(n), 1-std::get<1>(n), new_k, recursive_limit-1);
-        for (string kmer: kmers){
-            list_of_kmers.push_back(kmer);
-        }
-    }
-    return list_of_kmers;
-}
-
-/**
  * @brief Output exactly num_copies times all k-mers of the unitigs in the reads_fa file
  * 
  * @param unitig_gfa graph of the unitigs (built with a smaller k)
@@ -87,14 +55,12 @@ vector<string> recursively_list_all_k_mers_starting_from_this_unitig(string pref
  * @param bcalm path to the bcalm executable
  * @param num_threads
  */
-void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int k, int num_copies, string bcalm, int num_threads){
+void output_unitigs_for_next_k(std::string unitig_gfa, std::string file_with_higher_kmers, int k, int num_copies, int num_threads){
 
     //load all the links of the unitigs
     ifstream gfa(unitig_gfa);
-    unordered_map<string, std::vector< vector<std::tuple<string, bool, int>>>> links; //associates each contig to a set of its neighbors
-    unordered_map<string, string> sequences; //associates each contig to its sequence  
-    vector<string> contigs;
     string line;
+    ofstream out(file_with_higher_kmers);
     while (getline(gfa, line)){
         string nothing;
         if (line[0] == 'S'){
@@ -102,116 +68,15 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string reads_fa, int
             string seq;
             std::stringstream ss(line);
             ss >> nothing >> name >> seq;
-            links[name] = {{}, {}};
-            sequences[name] = seq;
-            contigs.push_back(name);
-        }
-        if (line[0] == 'L'){
-            string contig1;
-            string contig2;
-            string orientation1;
-            string orientation2;
-            string cigar;
-            std::stringstream ss(line);
-            ss >> nothing >> contig1 >> orientation1 >> contig2 >> orientation2 >> cigar;
-            int length_of_overlap = 0;
-            //go through the CIGAR and find the first non-numerical character and define the overlap : THIS IS ONLY VALID IF THERE ARE ONLY PERFECT OVERLAPS!!!!
-            string overlap_str;
-            for (char c : cigar){
-                if (c < '0' || c > '9'){
-                    break;
+            if (seq.length() >= k) {
+                for (int i = 0; i < num_copies; ++i) {
+                    out << ">" << name << "_" << i << "\n" << seq << "\n";
                 }
-                overlap_str += c;
             }
-            if (overlap_str.size() > 0){
-                length_of_overlap = std::atoi(overlap_str.c_str());
-            }
-
-            int end1 = (int)(orientation1 == "+");
-            int end2 = (int)(orientation2 == "-");
-            links[contig1][end1].push_back(std::make_tuple(contig2, end2, length_of_overlap));
-            links[contig2][end2].push_back(std::make_tuple(contig1, end1, length_of_overlap));
         }
     }
     gfa.close();
-
-    //explore the neighborhood of all unitigs so that all kmers are outputted
-    string tmp_fa = reads_fa + ".tmp";
-    ofstream out(tmp_fa);
-    string nothing;
-    //define a lock for the output
-    omp_lock_t lock;
-    omp_init_lock(&lock);
-    #pragma omp parallel for num_threads(num_threads)
-    for (auto contig_number = 0 ; contig_number < contigs.size() ; contig_number++){
-        string name = contigs[contig_number];
-        string seq = sequences[name];
-
-        int length_suffix = std::min(k-1, (int)seq.size());
-        //string suffix = seq.substr(seq.size() - length_suffix, length_suffix);
-        vector<string> extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 1, k-1 + length_suffix, 5); //k-1 + length_suffix to have k-1 on each side of the end of the contig //5 may not be enough, but it ensure that there are no more than 4^5 branching paths, which is already a lot
-
-        string rc_seq = reverse_complement(seq);
-        // string rc_suffix = rc_seq.substr(rc_seq.size() - length_suffix, length_suffix);
-        vector<string> rc_extensions = recursively_list_all_k_mers_starting_from_this_unitig("", seq.size()-length_suffix, sequences, links, name, 0, k-1 + length_suffix, 5);
-
-        omp_set_lock(&lock);
-        out << ">" << name << "\n";
-        out << seq << "\n";
-        int num_ext = 0;
-        for (string ext: extensions){
-            out << ">" << name << "_ext" << num_ext << "\n";
-            out << ext << "\n";
-            num_ext++;
-        }
-        out << ">" << name << "_rc\n";
-        out << rc_seq << "\n";
-        num_ext = 0;
-        for (string ext: rc_extensions){
-            out << ">" << name << "_rc_ext" << num_ext << "\n";
-            out << ext << "\n";
-            num_ext++;
-        }
-        omp_unset_lock(&lock);
-    }
     out.close();
-
-    //now, to make sure all kmers are present only once, we run bcalm
-    string bcalm_command = bcalm + " -in " + tmp_fa + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out "+reads_fa+ " -nb-cores " + std::to_string(num_threads) +" > "+reads_fa+".log 2>&1";
-    auto bcalm_ok = system(bcalm_command.c_str());
-    if (bcalm_ok != 0){
-        cerr << "ERROR: bcalm failed in output_unitigs_for_next_k\n";
-        cout << bcalm_command << endl;
-        exit(1);
-    }
-
-    //duplicate the bcalm output num_copies times
-    ofstream out2(tmp_fa);
-    for (int i = 0 ; i < num_copies ; i++){
-        ifstream in(reads_fa+".unitigs.fa");
-        while (getline(in, line)){
-            if (line[0] == '>'){
-                out2 << line << "_dup" << i << "\n";
-            }
-            else{
-                out2 << line << "\n";
-            }
-        }
-        in.close();
-    }
-    out2.close();
-
-    //move the tmp file to the final file
-    string command = "mv " + tmp_fa + " " + reads_fa;
-    system(command.c_str());
-
-    //remove the log
-    string remove_log = "rm " + reads_fa + ".log";
-    system(remove_log.c_str());
-
-    //remove the unitig file
-    string remove_unitigs = "rm " + reads_fa+".unitigs.fa";
-    system(remove_unitigs.c_str());
 }
 
 /**
@@ -272,7 +137,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, round*2, num_threads); //round*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
@@ -300,7 +165,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
             cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
         
             string file_with_higher_kmers = read_file + ".higher_k.fa";
-            output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, path_to_bcalm, num_threads);
+            output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, num_threads);
             //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
             string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
             system(command_concatenate.c_str());

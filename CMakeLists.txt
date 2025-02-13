@@ -39,7 +39,7 @@ target_compile_options (aliceasm PRIVATE -std=c++17)
 target_compile_options (aliceasm PRIVATE -O3)
 target_compile_options (aliceasm PRIVATE -march=x86-64)
 
-file(GLOB SOURCE "reduce_standalone.cpp" "reduce_and_expand.cpp" "rolling_hash.cpp")
+file(GLOB SOURCE "reduce_standalone.cpp" "reduce_and_expand.cpp" "rolling_hash.cpp" "basic_graph_manipulation.cpp")
 add_executable(reduce ${SOURCE})
 target_compile_options (reduce PRIVATE -fopenmp)
 target_compile_options (reduce PRIVATE -lz)
