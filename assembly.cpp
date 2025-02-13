@@ -91,14 +91,14 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string file_with_hig
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, std::string parameters){
+void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
     
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
 
     cout << " - Iterative DBG assemby of the compressed reads with increasing k [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
-    vector<int> values_of_k = {17,31}; //size of the kmer used to build the graph (min >= km) // for now, only one value of k because we have a problem with coverage above this
+    vector<int> values_of_k = kmer_sizes_vector; //size of the kmer used to build the graph (min >= km)
     int round = 0; 
     string file_with_unitigs_from_past_k_and_reads = read_file+".with_unitigs_from_previous_k.fa";
     //copy the reads to the file with unitigs

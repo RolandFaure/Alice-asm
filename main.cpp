@@ -173,6 +173,7 @@ int main(int argc, char** argv)
     bool rescue = false;
     bool contiguity = false;
     int min_abundance = 5;
+    string kmer_sizes = "{17,31}";
     int order = 101;
     int compression = 20;
     int num_threads = 1;
@@ -192,19 +193,21 @@ int main(int argc, char** argv)
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer and homodimer compression"),
 
         //Assembly options for the custom assembler
-        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid (for custom Alice assembler) [5]") & clipp::opt_value("m", min_abundance),
+        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
+        clipp::option("-k", "--kmer-sizes").doc("increasing size of k for assembly, must go at least to 31 [{17,31}]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
 
         //Other assemblers options
-        clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
-        clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
+        // clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
+        
+        // clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
-        clipp::option("--hifiasm_meta").doc("path to hifiasm_meta [hifiasm_meta]") & clipp::opt_value("h", path_to_hifiasm),
-        clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
-        clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
-        // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
-        clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
-        clipp::option("--megahit").doc("path to megahit [megahit]") & clipp::opt_value("m", path_to_megahit),
+        // clipp::option("--hifiasm_meta").doc("path to hifiasm_meta [hifiasm_meta]") & clipp::opt_value("h", path_to_hifiasm),
+        // clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
+        // clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
+        // // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
+        // clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
+        // clipp::option("--megahit").doc("path to megahit [megahit]") & clipp::opt_value("m", path_to_megahit),
         // clipp::option("--miniasm").doc("path to miniasm [miniasm]") & clipp::opt_value("m", path_to_miniasm), //we did not manage to make miniasm work
         // clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap2),
         // clipp::option("--minipolish").doc("path to minipolish [minipolish]") & clipp::opt_value("r", path_to_minipolish),
@@ -270,6 +273,35 @@ int main(int argc, char** argv)
         cerr << "ERROR: assembler must be bcalm or hifiasm or spades or gatb-mina or raven or flye \n";
         exit(1);
     }
+    vector<int> kmer_sizes_vector;
+    if (assembler == "custom"){
+        // Convert kmer_sizes string to vector of integers
+        if (kmer_sizes.front() != '{' || kmer_sizes.back() != '}') {
+            cerr << "ERROR: kmer-sizes must be formatted like {int1,int2,...,intn}\n";
+            exit(1);
+        }
+        kmer_sizes = kmer_sizes.substr(1, kmer_sizes.size() - 2); // Remove the curly braces
+        std::stringstream ss(kmer_sizes);
+        string item;
+        while (std::getline(ss, item, ',')) {
+            try {
+            int k = std::stoi(item);
+            if (!kmer_sizes_vector.empty() && k <= kmer_sizes_vector.back()) {
+                cerr << "ERROR: kmer-sizes must be in increasing order\n";
+                exit(1);
+            }
+            kmer_sizes_vector.push_back(k);
+            } catch (const std::invalid_argument& e) {
+            cerr << "ERROR: kmer-sizes must be a list of integers\n";
+            exit(1);
+            }
+        }
+        //if the last value <31, add 31 to do a proper expansion (>=km)
+        if (kmer_sizes_vector.size()== 0 || kmer_sizes_vector[kmer_sizes_vector.size()-1] < 31){
+            cerr << "WARNING: the kmer_sizes must go at least to 31, adding 31 at the end of your list" << endl;
+            kmer_sizes_vector.push_back(31);
+        }
+    }
 
     //make sure the output folder ends with a /
     if (output_folder[output_folder.size()-1] != '/'){
@@ -329,7 +361,8 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
-        assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, path_to_bcalm, path_convertToGFA, path_graphunzip, assembler_parameters);
+        
+        assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, path_to_bcalm, path_convertToGFA, path_graphunzip);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);
