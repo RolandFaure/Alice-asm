@@ -173,7 +173,7 @@ int main(int argc, char** argv)
     bool rescue = false;
     bool contiguity = false;
     int min_abundance = 5;
-    string kmer_sizes = "{17,31}";
+    string kmer_sizes = "17,31";
     int order = 101;
     int compression = 20;
     int num_threads = 1;
@@ -194,7 +194,7 @@ int main(int argc, char** argv)
 
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
-        clipp::option("-k", "--kmer-sizes").doc("increasing size of k for assembly, must go at least to 31 [{17,31}]") & clipp::opt_value("k", kmer_sizes),
+        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,31]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
 
         //Other assemblers options
@@ -275,12 +275,6 @@ int main(int argc, char** argv)
     }
     vector<int> kmer_sizes_vector;
     if (assembler == "custom"){
-        // Convert kmer_sizes string to vector of integers
-        if (kmer_sizes.front() != '{' || kmer_sizes.back() != '}') {
-            cerr << "ERROR: kmer-sizes must be formatted like {int1,int2,...,intn}\n";
-            exit(1);
-        }
-        kmer_sizes = kmer_sizes.substr(1, kmer_sizes.size() - 2); // Remove the curly braces
         std::stringstream ss(kmer_sizes);
         string item;
         while (std::getline(ss, item, ',')) {
