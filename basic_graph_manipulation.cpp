@@ -1395,7 +1395,7 @@ void trim_tips_and_isolated_contigs(std::string gfa_in, int min_coverage, int mi
 
 }
 
-void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, int> &segment_IDs){
+void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, int> &segment_IDs, bool load_in_RAM){
     //load the segments from the GFA file
     
     //in a first pass index all the segments by their name
@@ -1417,10 +1417,16 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
                 }
             }
 
-            Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq.size(), coverage);
-
-            segment_IDs[name] = s.ID;
-            segments.push_back(s);
+            if (load_in_RAM == false){
+                Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq.size(), coverage);
+                segment_IDs[name] = s.ID;
+                segments.push_back(s);
+            }
+            else{
+                Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq, seq.size(), coverage);
+                segment_IDs[name] = s.ID;
+                segments.push_back(s);
+            }
         }
     }
     gfa.close();
@@ -1487,9 +1493,29 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
     omp_lock_t lock_new_segment; //locks the creating of new segments, including the additions to links_to_add
     omp_init_lock(&lock_new_segment);
 
+    double total_time_pre = 0;
+    double total_time_prepare = 0;
+    double total_time_merge = 0;
+
+    vector<vector<string>> all_names (num_threads);
+    vector<vector<string>> all_seqs (num_threads);
+    vector<vector<double>> all_coverages (num_threads);
+    vector<vector<int>> all_lengths(num_threads);
+    vector<vector<int>> all_IDs(num_threads);
+    for (int t = 0 ; t < num_threads ; t++){
+        all_names[t].reserve(100);
+        all_seqs[t].reserve(100);
+        all_coverages[t].reserve(100);
+        all_lengths[t].reserve(100);
+        all_IDs[t].reserve(100);
+    }
+
     #pragma omp parallel for num_threads(num_threads)
     for (int seg_idx = 0 ; seg_idx < old_segments.size() ; seg_idx++){
 
+        int thread_num = omp_get_thread_num();
+
+        auto time_start = std::chrono::high_resolution_clock::now();
         Segment old_seg = old_segments[seg_idx];
 
         if (already_looked_at_segments.find(old_seg.ID) != already_looked_at_segments.end()){
@@ -1511,22 +1537,23 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             continue;
         }
 
+        auto time_before_prepare = std::chrono::high_resolution_clock::now();
+
         int other_end_of_merged_contig_ID = old_seg.ID;
         int other_end_of_merged_contig_end = 0;
 
         //prepare the merge of the contig (don't merge yet to avoid conflicts with other threads)
-        vector<string> all_names;
-        vector<string> all_seqs;
-        vector<double> all_coverages;
-        vector<int> all_lengths;
-        vector<int> all_IDs = {old_seg.ID};
+        all_IDs[thread_num] = {old_seg.ID};
+        all_names[thread_num].clear();
+        all_seqs[thread_num].clear();
+        all_coverages[thread_num].clear();
+        all_lengths[thread_num].clear();
         if (dead_end_left && !dead_end_right){
-            
             //let's see how far we can go right
-            all_names = {old_seg.name};
-            all_seqs = {old_seg.get_seq(original_gfa_file)};
-            all_coverages = {old_seg.get_coverage()};
-            all_lengths = {old_seg.get_length()};
+            all_names[thread_num] = {old_seg.name};
+            all_seqs[thread_num] = {old_seg.get_seq(original_gfa_file)};
+            all_coverages[thread_num] = {old_seg.get_coverage()};
+            all_lengths[thread_num] = {old_seg.get_length()};
             int current_ID = old_seg.ID;
             int current_end = 1;
 
@@ -1535,31 +1562,31 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int tmp_current_end = 1-old_segments[current_ID].links[current_end].first[0].second;
                 current_ID = old_segments[current_ID].links[current_end].first[0].first;
                 current_end = tmp_current_end;
-                all_names.push_back(old_segments[current_ID].name);
+                all_names[thread_num].push_back(old_segments[current_ID].name);
                 string seq = old_segments[current_ID].get_seq(original_gfa_file);
+
                 //now reverse complement if current_end is 1
                 if (current_end == 0){
                     seq = reverse_complement(seq);
                 }
                 //trim the sequence if there is a CIGAR
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
-                all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
-                all_coverages.push_back(old_segments[current_ID].get_coverage());
-                all_lengths.push_back(old_segments[current_ID].get_length());
-                all_IDs.push_back(current_ID);
+                all_seqs[thread_num].push_back(seq.substr(num_matches, seq.size()-num_matches));
+                all_coverages[thread_num].push_back(old_segments[current_ID].get_coverage());
+                all_lengths[thread_num].push_back(old_segments[current_ID].get_length());
+                all_IDs[thread_num].push_back(current_ID);
             }
 
             other_end_of_merged_contig_ID = current_ID;
             other_end_of_merged_contig_end = current_end;
         }
-        else if (!dead_end_left && dead_end_right){
-            
+        else if (!dead_end_left && dead_end_right){         
             //let's see how far we can go left
-            all_names = {old_seg.name};
+            all_names[thread_num] = {old_seg.name};
             string seq = old_seg.get_seq(original_gfa_file);
-            all_seqs = {reverse_complement(seq)};
-            all_coverages = {old_seg.get_coverage()};
-            all_lengths = {old_seg.get_length()};
+            all_seqs[thread_num] = {reverse_complement(seq)};
+            all_coverages[thread_num] = {old_seg.get_coverage()};
+            all_lengths[thread_num] = {old_seg.get_length()};
             int current_ID = old_seg.ID;
             int current_end = 0;
 
@@ -1571,7 +1598,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 int tmp_current_end = 1-old_segments[current_ID].links[current_end].first[0].second;
                 current_ID = old_segments[current_ID].links[current_end].first[0].first;
                 current_end = tmp_current_end;
-                all_names.push_back(old_segments[current_ID].name);
+                all_names[thread_num].push_back(old_segments[current_ID].name);
                 string seq = old_segments[current_ID].get_seq(original_gfa_file);
                 //now reverse complement if current_end is 0
                 if (current_end == 0){
@@ -1579,15 +1606,17 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 }
                 //trim the sequence if there is a CIGAR
                 int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
-                all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
-                all_coverages.push_back(old_segments[current_ID].get_coverage());
-                all_lengths.push_back(old_segments[current_ID].get_length());
-                all_IDs.push_back(current_ID);
+                all_seqs[thread_num].push_back(seq.substr(num_matches, seq.size()-num_matches));
+                all_coverages[thread_num].push_back(old_segments[current_ID].get_coverage());
+                all_lengths[thread_num].push_back(old_segments[current_ID].get_length());
+                all_IDs[thread_num].push_back(current_ID);
             }
 
             other_end_of_merged_contig_ID = current_ID;
             other_end_of_merged_contig_end = current_end;
         }
+        
+        auto time_after_prepare = std::chrono::high_resolution_clock::now();
 
         //check that we can proceed thread-safely
         bool thread_safe = true;
@@ -1597,7 +1626,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 thread_safe = false;
             }
             else{
-                for (int ID : all_IDs){
+                for (int ID : all_IDs[thread_num]){
                     already_looked_at_segments.insert(ID);
                 }
             }
@@ -1635,20 +1664,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             else if (dead_end_left && !dead_end_right){
                 //create the new contig
                 string new_name = "";
-                for (string name : all_names){
+                for (string name : all_names[thread_num]){
                     new_name += name + "_";
                 }
                 new_name = new_name.substr(0, new_name.size()-1);
                 string new_seq = "";
-                for (string seq : all_seqs){
+                for (string seq : all_seqs[thread_num]){
                     new_seq += seq;
                 }
                 double new_coverage = 0;
                 int new_length = 0;
                 int idx = 0;
-                for (double coverage : all_coverages){
-                    new_coverage += all_coverages[idx]*all_lengths[idx];
-                    new_length += all_lengths[idx];
+                for (double coverage : all_coverages[thread_num]){
+                    new_coverage += all_coverages[thread_num][idx]*all_lengths[thread_num][idx];
+                    new_length += all_lengths[thread_num][idx];
                     idx++;
                 }
                 new_coverage = new_coverage/new_length;
@@ -1682,20 +1711,20 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             
                 //create the new contig
                 string new_name = "r";
-                for (string name : all_names){
+                for (string name : all_names[thread_num]){
                     new_name += name + "_";
                 }
                 new_name = new_name.substr(0, new_name.size()-1);
                 string new_seq = "";
-                for (string seq : all_seqs){
+                for (string seq : all_seqs[thread_num]){
                     new_seq += seq;
                 }
                 double new_coverage = 0;
                 int new_length = 0;
                 int idx = 0;
-                for (double coverage : all_coverages){
-                    new_coverage += all_coverages[idx]*all_lengths[idx];
-                    new_length += all_lengths[idx];
+                for (double coverage : all_coverages[thread_num]){
+                    new_coverage += all_coverages[thread_num][idx]*all_lengths[thread_num][idx];
+                    new_length += all_lengths[thread_num][idx];
                     idx++;
                 }
                 new_coverage = new_coverage/new_length;
@@ -1712,7 +1741,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
                 old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
 
-                //add the links
+                // add the links
                 int idx_link = 0;
                 for (pair<int,int> link : old_seg.links[1].first){
                     links_to_add.insert({{{old_seg.ID, 1}, link}, old_seg.links[1].second[idx_link]});
@@ -1726,6 +1755,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 omp_unset_lock(&lock_new_segment);
             }
         }
+
+        auto time_after_merge = std::chrono::high_resolution_clock::now();
+
+        total_time_pre = std::chrono::duration_cast<std::chrono::milliseconds>(time_before_prepare-time_start).count();
+        total_time_prepare = std::chrono::duration_cast<std::chrono::milliseconds>(time_after_prepare - time_before_prepare).count();
+        total_time_merge = std::chrono::duration_cast<std::chrono::milliseconds>(time_after_merge - time_after_prepare).count();
     }
     omp_destroy_lock(&lock_new_segment);
 

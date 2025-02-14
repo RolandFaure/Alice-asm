@@ -1332,7 +1332,7 @@ int main(int argc, char *argv[])
     //load the segments from the GFA file
     unordered_map<string, int> segment_IDs;
     vector<Segment> segments; //segments is a dict of pairs
-    load_GFA(gfa_input, segments, segment_IDs);
+    load_GFA(gfa_input, segments, segment_IDs, false); //false is to not load the seqs in memory
     // cout << "Segments loaded" << endl;
     log << "Segments loaded" << endl;
 
@@ -1389,7 +1389,7 @@ int main(int argc, char *argv[])
         //now merge the contigs
         segments.clear();
         segment_IDs.clear();
-        load_GFA(gfa_output_tmp, segments, segment_IDs);
+        load_GFA(gfa_output_tmp, segments, segment_IDs, false);
         vector<Segment> new_merged_segments;
         merge_adjacent_contigs(segments, new_merged_segments, gfa_output_tmp, rename, threads);
         output_graph(gfa_output, gfa_output_tmp, new_merged_segments);
@@ -1406,7 +1406,7 @@ int main(int argc, char *argv[])
         //now merge the contigs
         segments.clear();
         segment_IDs.clear();
-        load_GFA(gfa_output_tmp2, segments, segment_IDs);
+        load_GFA(gfa_output_tmp2, segments, segment_IDs, false);
         vector<Segment> merged_segments;
         merge_adjacent_contigs(segments, merged_segments, gfa_output_tmp2, rename, threads);
         output_graph(gfa_output, gfa_output_tmp2, merged_segments);

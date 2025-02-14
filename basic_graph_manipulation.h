@@ -67,6 +67,19 @@ class Segment{
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
 
+        Segment(std::string name, int ID, std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>> links, long int pos_in_file, std::string seq, int length, double coverage){
+            this->name = name;
+            this->ID = ID;
+            this->links = links;
+            this->pos_in_file = pos_in_file;
+            this->seq = seq;
+            this->length = length;
+            this->coverage = coverage;
+            this->original_coverage = coverage;
+            this->haploid = false;
+            this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
+        }
+
         bool is_haploid(){return this->haploid;}
         std::vector<std::pair<int,bool>> get_consensus_left(){return this->consensus_left;}
         std::vector<std::pair<int,bool>> get_consensus_right(){return this->consensus_right;}
@@ -140,12 +153,11 @@ class Segment{
         double coverage;
         double original_coverage; //same thing as coverage but cannot be decreased
         int length;
-
         bool haploid;
 
 };
 
-void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::unordered_map<std::string, int> &segment_IDs);
+void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::unordered_map<std::string, int> &segment_IDs, bool load_in_RAM);
 void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename, int num_threads);
 void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 

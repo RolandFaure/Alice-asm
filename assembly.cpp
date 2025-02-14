@@ -149,7 +149,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
             unordered_map<string, int> segments_IDs;
             vector<Segment> segments;
             vector<Segment> merged_segments;
-            load_GFA(shaved_gfa, segments, segments_IDs);
+            load_GFA(shaved_gfa, segments, segments_IDs, true); //the last true to load the contigs in memory
             merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
             output_graph(merged_gfa, shaved_gfa, merged_segments);
         }
@@ -194,7 +194,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         unordered_map<string, int> segments_IDs;
         vector<Segment> segments;
         vector<Segment> merged_segments;
-        load_GFA(shaved_and_popped_gfa, segments, segments_IDs);
+        load_GFA(shaved_and_popped_gfa, segments, segments_IDs, true);  //the last true to load the contigs in memory
         string shaved_and_popped_merged = tmp_folder+"bcalm.unitigs.shaved.popped.merged.gfa";
         merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true, num_threads); //the last bool is to rename the contigs
         output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
@@ -239,7 +239,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     unordered_map<string, int> segments_IDs;
     vector<Segment> segments;
     vector<Segment> merged_segments;
-    load_GFA(tmp_gfa, segments, segments_IDs);
+    load_GFA(tmp_gfa, segments, segments_IDs, true);
     merge_adjacent_contigs(segments, merged_segments, tmp_gfa, true, num_threads); //the last bool is to rename the contigs
     output_graph(final_gfa, tmp_gfa, merged_segments);
     auto time_trim = std::chrono::high_resolution_clock::now();

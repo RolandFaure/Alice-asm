@@ -36,8 +36,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.27";
-string date = "2024-02-13";
+string version = "0.6.28";
+string date = "2024-02-14";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
@@ -153,7 +153,6 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
-
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;
