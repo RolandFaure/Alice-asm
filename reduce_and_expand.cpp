@@ -746,3 +746,19 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
     full_kmers_input.close();
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

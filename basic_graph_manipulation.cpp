@@ -1522,7 +1522,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             continue;
         }
         //check if it has either at least two neighbors left or that its neighbor left has at least two neighbors right
-        // cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
+        cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
         bool dead_end_left = false;
         if (old_seg.links[0].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].links[old_seg.links[0].first[0].second].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].ID == old_seg.ID){
             dead_end_left = true;
@@ -1646,6 +1646,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), old_seg.get_length(), old_seg.get_coverage()));
                 old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
                 old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 1};
+                new_segments[new_segments.size()-1].seq = old_seg.get_seq(original_gfa_file);
             
                 //add the links
                 int idx_link = 0;
@@ -1857,6 +1858,7 @@ void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments
             gfa << "S\t" << s.name << "\t" << s.get_seq(gfa_input) << "\tDP:f:" << s.get_coverage() <<  "\n";
         }
     }
+    int nb_segments_outputted = 0;
     for (Segment s : segments){
         for (int end = 0 ; end < 2 ; end++){
             for (int neigh = 0 ; neigh < s.links[end].first.size() ; neigh++){
