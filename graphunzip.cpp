@@ -14,29 +14,6 @@ using std::stringstream;
 using robin_hood::unordered_map;
 using std::set;
 
-// string reverse_complement(string& seq){
-//     string rc (seq.size(), 'N');
-//     for (int i = seq.size() - 1 ; i >= 0; i--){
-//         switch (seq[i]){
-//             case 'A':
-//                 rc[seq.size() - 1 - i] = 'T';
-//                 break;
-//             case 'T':
-//                 rc[seq.size() - 1 - i] = 'A';
-//                 break;
-//             case 'C':
-//                 rc[seq.size() - 1 - i] = 'G';
-//                 break;
-//             case 'G':
-//                 rc[seq.size() - 1 - i] = 'C';
-//                 break;
-//             default:
-//                 rc[seq.size() - 1 - i] = 'N';
-//                 break;
-//         }
-//     }
-//     return rc;
-// }
 
 void Segment::add_neighbor(vector<pair<int,bool>> new_neighbor, bool left){
 
@@ -224,6 +201,12 @@ void Segment::compute_consensuses(){
     }
 
     this->haploid = haploid_right && haploid_left;
+
+    // Free up the memory of neighbors_right and neighbors_left
+    neighbors_right.clear();
+    neighbors_left.clear();
+    neighbors_right.shrink_to_fit();
+    neighbors_left.shrink_to_fit();
 }
 
 vector<vector<pair<int,bool>>> Segment::get_strong_neighbors_left(int min_coverage){
@@ -344,7 +327,25 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
 }
 */
 
-void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, int> &segments_IDs){
+/**
+ * @brief Loads the paths from a GAF (Graph Alignment Format) file and updates the segments and their IDs.
+ * 
+ * This function reads a GAF file line by line, extracts the read name and path, and processes the path to update
+ * the segments and their neighbors. It ensures that the segments are correctly linked according to the paths
+ * specified in the GAF file.
+ * 
+ * @param gaf_file The path to the GAF file to be loaded.
+ * @param segments A vector of Segment objects that will be updated with the paths from the GAF file.
+ * @param segments_IDs An unordered_map that maps segment names to their corresponding IDs.
+ * @param min_index_of_segment_to_index The minimum index of the segment to be indexed (to save memory, all segments may not be indexed at the same time).
+ * @param max_segment_to_index The maximum index of the segment to be indexed (to save memory, all segments may not be indexed at the same time).
+ * 
+ * @note The function assumes that the segments and their IDs are already initialized and that the GAF file is
+ * properly formatted.
+ * 
+ * @throws runtime_error If a segment in the GAF file cannot be found in the GFA.
+ */
+void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, int> &segments_IDs, size_t min_index_of_segment_to_index, size_t max_segment_to_index){
     //load the paths from the GAF file
     ifstream gaf(gaf_file);
     string line;
@@ -439,15 +440,16 @@ void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, 
 
 
             for (int contig = 0 ; contig < pair_path.size()  ; contig++){
-                if (pair_path[contig].second){
-                    segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), false);
-                    segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(reverse_path_contigs.begin() + reverse_path_contigs.size() - contig, reverse_path_contigs.end()), true);
-                } 
-                else{
-                    segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), true);
-                    segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(reverse_path_contigs.begin() + reverse_path_contigs.size() - contig, reverse_path_contigs.end()), false);
+                if (pair_path[contig].first >= min_index_of_segment_to_index && pair_path[contig].first < max_segment_to_index){
+                    if (pair_path[contig].second){
+                        segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), false);
+                        segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(reverse_path_contigs.begin() + reverse_path_contigs.size() - contig, reverse_path_contigs.end()), true); 
+                    } 
+                    else{
+                        segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(pair_path.begin() + contig + 1, pair_path.end()), true);
+                        segments[pair_path[contig].first].add_neighbor(vector<pair<int,bool>>(reverse_path_contigs.begin() + reverse_path_contigs.size() - contig, reverse_path_contigs.end()), false);
+                    }
                 }
-
             }
         }
     }
@@ -459,53 +461,55 @@ void load_GAF(string gaf_file, vector<Segment> &segments, unordered_map<string, 
  * 
  * @param segments 
  * @param min_coverage 
+ * @param min_index_of_segment_to_index The minimum index of the segment to be indexed (to save memory, all segments may not be indexed at the same time).
+ * @param max_segment_to_index The maximum index of the segment to be indexed (to save memory, all segments may not be indexed at the same time).
  */
-void determine_haploid_contigs(vector<Segment> &segments, int min_coverage){
+void determine_haploid_contigs(vector<Segment> &segments, int min_coverage, size_t min_index_of_segment_to_index, size_t max_segment_to_index){
     //determine which contigs are haploid. For this, a simple metric: the paths should be consensual left and right
-    for (auto s = 0 ; s < segments.size() ; s++){
+    for (size_t s = std::max(0, (int) min_index_of_segment_to_index) ; s < std::min(segments.size(), max_segment_to_index) ; s++){
     
         segments[s].compute_consensuses();
-        if (segments[s].name == "4972" && false){
+        // if (segments[s].name == "4972" && false){
 
-            cout << "****here are the neighbors right with their strengths: " << endl;
-            auto neighbors_right_with_strengths = segments[s].get_neighbors_right_with_strengths();
-            for (auto neighbor : neighbors_right_with_strengths){
-                for (auto contig : neighbor){
-                    cout << contig.first.first << " ";
-                }
-                cout << endl;
-                for (auto contig : neighbor){
-                    cout << contig.second.first << "/" << contig.second.second << " ";
-                }
-                cout << endl;
-            }
-            cout << "****here are the neighbors left with their strengths: " << endl;
-            auto neighbors_left_with_strengths = segments[s].get_neighbors_left_with_strengths();
-            for (auto neighbor : neighbors_left_with_strengths){
-                for (auto contig : neighbor){
-                    cout << contig.first.first << " ";
-                }
-                cout << endl;
-                for (auto contig : neighbor){
-                    cout << contig.second.first << "/" << contig.second.second << " ";
-                }
-                cout << endl;
-            }
+        //     cout << "****here are the neighbors right with their strengths: " << endl;
+        //     auto neighbors_right_with_strengths = segments[s].get_neighbors_right_with_strengths();
+        //     for (auto neighbor : neighbors_right_with_strengths){
+        //         for (auto contig : neighbor){
+        //             cout << contig.first.first << " ";
+        //         }
+        //         cout << endl;
+        //         for (auto contig : neighbor){
+        //             cout << contig.second.first << "/" << contig.second.second << " ";
+        //         }
+        //         cout << endl;
+        //     }
+        //     cout << "****here are the neighbors left with their strengths: " << endl;
+        //     auto neighbors_left_with_strengths = segments[s].get_neighbors_left_with_strengths();
+        //     for (auto neighbor : neighbors_left_with_strengths){
+        //         for (auto contig : neighbor){
+        //             cout << contig.first.first << " ";
+        //         }
+        //         cout << endl;
+        //         for (auto contig : neighbor){
+        //             cout << contig.second.first << "/" << contig.second.second << " ";
+        //         }
+        //         cout << endl;
+        //     }
             
-            cout << "haploid: " << segments[s].is_haploid() << endl;
+        //     cout << "haploid: " << segments[s].is_haploid() << endl;
 
-            cout << "consensus left: ";
-            for (auto contig : segments[s].get_consensus_left()){
-                cout << contig.first << " ";
-            }
-            cout << endl;
+        //     cout << "consensus left: ";
+        //     for (auto contig : segments[s].get_consensus_left()){
+        //         cout << contig.first << " ";
+        //     }
+        //     cout << endl;
 
-            cout << "consensus right: ";
-            for (auto contig : segments[s].get_consensus_right()){
-                cout << contig.first << " ";
-            }
-            cout << endl;
-        }
+        //     cout << "consensus right: ";
+        //     for (auto contig : segments[s].get_consensus_right()){
+        //         cout << contig.first << " ";
+        //     }
+        //     cout << endl;
+        // }
     }    
 }
 
@@ -625,7 +629,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     else{
                         //create the haploid contig only if not already created
                         if (old_ID_to_new_IDs.find(cons_right[contig_in_cons].first) == old_ID_to_new_IDs.end()){
-                            new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
+                            new_segments.push_back(Segment(old_segments[cons_right[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_right[contig_in_cons].first].get_pos_in_file(), length_bridge, old_segments[cons_right[contig_in_cons].first].get_coverage()));
                             old_ID_to_new_IDs[cons_right[contig_in_cons].first] = {new_ID};
                             new_ID++;
                         }
@@ -723,7 +727,7 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     else{
                         //create the haploid contig only if not already created
                         if (old_ID_to_new_IDs.find(cons_left[contig_in_cons].first) == old_ID_to_new_IDs.end()){
-                            new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, coverage_bridge));
+                            new_segments.push_back(Segment(old_segments[cons_left[contig_in_cons].first].name + "_0" , new_ID, old_segments[cons_left[contig_in_cons].first].get_pos_in_file(), length_bridge, old_segments[cons_left[contig_in_cons].first].get_coverage()));
                             old_ID_to_new_IDs[cons_left[contig_in_cons].first] = {new_ID};
                             new_ID++;
                         }
@@ -1328,6 +1332,13 @@ int main(int argc, char *argv[])
 
     ofstream log(logfile);
 
+    // Export the command line used to the log file
+    log << "Command line used: ";
+    for (int i = 0; i < argc; ++i) {
+        log << argv[i] << " ";
+    }
+    log << endl;
+
 
     //load the segments from the GFA file
     unordered_map<string, int> segment_IDs;
@@ -1337,19 +1348,21 @@ int main(int argc, char *argv[])
     log << "Segments loaded" << endl;
 
     //load the paths from the GAF file
-    load_GAF(gaf_file, segments, segment_IDs);
-    // cout << "Paths loaded" << endl;
-    log << "Paths loaded" << endl;
+    int max_number_of_segments_to_load_at_the_same_time = 200000; //to save RAM, only load the paths for this number of contigs and compute consensus by batch
+    for (size_t contig_index=0 ; contig_index < segments.size() ; contig_index += max_number_of_segments_to_load_at_the_same_time){
+        load_GAF(gaf_file, segments, segment_IDs, contig_index, std::min(contig_index+max_number_of_segments_to_load_at_the_same_time, segments.size()));
+        determine_haploid_contigs(segments, min_coverage, contig_index, std::min(contig_index+max_number_of_segments_to_load_at_the_same_time, segments.size()));
+    }
 
-    //unzip the graph
-    // cout << "Now unzipping the graph" << endl;
+    // cout << "Paths loaded" << endl;
+    log << "Paths loaded and haploid contigs determined" << endl;
+
     vector<Segment> unzipped_segments;
     unordered_map<int, std::vector<int>> old_ID_to_new_IDs;
     unordered_map<int, vector<set<int>>> already_built_bridges;
     for (auto old_segment = 0 ; old_segment < segments.size() ; old_segment++){
        already_built_bridges[old_segment] = {set<int>(), set<int>()};
     }
-    determine_haploid_contigs(segments, min_coverage);
     // cout << "Haploid contigs determined" << endl;
     // cout << "Creating haploid contigs" << endl;
     create_haploid_contigs(segments, unzipped_segments, old_ID_to_new_IDs, already_built_bridges, min_coverage, contiguity);

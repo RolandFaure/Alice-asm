@@ -266,7 +266,7 @@ void sort_GFA(std::string gfa){
 
     //move the sorted file to the original file
     std::string command = "mv " + gfa + ".sorted " + gfa;
-    system(command.c_str());
+    auto res = system(command.c_str());
 }
 
 
@@ -447,7 +447,7 @@ void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k
         //convert to gfa
         // cout << "Launching convertToGFA\n";
         string convert_command2 = path_convertToGFA + " " + path_tmp_folder+ "tmp_324.unitigs.fa " + gfa_out + " " + std::to_string(k) + " > "+path_tmp_folder+"convertToGFA.log 2>&1";
-        system(convert_command2.c_str());
+        auto res = system(convert_command2.c_str());
 
         //remove tmp files
         // string remove_tmp_files = "rm "+path_tmp_folder+"tmp_324*";
@@ -509,7 +509,7 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
 
     //move the sorted file to the original file
     std::string command = "mv " + gfa + ".tmp " + gfa;
-    system(command.c_str());
+    auto res = system(command.c_str());
 
 }
 
@@ -1522,7 +1522,6 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             continue;
         }
         //check if it has either at least two neighbors left or that its neighbor left has at least two neighbors right
-        cout << "in merge, looking at segment " << seg_idx << " out of " << old_segments.size() << "\r" << std::flush;
         bool dead_end_left = false;
         if (old_seg.links[0].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].links[old_seg.links[0].first[0].second].first.size() != 1 || old_segments[old_seg.links[0].first[0].first].ID == old_seg.ID){
             dead_end_left = true;

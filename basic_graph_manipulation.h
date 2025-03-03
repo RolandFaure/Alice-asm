@@ -131,12 +131,35 @@ class Segment{
         std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> > get_neighbors_left_with_strengths(){return neighbors_left_with_strengths;}
         std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> > get_neighbors_right_with_strengths(){return neighbors_right_with_strengths;}
 
+        bool operator!=(const Segment& other) const {
+            return !(*this == other);
+        }
+
+        bool operator==(const Segment& other) const {
+            return name == other.name &&
+                   ID == other.ID &&
+                   links == other.links &&
+                   pos_in_file == other.pos_in_file &&
+                   seq == other.seq &&
+                   length == other.length &&
+                   coverage == other.coverage &&
+                   original_coverage == other.original_coverage &&
+                   haploid == other.haploid &&
+                   consensus_left == other.consensus_left &&
+                   consensus_right == other.consensus_right &&
+                   neighbors_left_with_strengths == other.neighbors_left_with_strengths &&
+                   neighbors_right_with_strengths == other.neighbors_right_with_strengths &&
+                   neighbors_left == other.neighbors_left &&
+                   neighbors_right == other.neighbors_right;
+        }
+
         //the hash of the segment is the hash of the name
         size_t hash() const{
             return std::hash<std::string>{}(name);
         }
 
         std::string seq;
+
 
     private:
         //consensus sequences of contigs left and right
