@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.31";
+string version = "0.6.32";
 string date = "2024-03-28";
 string author = "Roland Faure";
 
@@ -216,9 +216,14 @@ int main(int argc, char** argv)
         //Other options
         clipp::option("--clean").set(clean).doc("remove the tmp folder at the end [off]"),
         clipp::option("--test").doc("(developers only) to compare the result against this reference") & clipp::opt_value("t", test_ref_gfa),
-        clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit")
-
+        clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit"),
+        clipp::option("-h", "--help").set(help).doc("print this help message and exit")
     );
+
+    if (help) {
+        std::cout << clipp::make_man_page(cli, argv[0]);
+        exit(0);
+    }
 
     bool homopolymer_compression = !no_hpc;
 
