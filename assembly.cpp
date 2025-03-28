@@ -110,11 +110,11 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        int abundance-min = 2;
+        int abundancemin = 2;
         if (single_genome){ //if you have a single genome, aggressively delete low coverage kmers
-            abundance-min = min_abundance;
+            abundancemin = min_abundance;
         }
-        string bcalm_command = path_to_bcalm + " -in " + file_with_unitigs_from_past_k_and_reads + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min "+std::to_string(abundance-min)+" -nb-cores "+std::to_string(num_threads)
+        string bcalm_command = path_to_bcalm + " -in " + file_with_unitigs_from_past_k_and_reads + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min "+std::to_string(abundancemin)+" -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm"+std::to_string(kmer_len)+" > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());

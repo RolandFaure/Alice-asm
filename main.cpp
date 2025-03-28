@@ -196,7 +196,7 @@ int main(int argc, char** argv)
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
         clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,31]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
-        clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome")
+        clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
 
         //Other assemblers options
         // clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
