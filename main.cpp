@@ -328,6 +328,17 @@ int main(int argc, char** argv)
 
     check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_to_megahit, path_fastg2gfa, path_convertToGFA, path_graphunzip, path_src);
 
+    // Check if the input file is gzipped
+    if (input_file.substr(input_file.find_last_of('.') + 1) == "gz") {
+        string unzipped_file = input_file.substr(input_file.find_last_of('/') + 1, input_file.find_last_of('.') - input_file.find_last_of('/') - 1);
+        string command = "gunzip -c " + input_file + " > " + tmp_folder + unzipped_file;
+        auto ok = system(command.c_str());
+        if (ok != 0) {
+            cerr << "ERROR: Failed to unzip the gzipped input file\n";
+            exit(1);
+        }
+        input_file = tmp_folder + unzipped_file;
+    }
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
         string fasta_file = input_file.substr(input_file.find_last_of('/') + 1, input_file.find_last_of('.') - input_file.find_last_of('/') - 1) + ".fasta";
@@ -443,6 +454,9 @@ int main(int argc, char** argv)
         cout << "Comparing the result with the reference " << test_ref_gfa << endl;
         test_assembly(output_file, test_ref_gfa);
     }
+
+    // Remove the trash.log file if it exists
+    std::remove("trash.log");
 
     return 0;
 }
