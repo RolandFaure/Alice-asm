@@ -91,7 +91,7 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string file_with_hig
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
+void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
     
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
@@ -110,8 +110,11 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-
-        string bcalm_command = path_to_bcalm + " -in " + file_with_unitigs_from_past_k_and_reads + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min 2 -nb-cores "+std::to_string(num_threads)
+        int abundance-min = 2;
+        if (single_genome){ //if you have a single genome, aggressively delete low coverage kmers
+            abundance-min = min_abundance;
+        }
+        string bcalm_command = path_to_bcalm + " -in " + file_with_unitigs_from_past_k_and_reads + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min "+std::to_string(abundance-min)+" -nb-cores "+std::to_string(num_threads)
             + " -out "+tmp_folder+"bcalm"+std::to_string(kmer_len)+" > "+tmp_folder+"bcalm.log 2>&1";
         auto time_start = std::chrono::high_resolution_clock::now();
         auto bcalm_ok = system(bcalm_command.c_str());
@@ -133,7 +136,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         cout << "convert: " << convert_command << " result: " << res << endl;
         auto time_convert = std::chrono::high_resolution_clock::now();
 
-        // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k) -> this does not really work yet
+        // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;

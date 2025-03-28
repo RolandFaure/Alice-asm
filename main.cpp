@@ -171,6 +171,7 @@ int main(int argc, char** argv)
     string test_ref_gfa = "";
     bool rescue = false;
     bool contiguity = false;
+    bool single_genome= false;
     int min_abundance = 5;
     string kmer_sizes = "17,31";
     int order = 101;
@@ -195,6 +196,7 @@ int main(int argc, char** argv)
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
         clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,31]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
+        clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome")
 
         //Other assemblers options
         // clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
@@ -355,7 +357,7 @@ int main(int argc, char** argv)
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
         
-        assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, path_to_bcalm, path_convertToGFA, path_graphunzip);
+        assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);

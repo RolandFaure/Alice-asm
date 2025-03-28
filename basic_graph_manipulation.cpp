@@ -784,7 +784,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
     
         }
 
-        if (bubble && ((coverage[contig] < abundance_min || abundance_min == -1) && length_of_contigs[contig] < min_length)) //pop it if 1) this is a bubble and 2) coverage less than 5x or the contig is shorter than min_length
+        if (bubble && ((coverage[contig] < abundance_min || abundance_min == -1) && length_of_contigs[contig] < min_length)) //pop it if 1) this is a bubble and 2) coverage less than 5x and the contig is shorter than min_length
         {
             //do nothing, and most importantly, do not add the contig to the to_keep set
         }
