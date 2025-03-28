@@ -330,7 +330,7 @@ int main(int argc, char** argv)
 
     //if the input file is a fastq file, convert it to fasta
     if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
-        string fasta_file = input_file.substr(0, input_file.find_last_of('.')) + ".fasta";
+        string fasta_file = input_file.substr(input_file.find_last_of('/') + 1, input_file.find_last_of('.') - input_file.find_last_of('/') - 1) + ".fasta";
         string command = "sed -n '1~4s/^@/>/p;2~4p' " + input_file + " > " + tmp_folder + fasta_file;
         auto ok = system(command.c_str());
         if (ok != 0){
