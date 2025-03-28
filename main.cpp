@@ -220,11 +220,6 @@ int main(int argc, char** argv)
         clipp::option("-h", "--help").set(help).doc("print this help message and exit")
     );
 
-    if (help) {
-        std::cout << clipp::make_man_page(cli, argv[0]);
-        exit(0);
-    }
-
     bool homopolymer_compression = !no_hpc;
 
 
@@ -265,9 +260,16 @@ int main(int argc, char** argv)
     cout << "Alice Assembler version " << version << "\nLast update: " << date << "\nAuthor: " << author << endl << endl;
 
     if(!clipp::parse(argc, argv, cli)) {
-        cout << "Could not parse the arguments" << endl;
-        cout << clipp::make_man_page(cli, argv[0]);
-        exit(1);
+        if (!help){
+            cout << "Could not parse the arguments" << endl;
+            cout << clipp::make_man_page(cli, argv[0]);
+            exit(1);
+        }
+        else{
+            cout << "Help: " << endl;
+            cout << clipp::make_man_page(cli, argv[0]);
+            exit(0);
+        }
     }
 
     if (order % 2 == 0){
