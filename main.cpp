@@ -43,7 +43,7 @@ string author = "Roland Faure";
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
     string &path_convertToGFA, string &path_graphunzip, string path_src){
 
-    string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
+    string command_bcalm = path_bcalm + " -version 2> trash.log > trash.log";
     auto bcalm_ok = system(command_bcalm.c_str());
 
     string command_hifiasm = path_hifiasm + " -h 2> trash.log > trash.log";
@@ -255,7 +255,7 @@ int main(int argc, char** argv)
             cout << "Help: " << endl;
             cout << clipp::make_man_page(cli, argv[0]);
 
-            string command_bcalm = path_to_bcalm + " --help 2> trash.log > trash.log";
+            string command_bcalm = path_to_bcalm + " -version 2> trash.log > trash.log";
             auto bcalm_ok = system(command_bcalm.c_str());
 
             if (bcalm_ok){
