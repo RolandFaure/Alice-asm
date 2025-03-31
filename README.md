@@ -1,19 +1,19 @@
-# The Alice Assembler
+# Alice
 
-The Alice assembler is named after the character of Lewis Caroll's _Alice in Wonderland_, and more precisely to the "drink-me potion" and "eat-me cake", which make Alice respectively shrink and grow. The idea of the Alice assembler is to shrink the input reads, perform assembly on shrunken data and inflate the obtained assembly back to normal size. The compression is a Mapping-friendly Sequence Reduction (MSR) of high order, which allows all base to be taken into account during compression. However, it increases error rate of the reads. It is thus recommended to run it on long and accurate reads.
+Alice is a genomic and metagenomic assembler designed for HiFi read (<0.1% error rate). 
+
+
+It is named after the character of Lewis Caroll's _Alice in Wonderland_, and more precisely to the "drink-me potion" and "eat-me cake", which make Alice respectively shrink and grow. The idea of the Alice assembler is to shrink the input reads, perform assembly on shrunken data and inflate the obtained assembly back to normal size. The compression is a Mapping-friendly Sequence Reduction (MSR) of high order, which allows all base to be taken into account during compression. However, it increases error rate of the reads. It is thus recommended to run it on long and accurate reads.
 ![alice_compression](https://github.com/rolandfaure/Alice-asm/blob/master/alice_compression.png)
 
 ## Installation
 
-Dependencies: numpy, scipy, cmake
-=======
-To have all the dependencies, it is advised to create first a conda environment with all the dependencies (bcalm, minimap2, openmp, g++, scipy, numpy)
+The recommended way to install Alice is through conda
 ```
-conda create -n hairsplitter -c bioconda -c conda-forge bcalm openmp libgomp gxx gcc scipy numpy cmake
-conda activate hairsplitter
+conda install -c bioconda aliceasm
 ```
 
-Then download and compile the Alice assembler
+To download and compile the Alice assembler from source
 ```
 git clone https://github.com/RolandFaure/Alice-asm.git
 cd Alice-asm
@@ -26,27 +26,40 @@ make
 
 ```
 SYNOPSIS
-        aliceasm -r [<i>] -o [<o>] [-t [<t>]] [-m [<m>]] [-l [<o>]] [-c [<c>]]
-            [--bcalm [<b>]] [--minimap2 [<m>]] [-v]
+        ./aliceasm -r [<r>] -o [<o>] [-t [<t>]] [-l [<o>]] [-c [<c>]] [-H] [-m [<m>]] [-k [<k>]]
+                   [--contiguity] [--single-genome] [--bcalm [<b>]] [--clean] [--test [<t>]] [-v]
+                   [-h]
 
 OPTIONS
         -r, --reads input file (fasta/q)
         -o, --output
-                    output file (gfa)
+                    output folder
 
         -t, --threads
                     number of threads [1]
 
-        -m, --min-abundance
-                    minimum abundance of kmer to consider solid [10]
-
-        -l, --order order of MSR compression (odd) [201]
+        -l, --order order of MSR compression (odd) [101]
         -c, --compression
                     compression factor [20]
 
+        -H, --no-hpc
+                    turn off homopolymer compression
+
+        -m, --min-abundance
+                    minimum abundance of kmer to consider solid [5]
+
+        -k, --kmer-sizes
+                    comma-separated increasing sizes of k for assembly, must go at least to 31
+                    [17,31]
+
+        --contiguity
+                    Favor contiguity over recovery of rare strains [off]
+
+        --single-genome
+                    Switch on if assembling a single genome
+
         --bcalm     path to bcalm [bcalm]
-        --minimap2  path to minimap2 [minimap2]
+        --clean     remove the tmp folder at the end [off]
         -v, --version
                     print version and exit
-
 ```
