@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.32";
+string version = "0.6.33";
 string date = "2024-03-28";
 string author = "Roland Faure";
 
@@ -105,7 +105,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         }
     }
 
-    int gfatools_ok = system("gfatools version 2> trash.log > trash.log");
+    // int gfatools_ok = system("gfatools version 2> trash.log > trash.log");
 
     std::cout << "_______________________________" << std::endl;
     std::cout << "|    Dependency     |  Found  |" << std::endl;
@@ -131,7 +131,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         std::cout << "|    megahit        |   " << (megahit_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
         std::cout << "|    fastg2gfa      |   " << (fastg2gfa_ok == 256 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     }
-    std::cout << "|    gfatools       |   " << (gfatools_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    // std::cout << "|    gfatools       |   " << (gfatools_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     std::cout << "-------------------------------" << std::endl;
 
 
@@ -268,7 +268,17 @@ int main(int argc, char** argv)
         else{
             cout << "Help: " << endl;
             cout << clipp::make_man_page(cli, argv[0]);
-            exit(0);
+
+            string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
+            auto bcalm_ok = system(command_bcalm.c_str());
+
+            if (bcalm_ok){
+                exit(0);
+            }
+            else{
+                cout << "Missing dependency: bcalm" << endl;
+                exit(1);
+            }
         }
     }
 
