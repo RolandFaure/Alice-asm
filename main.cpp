@@ -80,24 +80,11 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
     int convertToGFA_ok = 0;
     int graphunzip_ok = 0;
-    if (assembler == "bcalm"){
-        path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
-        convertToGFA_ok = system((path_convertToGFA+" --help >trash.log 2>trash.log").c_str());
-        if (convertToGFA_ok != 0){
-            path_convertToGFA = "convertToGFA.py";
-            convertToGFA_ok = system(path_convertToGFA.c_str());
-            if (convertToGFA_ok != 0){
-                cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321. I was looking for convertToGFA.py at " << path_src << "/bcalm/scripts/convertToGFA.py but did not find it\n";
-                cerr << "Command 1: " << "python " << path_src << "/bcalm/scripts/convertToGFA.py\n";
-                cerr << "Command 2: " << "convertToGFA.py\n";
-                exit(1);
-            }
-        }
-
+    if (assembler == "custom"){
         auto graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());
         if (graphunzip_ok != 0){
             path_graphunzip = "graphunzip";
-            graphunzip_ok = system(path_graphunzip.c_str());
+            graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());
             if (graphunzip_ok != 0){
                 cerr << "ERROR: graphunzip not found, problem in the installation, error code 322.\n";
                 exit(1);
@@ -143,8 +130,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         (flye_ok != 0 && assembler == "flye") ||
         ((minimap_ok != 0 || miniasm_ok != 0 || minipolish_ok != 0) && assembler == "miniasm") ||
         (megahit_ok != 0 && assembler == "megahit" && fastg2gfa_ok != 0) ||
-        (convertToGFA_ok != 0 || graphunzip_ok != 0) ||
-        gfatools_ok != 0){
+        (convertToGFA_ok != 0 || graphunzip_ok != 0)){
         std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
         exit(1);
     }
@@ -269,7 +255,7 @@ int main(int argc, char** argv)
             cout << "Help: " << endl;
             cout << clipp::make_man_page(cli, argv[0]);
 
-            string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
+            string command_bcalm = path_to_bcalm + " --help 2> trash.log > trash.log";
             auto bcalm_ok = system(command_bcalm.c_str());
 
             if (bcalm_ok){
@@ -332,7 +318,6 @@ int main(int argc, char** argv)
     command = "mkdir -p " + tmp_folder + " 2> trash.log";
     res = system(command.c_str());
     
-
     string path_src = argv[0];
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /aliceasm
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
@@ -344,6 +329,7 @@ int main(int argc, char** argv)
     string path_fastg2gfa = path_total.substr(0, path_total.find_last_of("/"))+ "/fastg2gfa";
 
     check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_to_megahit, path_fastg2gfa, path_convertToGFA, path_graphunzip, path_src);
+    cout << "graphufdsi " << path_graphunzip << endl;
 
     // Check if the input file is gzipped
     if (input_file.substr(input_file.find_last_of('.') + 1) == "gz") {
