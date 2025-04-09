@@ -36,13 +36,14 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.33";
-string date = "2024-03-28";
+string version = "0.6.34";
+string date = "2024-04-09";
 string author = "Roland Faure";
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
     string &path_convertToGFA, string &path_graphunzip, string path_src){
 
+        
     string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
     auto bcalm_ok = system(command_bcalm.c_str());
 
@@ -73,6 +74,9 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     string command_fastg2gfa = path_fastg2gfa + " 2> trash.log > trash.log";
     auto fastg2gfa_ok = system(command_fastg2gfa.c_str());
 
+    string command_python3 = "python3 --version 2> trash.log > trash.log";
+    auto python3_ok = system(command_python3.c_str());
+
 
     // string command_minia = path_minia + " --help 2> trash.log > trash.log";
     // auto minia_ok = system(command_minia.c_str());
@@ -97,6 +101,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     std::cout << "_______________________________" << std::endl;
     std::cout << "|    Dependency     |  Found  |" << std::endl;
     std::cout << "|-------------------|---------|" << std::endl;
+    std::cout << "|    python3        |   " << (python3_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     if (assembler == "custom")
         std::cout << "|    bcalm          |   " << (bcalm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     else if (assembler == "hifiasm")
@@ -130,8 +135,9 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
         (flye_ok != 0 && assembler == "flye") ||
         ((minimap_ok != 0 || miniasm_ok != 0 || minipolish_ok != 0) && assembler == "miniasm") ||
         (megahit_ok != 0 && assembler == "megahit" && fastg2gfa_ok != 0) ||
-        (convertToGFA_ok != 0 || graphunzip_ok != 0)){
-        std::cout << "Error: some dependencies are missing. Please install them or provide a valid path with the options." << std::endl;
+        (convertToGFA_ok != 0 || graphunzip_ok != 0) ||
+        (python3_ok != 0)){
+        std::cout << "Error: some dependencies are missing." << std::endl;
         exit(1);
     }
 
@@ -323,14 +329,13 @@ int main(int argc, char** argv)
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /aliceasm
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
 
-    std::string path_convertToGFA = "python " + path_src + "/bcalm/scripts/convertToGFA.py";
+    std::string path_convertToGFA = "python3 " + path_src + "/bcalm/scripts/convertToGFA.py";
     string path_graphunzip = path_src + "/build/graphunzip";
 
     string path_total = argv[0];
     string path_fastg2gfa = path_total.substr(0, path_total.find_last_of("/"))+ "/fastg2gfa";
 
     check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_to_megahit, path_fastg2gfa, path_convertToGFA, path_graphunzip, path_src);
-    cout << "graphufdsi " << path_graphunzip << endl;
 
     // Check if the input file is gzipped
     if (input_file.substr(input_file.find_last_of('.') + 1) == "gz") {
