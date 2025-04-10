@@ -77,12 +77,22 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     string command_python3 = "python3 --version 2> trash.log > trash.log";
     auto python3_ok = system(command_python3.c_str());
 
+    string command_convertToGFA = path_convertToGFA + " -h 2> trash.log > trash.log";
+    auto convertToGFA_ok = system(command_convertToGFA.c_str());
+    if (convertToGFA_ok != 0) {
+        path_convertToGFA = "python3 convertToGFA.py";
+        convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
+        if (convertToGFA_ok != 0) {
+            cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
+            exit(1);
+        }
+    }
+
 
     // string command_minia = path_minia + " --help 2> trash.log > trash.log";
     // auto minia_ok = system(command_minia.c_str());
     // cout << "trying command line " << command_minia << " " << minia_ok << " " << minia_ok2 << endl;
 
-    int convertToGFA_ok = 0;
     int graphunzip_ok = 0;
     if (assembler == "custom"){
         auto graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());

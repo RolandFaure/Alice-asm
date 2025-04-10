@@ -133,7 +133,6 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         string unitig_file_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.gfa";
         string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
         auto res = system(convert_command.c_str());
-        cout << "convert: " << convert_command << " result: " << res << endl;
         auto time_convert = std::chrono::high_resolution_clock::now();
 
         // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
