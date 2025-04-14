@@ -140,7 +140,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         ltm2 = localtime(&now2);
         cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
+        pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads, single_genome); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
         auto time_shave = std::chrono::high_resolution_clock::now();
 
         //merge the adjacent contigs
@@ -227,7 +227,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     string unzipped_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gfa";
-    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + std::to_string(num_threads) + " 0 " + unzipped_gfa + " " + std::to_string(contiguity) + " " + tmp_folder + "graphunzip.log";
+    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + std::to_string(num_threads) + " 0 " + unzipped_gfa + " " + std::to_string(contiguity) + + " " + std::to_string(single_genome) + " " + tmp_folder + "graphunzip.log";
     cout << "    - Command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){

@@ -1311,13 +1311,13 @@ int main(int argc, char *argv[])
 {
 
     //HS_GraphUnzip <gfa_input> <gaf_file> <threads> <gfa_output> <exhaustive>
-    if (argc != 9){
+    if (argc != 10){
         //if -h or --help is passed as an argument, print the help
         if (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)){
-            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <rename> <gfa_output> <contigutiy> <logfile>" << std::endl;
+            std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <rename> <gfa_output> <contiguity> <single_genome> <logfile>" << std::endl;
             return 0;
         }
-        std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <rename> <gfa_output> <contiguity> <logfile>" << std::endl;
+        std::cout << "Usage: graphunzip <gfa_input> <gaf_file> <min_coverage> <threads> <rename> <gfa_output> <contiguity> <single_genome> <logfile>" << std::endl;
         return 1;
     }
 
@@ -1328,7 +1328,8 @@ int main(int argc, char *argv[])
     bool rename = std::stoi(argv[5]);
     std::string gfa_output = argv[6];
     bool contiguity = std::stoi(argv[7]);
-    std::string logfile = argv[8];
+    bool single_genome = std::stoi(argv[8]);
+    std::string logfile = argv[9];
 
     ofstream log(logfile);
 
@@ -1415,7 +1416,7 @@ int main(int argc, char *argv[])
         output_graph(gfa_output_tmp, gfa_input, merged_segments);
 
         string gfa_output_tmp2 = gfa_output + "_tmp2.gfa";
-        pop_and_shave_graph(gfa_output_tmp, 5, 100, true, 31, gfa_output_tmp2, 0, threads);
+        pop_and_shave_graph(gfa_output_tmp, 5, 100, true, 31, gfa_output_tmp2, 0, threads, single_genome);
         //now merge the contigs
         segments.clear();
         segment_IDs.clear();

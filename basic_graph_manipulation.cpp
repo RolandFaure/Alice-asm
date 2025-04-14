@@ -630,7 +630,7 @@ int explore_neighborhood(string contig, int endOfContig, unordered_map<string, p
  * @param gfa_out 
  * @param extra_coverage //to retreat to the coverage because it comes from extra contigs added to the reads from previous assembly rounds
  */
-void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out, int extra_coverage, int num_threads){
+void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out, int extra_coverage, int num_threads, bool single_contig){
 
     if (min_length == -1){ //then no length is sufficient to keep a contig, it has to be done on the coverage
         //set min_length to the max int
@@ -781,6 +781,9 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
             if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
                 bubble = true;
             }
+            if (single_contig && other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 2*coverage[contig] < coverage[other_neighbor_of_contig_left]){
+                bubble = true;
+            }
     
         }
 
@@ -849,6 +852,33 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
             }
             else if (overcovered_left == 1 && overcovered_right == 0 || overcovered_left == 0 && overcovered_right == 1){ //this means that this is a tip
                 //do nothing, and most importantly, do not add the contig to the to_keep set
+            }
+
+            //if single contig mode is on, delete badly covered dead ends
+            if (single_contig) {
+                if (linked[contig].first.size() == 0 && linked[contig].second.size() > 0  ){
+                    float max_neighbor_coverage = 0;
+                    for (auto neighbor : linked[contig].second) {
+                        max_neighbor_coverage = std::max(max_neighbor_coverage, coverage[neighbor.first]);
+                    }
+                    if (coverage[contig] * 2 < max_neighbor_coverage && length_of_contigs[contig] < 2*min_length) {
+                        omp_set_lock(&lock_contigs_to_keep);
+                        to_keep.erase(contig);
+                        omp_unset_lock(&lock_contigs_to_keep);
+                    }
+                }
+                if (linked[contig].first.size() > 0 && linked[contig].second.size() == 0  ){
+                    float max_neighbor_coverage = 0;
+                    for (auto neighbor : linked[contig].first) {
+                        max_neighbor_coverage = std::max(max_neighbor_coverage, coverage[neighbor.first]);
+                    }
+                    if (coverage[contig] * 2 < max_neighbor_coverage && length_of_contigs[contig] < 2*min_length) {
+                        omp_set_lock(&lock_contigs_to_keep);
+                        to_keep.erase(contig);
+                        omp_unset_lock(&lock_contigs_to_keep);
+                    }
+                }
+                
             }
         }
     }

@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.34";
+string version = "0.6.35";
 string date = "2024-04-09";
 string author = "Roland Faure";
 
@@ -80,10 +80,12 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     string command_convertToGFA = path_convertToGFA + " -h 2> trash.log > trash.log";
     auto convertToGFA_ok = system(command_convertToGFA.c_str());
     if (convertToGFA_ok != 0) {
+        string bad_path = path_convertToGFA;
         path_convertToGFA = "python3 convertToGFA.py";
         convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
         if (convertToGFA_ok != 0) {
             cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
+            cout << "tried " << endl << bad_path << endl << path_convertToGFA << endl;
             exit(1);
         }
     }
@@ -195,7 +197,7 @@ int main(int argc, char** argv)
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer and homodimer compression"),
 
         //Assembly options for the custom assembler
-        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid [5]") & clipp::opt_value("m", min_abundance),
+        clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2 if single-genome [5]") & clipp::opt_value("m", min_abundance),
         clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,31]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
@@ -386,7 +388,6 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
-        
         assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip);
     }
     else if (assembler == "hifiasm"){

@@ -63,3 +63,7 @@ OPTIONS
         -v, --version
                     print version and exit
 ```
+
+## Can I use Alice for both genomic and metagenomic use cases ?
+
+Yes! If you are trying to assemble a single genome, it is recommended to use flag --single-genome and set -m to expected-coverage/2 in order to simplify the output graph.

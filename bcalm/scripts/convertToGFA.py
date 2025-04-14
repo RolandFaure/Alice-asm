@@ -58,11 +58,6 @@ def main():
     parser.add_argument('-s', '--single-directed', action='store_true',
                         help='Avoid outputting the whole skew-simmetric graph and output only one edge between two nodes',
                         dest='single_directed')
-    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
-                        help='Show this help message and exit')
-    if '-h' in sys.argv or '--help' in sys.argv:
-        parser.print_help()
-        sys.exit(0)
 
     args = parser.parse_args()
 
