@@ -59,6 +59,10 @@ def main():
                         help='Avoid outputting the whole skew-simmetric graph and output only one edge between two nodes',
                         dest='single_directed')
 
+    if '-h' in sys.argv or '--help' in sys.argv:
+        parser.parse_args()
+        sys.exit(0)
+    
     args = parser.parse_args()
 
     with open(args.inputFilename) as f:

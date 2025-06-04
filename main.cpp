@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.35";
+string version = "0.6.36";
 string date = "2024-04-09";
 string author = "Roland Faure";
 
@@ -77,11 +77,11 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     string command_python3 = "python3 --version 2> trash.log > trash.log";
     auto python3_ok = system(command_python3.c_str());
 
-    string command_convertToGFA = path_convertToGFA + " -h 2> trash.log > trash.log";
+    string command_convertToGFA = path_convertToGFA + " 2> trash.log > trash.log";
     auto convertToGFA_ok = system(command_convertToGFA.c_str());
     if (convertToGFA_ok != 0) {
         string bad_path = path_convertToGFA;
-        path_convertToGFA = "python3 convertToGFA.py";
+        path_convertToGFA = "convertToGFA.py";
         convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
         if (convertToGFA_ok != 0) {
             cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
@@ -275,7 +275,6 @@ int main(int argc, char** argv)
 
             string command_bcalm = path_to_bcalm + " --help 2> trash.log > trash.log";
             auto bcalm_ok = system(command_bcalm.c_str());
-            cout << "trieds " << command_bcalm << " dsjf returne " << bcalm_ok << endl;
 
             if (bcalm_ok == 0){
                 exit(0);
