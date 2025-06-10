@@ -36,9 +36,27 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.36";
+string version = "0.6.37";
 string date = "2024-04-09";
 string author = "Roland Faure";
+
+//small function to exaceute a shell command and catch the result
+std::string exec(const char* cmd) {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    // Remove trailing newline, if present
+    if (!result.empty() && result.back() == '\n') {
+        result.pop_back();
+    }
+    return result;
+}
 
 void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
     string &path_convertToGFA, string &path_graphunzip, string path_src){
@@ -81,7 +99,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     auto convertToGFA_ok = system(command_convertToGFA.c_str());
     if (convertToGFA_ok != 0) {
         string bad_path = path_convertToGFA;
-        path_convertToGFA = "convertToGFA.py";
+        path_convertToGFA = "python " + exec("which convertToGFA.py");
         convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
         if (convertToGFA_ok != 0) {
             cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
