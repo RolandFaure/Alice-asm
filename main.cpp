@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.37";
+string version = "0.6.38";
 string date = "2024-04-09";
 string author = "Roland Faure";
 
@@ -99,7 +99,7 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     auto convertToGFA_ok = system(command_convertToGFA.c_str());
     if (convertToGFA_ok != 0) {
         string bad_path = path_convertToGFA;
-        path_convertToGFA = "python " + exec("which convertToGFA.py");
+        path_convertToGFA = "python3 " + exec("which convertToGFA.py");
         convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
         if (convertToGFA_ok != 0) {
             cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
