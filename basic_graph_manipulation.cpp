@@ -1292,7 +1292,7 @@ void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa
  * @param min_length 
  * @param gfa_out 
  */
-void trim_tips_and_isolated_contigs(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out){
+void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out){
     //load the graph
     ifstream input(gfa_in);
     unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
@@ -1377,12 +1377,54 @@ void trim_tips_and_isolated_contigs(std::string gfa_in, int min_coverage, int mi
     }
     input.close();
     
-    //now trim the tips and isolated contigs with a coverage below min_coverage and a length below min_length
+    //now trim the tips, isolated contigs and bubbles with a coverage below min_coverage and a length below min_length (bubbles need to have coverage 1)
     std::set<string> contigs_to_remove;
     for (auto c: linked){
         string contig_name = c.first;
+        //remove tip
         if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
-            if (coverage[contig_name] < min_coverage && length_of_contigs[contig_name] < min_length){
+            if (coverage[contig_name] < min_coverage && (length_of_contigs[contig_name] < min_length || coverage[contig_name]==1)){
+                contigs_to_remove.insert(contig_name);
+            }
+        }
+        //remove bubble
+        if (linked[contig_name].first.size() == 1 && linked[contig_name].second.size() == 1 && coverage[contig_name] == 1) {
+            string neighbor_left = linked[contig_name].first[0].first;
+            char end_of_neighbor_left = linked[contig_name].first[0].second;
+            string neighbor_right = linked[contig_name].second[0].first;
+            char end_of_neighbor_right = linked[contig_name].second[0].second;
+
+            string other_neighbor_of_contig_left = "";
+            if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2) {
+                for (auto l : linked[neighbor_left].first) {
+                    if (l.first != contig_name) {
+                        other_neighbor_of_contig_left = l.first;
+                    }
+                }
+            } else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2) {
+                for (auto l : linked[neighbor_left].second) {
+                    if (l.first != contig_name) {
+                        other_neighbor_of_contig_left = l.first;
+                    }
+                }
+            }
+
+            string other_neighbor_of_contig_right = "";
+            if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2) {
+                for (auto l : linked[neighbor_right].first) {
+                    if (l.first != contig_name) {
+                        other_neighbor_of_contig_right = l.first;
+                    }
+                }
+            } else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2) {
+                for (auto l : linked[neighbor_right].second) {
+                    if (l.first != contig_name) {
+                        other_neighbor_of_contig_right = l.first;
+                    }
+                }
+            }
+
+            if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "") {
                 contigs_to_remove.insert(contig_name);
             }
         }

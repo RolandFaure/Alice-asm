@@ -238,7 +238,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
 
     //trim the tips and isolated contigs that result from the unzipping of the graph. Then merge the adjacent contigs
     string tmp_gfa = tmp_folder+"tmp.gfa";
-    trim_tips_and_isolated_contigs(unzipped_gfa, min_abundance, 2*values_of_k[values_of_k.size()-1], tmp_gfa);
+    trim_tips_isolated_contigs_and_bubbles(unzipped_gfa, min_abundance, 2*values_of_k[values_of_k.size()-1], tmp_gfa);
     unordered_map<string, int> segments_IDs;
     vector<Segment> segments;
     vector<Segment> merged_segments;
