@@ -25,10 +25,23 @@ make
 ## Usage
 
 ```
+/build/aliceasm --help
+   _______ _                     _ _                                            _     _                               
+  |__   __| |              /\   | (_)              /\                          | |   | |                              
+     | |  | |__   ___     /  \  | |_  ___ ___     /  \   ___ ___  ___ _ __ ___ | |__ | | ___ _ __      ::     _.mnm._ 
+     | |  | '_ \ / _ \   / /\ \ | | |/ __/ _ \   / /\ \ / __/ __|/ _ \ '_ ` _ \| '_ \| |/ _ \ '__|    :  :   ( _____ )
+     | |  | | | |  __/  / ____ \| | | (_|  __/  / ____ \\__ \__ \  __/ | | | | | |_) | |  __/ |       :  :    |     | 
+     |_|  |_| |_|\___| /_/    \_\_|_|\___\___| /_/    \_\___/___/\___|_| |_| |_|_.__/|_|\___|_|       :__:     `___/  
+
+Command line: ./build/aliceasm --help 
+Alice Assembler version 0.6.41
+Last update: 2024-04-09
+Author: Roland Faure
+
+Help: 
 SYNOPSIS
-        ./aliceasm -r [<r>] -o [<o>] [-t [<t>]] [-l [<o>]] [-c [<c>]] [-H] [-m [<m>]] [-k [<k>]]
-                   [--contiguity] [--single-genome] [--bcalm [<b>]] [--clean] [--test [<t>]] [-v]
-                   [-h]
+        ./build/aliceasm -r [<r>] -o [<o>] [-t [<t>]] [-l [<o>]] [-c [<c>]] [-H] [-m [<m>]] [-k
+                         [<k>]] [--single-genome] [--bcalm [<b>]] [--clean] [--test [<t>]] [-v] [-h]
 
 OPTIONS
         -r, --reads input file (fasta/q)
@@ -46,14 +59,12 @@ OPTIONS
                     turn off homopolymer compression
 
         -m, --min-abundance
-                    minimum abundance of kmer to consider solid [5]
+                    minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2
+                    if single-genome [5]
 
         -k, --kmer-sizes
                     comma-separated increasing sizes of k for assembly, must go at least to 31
                     [17,31]
-
-        --contiguity
-                    Favor contiguity over recovery of rare strains [off]
 
         --single-genome
                     Switch on if assembling a single genome
@@ -62,6 +73,8 @@ OPTIONS
         --clean     remove the tmp folder at the end [off]
         -v, --version
                     print version and exit
+
+        -h, --help  print this help message and exit
 ```
 
 ## Can I use Alice for both genomic and metagenomic use cases ?
