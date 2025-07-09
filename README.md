@@ -35,7 +35,7 @@ make
 
 Command line: ./build/aliceasm --help 
 Alice Assembler version 0.6.41
-Last update: 2024-04-09
+Last update: 2025-07-09
 Author: Roland Faure
 
 Help: 
