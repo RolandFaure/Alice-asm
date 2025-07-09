@@ -389,7 +389,7 @@ int main(int argc, char** argv)
         input_file = tmp_folder+fasta_file;
     }
 
-    if (single_contig){
+    if (single_genome){
         contiguity = true;
     }
 
