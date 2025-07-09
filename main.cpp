@@ -36,7 +36,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.6.39";
+string version = "0.6.41";
 string date = "2024-04-09";
 string author = "Roland Faure";
 
@@ -95,13 +95,13 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
     string command_python3 = "python3 --version 2> trash.log > trash.log";
     auto python3_ok = system(command_python3.c_str());
 
-    string command_convertToGFA = path_convertToGFA + " 2> trash.log > trash.log";
+    string command_convertToGFA = path_convertToGFA + " -h 2> trash.log > trash.log";
     auto convertToGFA_ok = system(command_convertToGFA.c_str());
     if (convertToGFA_ok != 0) {
         string bad_path = path_convertToGFA;
         path_convertToGFA = "python3 " + exec("which convertToGFA.py");
         convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
-        if (convertToGFA_ok != 0) {
+        if (convertToGFA_ok != 0 || path_convertToGFA == "python3 ") {
             cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
             cout << "tried " << endl << bad_path << endl << path_convertToGFA << endl;
             exit(1);
@@ -192,7 +192,7 @@ int main(int argc, char** argv)
     string assembler_parameters = "";
     string test_ref_gfa = "";
     bool rescue = false;
-    bool contiguity = false;
+    bool contiguity = true;
     bool single_genome= false;
     int min_abundance = 5;
     string kmer_sizes = "17,31";
@@ -217,7 +217,7 @@ int main(int argc, char** argv)
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2 if single-genome [5]") & clipp::opt_value("m", min_abundance),
         clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,31]") & clipp::opt_value("k", kmer_sizes),
-        clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"),
+        // clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"), //in our tests, contiguity is better turned on
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
 
         //Other assemblers options
@@ -387,6 +387,10 @@ int main(int argc, char** argv)
             exit(1);
         }
         input_file = tmp_folder+fasta_file;
+    }
+
+    if (single_contig){
+        contiguity = true;
     }
 
     string compressed_file = tmp_folder+"compressed.fa";
