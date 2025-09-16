@@ -195,7 +195,7 @@ int main(int argc, char** argv)
     bool contiguity = true;
     bool single_genome= false;
     int min_abundance = 5;
-    string kmer_sizes = "17,31";
+    string kmer_sizes = "17,21,31";
     int order = 101;
     int compression = 20;
     int num_threads = 1;
@@ -216,7 +216,7 @@ int main(int argc, char** argv)
 
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2 if single-genome [5]") & clipp::opt_value("m", min_abundance),
-        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,31]") & clipp::opt_value("k", kmer_sizes),
+        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,21,31]") & clipp::opt_value("k", kmer_sizes),
         // clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"), //in our tests, contiguity is better turned on
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
 
