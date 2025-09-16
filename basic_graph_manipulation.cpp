@@ -308,7 +308,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             // (uint64_t &foward_hash, int k, std::string &seq, size_t &pos )
             while (roll_f(hash_foward, km, sequence, pos_end, pos_begin, false)){
                 
-                if (pos_begin>=0){
+                if (pos_begin>=0  && pos_begin % 5 == 0){
                     kmers_to_contigs[hash_foward] = make_pair(name, pos_end-km);
                 }
             }

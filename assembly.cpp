@@ -104,6 +104,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     //copy the reads to the file with unitigs
     string command_copy = "cp " + read_file + " " + file_with_unitigs_from_past_k_and_reads;
     system(command_copy.c_str());
+    string unitig_file_gfa, unitig_file_fa;
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
@@ -129,46 +130,19 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Converting result to GFA [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        string unitig_file_fa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.fa";
-        string unitig_file_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.gfa";
+        unitig_file_fa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.fa";
+        unitig_file_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.gfa";
         string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
         auto res = system(convert_command.c_str());
         auto time_convert = std::chrono::high_resolution_clock::now();
 
-        // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
-        now2 = time(0);
-        ltm2 = localtime(&now2);
-        cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads, single_genome); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
-        auto time_shave = std::chrono::high_resolution_clock::now();
-
-        //merge the adjacent contigs
-        now2 = time(0);
-        ltm2 = localtime(&now2);
-        cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-        if (true || round == values_of_k.size()-1){ //we are in the last round, do a proper merge that keeps the coverages //BUT gfatools does not seem to work well so do this every time...
-            unordered_map<string, int> segments_IDs;
-            vector<Segment> segments;
-            vector<Segment> merged_segments;
-            load_GFA(shaved_gfa, segments, segments_IDs, true); //the last true to load the contigs in memory
-            merge_adjacent_contigs(segments, merged_segments, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
-            output_graph(merged_gfa, shaved_gfa, merged_segments);
-        }
-        // else{ //merge using gfatools asm -u: much faster, though it does not keep the coverages
-        //     string merged_gfa_tmp = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-        //     string merge_command = "gfatools asm -u "+shaved_gfa+" > "+merged_gfa + " 2> "+tmp_folder+"gfatools.log";
-        //     system(merge_command.c_str());
-        // }
-        auto time_merge = std::chrono::high_resolution_clock::now();
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
         if (round < values_of_k.size()-1){
             cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
         
             string file_with_higher_kmers = read_file + ".higher_k.fa";
-            output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, num_threads);
+            output_unitigs_for_next_k(unitig_file_gfa, file_with_higher_kmers, values_of_k[round+1], 2, num_threads);
             //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
             string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
             system(command_concatenate.c_str());
@@ -177,13 +151,33 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
         auto time_nextk = std::chrono::high_resolution_clock::now();
 
         cout << "       - Times: bcalm " << std::chrono::duration_cast<std::chrono::seconds>(time_bcalm - time_start).count() << "s, convert " << std::chrono::duration_cast<std::chrono::seconds>(time_convert - time_bcalm).count() 
-            << "s, shave " << std::chrono::duration_cast<std::chrono::seconds>(time_shave - time_convert).count() << "s, merge " << std::chrono::duration_cast<std::chrono::seconds>(time_merge - time_shave).count()  
-            << "s, output for next k: " << std::chrono::duration_cast<std::chrono::seconds>(time_nextk - time_merge).count() << "s"<< endl;
+            << "s, output for next k: " << std::chrono::duration_cast<std::chrono::seconds>(time_nextk - time_convert).count() << "s"<< endl;
 
         round++;
     }
 
-    string merged_gfa = tmp_folder+"bcalm"+std::to_string(values_of_k[values_of_k.size()-1])+".unitigs.shaved.merged.gfa";
+    // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    int kmer_len = values_of_k[values_of_k.size()-1];
+    cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
+    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads, single_genome); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
+    auto time_shave = std::chrono::high_resolution_clock::now();
+
+    //merge the adjacent contigs
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
+    unordered_map<string, int> segments_IDs2;
+    vector<Segment> segments2;
+    vector<Segment> merged_segments2;
+    load_GFA(shaved_gfa, segments2, segments_IDs2, true); //the last true to load the contigs in memory
+    merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
+    output_graph(merged_gfa, shaved_gfa, merged_segments2);
+    auto time_merge = std::chrono::high_resolution_clock::now();
+
     cout << " =>Done with the iterative assembly, the graph is in " << merged_gfa << "\n" << endl;
 
     now2 = time(0);
