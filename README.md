@@ -76,7 +76,9 @@ OPTIONS
 
         -h, --help  print this help message and exit
 ```
-
 ## Can I use Alice for both genomic and metagenomic use cases ?
 
 Yes! If you are trying to assemble a single genome, it is recommended to use flag --single-genome and set -m to expected-coverage/2 in order to simplify the output graph.
+
+## Citation
+Please cite the preprint: [https://www.biorxiv.org/content/10.1101/2025.09.29.679204v1](https://www.biorxiv.org/content/10.1101/2025.09.29.679204v1)
