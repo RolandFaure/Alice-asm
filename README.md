@@ -76,6 +76,21 @@ OPTIONS
 
         -h, --help  print this help message and exit
 ```
+
+### Example
+Let's run an assembly together. Let's imagine that we want to assemble `SRR21295163` as a metagenome (even though it is a single _E.coli_ genome, but lets keep the files small for this section)
+First, download the dataset:
+```
+fastq-dump SRR21295163
+```
+Then assemble
+```
+conda activate aliceasm #Don't forget to place yourself in an environment with the bcalm dependency, e.g. the bioconda::aliceasm conda package
+aliceasm -r SRR21295163.fastq -o output_assembly -t 8
+```
+On my computer, the assembly completed in 25s and 0.33GB RAM. You should have created an output_assembly folder, containing assembly.gfa and assembly.fasta (which represent exactly the same contigs).
+If you want to make sure the assembly was successful, the assembly I obtained is available on this repo, in test/SRR21295163_assembly.gfa.
+
 ## Can I use Alice for both genomic and metagenomic use cases ?
 
 Yes! If you are trying to assemble a single genome, it is recommended to use flag --single-genome and set -m to expected-coverage/2 in order to simplify the output graph.
