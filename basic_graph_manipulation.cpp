@@ -1960,4 +1960,3 @@ void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments
     gfa.close();
 }
 
-
