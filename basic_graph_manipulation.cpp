@@ -288,6 +288,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     
     unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
     unordered_flat_map<string, int> length_of_contigs;
+    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
 
     ifstream input(unitig_graph);
     string line;
@@ -302,6 +303,10 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             ss >> dont_care >> name >> sequence;
             length_of_contigs[name] = sequence.size();
 
+            if (linked.find(name) == linked.end()){
+                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
+            }
+
             uint64_t hash_foward = -1;
             size_t pos_end = 0;
             long pos_begin = -km;
@@ -310,6 +315,41 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                 
                 if (pos_begin>=0  && pos_begin % 5 == 0){
                     kmers_to_contigs[hash_foward] = make_pair(name, pos_end-km);
+                }
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            char or1 = (orientation1 == "+" ? 1 : 0);
+            char or2 = (orientation2 == "+" ? 0 : 1);
+            auto neighbor = make_pair(name2, or2);
+            if (orientation1 == "+"){
+                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
+                    linked[name1].second.push_back(neighbor);
+                }
+            }
+            else{
+                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
+                    linked[name1].first.push_back(neighbor);
+                }
+            }
+
+            neighbor = make_pair(name1, or1);
+            if (orientation2 == "+"){
+                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
+                    linked[name2].first.push_back(neighbor);
+                }
+            }
+            else{
+                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
+                    linked[name2].second.push_back(neighbor);
                 }
             }
         }
@@ -357,17 +397,65 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             size_t pos_end = 0;
             long pos_begin = -km;
             long pos_middle = -(km+1)/2;
+            int previous_match = 0; //previous position on the read
+            string previous_contig = "";
             while(roll(hash_foward, hash_reverse, km, line, pos_end, pos_begin, pos_middle, false)){
                 if (pos_begin == pos_to_look_at){
 
                     unsigned long kmer = hash_foward; 
 
                     if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){ //foward kmer
+                        // if (name == "SRR21295163.27908 27908 length=11519"){
+                        //     cout << "fell in " << kmers_to_contigs[kmer].first << " and " << pos_to_look_at << endl;
+                        // }
                         if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == true){
                             //same contig, do nothing
                         }
                         else{
                             string contig = kmers_to_contigs[kmer].first;
+
+                            if (previous_contig != ""){
+                                // List all paths from this contig
+                                int distance = pos_to_look_at - previous_match - kmers_to_contigs[kmer].second; // Distance since last kmer match
+                                vector<vector<pair<string, bool>>> paths = list_all_paths_from_contig(linked, contig, false, distance, length_of_contigs, km);
+                                
+                                // Check if any of the paths contain the previous contig
+                                bool found_path_with_previous = false;
+                                for (const auto& path : paths) {
+                                    auto node = path[path.size()-1];
+                                    if (node.first == previous_contig) {
+                                        found_path_with_previous = true;
+                                        // Add all contigs from this path to p (excluding the current contig which is added below and the last one which was already added)
+                                        for (int i = path.size() - 2; i >= 0; i--) {
+                                            if (path[i].first != contig) {
+                                                p.contigs.push_back(path[i].first);
+                                                p.orientations.push_back(!path[i].second); //reverse the orientation, we looked backward
+                                                if (coverages.find(path[i].first) == coverages.end()) {
+                                                    coverages[path[i].first] = 0;
+                                                }
+                                                coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                            }
+                                        }
+
+                                        // if (name == "SRR21295163.104800 104800 length=16805"){
+                                        //     cout << "Found path from " << (p.orientations[p.orientations.size()-1] ? ">" : "<") << previous_contig << " to " << (true ? ">" : "<") << contig << " through:\n";
+                                        //     for (int i = path.size() - 1; i >= 0; i--) {
+                                        //         cout << (path[i].second ? ">" : "<") << path[i].first << " ";
+                                        //     }
+                                        //     cout << "\n";
+                                        //     cout << name << endl;
+                                        //     // exit(0);
+                                        // }
+                                        
+                                        break;
+                                        
+                                    }
+                                    if (found_path_with_previous) {
+                                        break;
+                                    }
+                                }
+                            }
+
                             p.contigs.push_back(contig);
                             p.orientations.push_back(true);
                             if (coverages.find(contig) == coverages.end()){
@@ -381,13 +469,50 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                             pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
                         }
                         // cout << "found in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second <<" " << pos_nth << "\n";
+                        previous_match = pos_begin;
+                        previous_contig = kmers_to_contigs[kmer].first;
                     }
                     else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){ //reverse kmer
+                    
                         if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[hash_reverse].first && p.orientations[p.orientations.size()-1] == false){
                             //same contig, do nothing
                         }
                         else{
+                            // if (name == "SRR21295163.27908 27908 length=11519"){
+                            //     cout << "fell in " << kmers_to_contigs[hash_reverse].first << " and " << pos_to_look_at << endl;
+                            // }
                             string contig = kmers_to_contigs[hash_reverse].first;
+
+                            if (previous_contig != ""){
+                                int distance = pos_to_look_at - previous_match - (length_of_contigs[kmers_to_contigs[hash_reverse].first] - kmers_to_contigs[hash_reverse].second - km) ; // Distance since last kmer match
+                                vector<vector<pair<string, bool>>> paths = list_all_paths_from_contig(linked, contig, true, distance, length_of_contigs, km);
+
+                                // Check if any of the paths contain the previous contig
+                                bool found_path_with_previous = false;
+                                for (const auto& path : paths) {
+                                    auto node = path[path.size()-1];
+
+                                    if (node.first == previous_contig) {
+                                        found_path_with_previous = true;
+                                        // Add all contigs from this path to p (excluding the current contig which is added below and the last one which was already added )
+                                        for (int i = path.size() - 2; i >= 0; i--) {
+                                            if (path[i].first != contig) {
+                                                p.contigs.push_back(path[i].first);
+                                                p.orientations.push_back(!path[i].second); // Invert orientation since we're in reverse
+                                                if (coverages.find(path[i].first) == coverages.end()) {
+                                                    coverages[path[i].first] = 0;
+                                                }
+                                                coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    if (found_path_with_previous) {
+                                        break;
+                                    }
+                                }
+                            }
+
                             p.contigs.push_back(contig);
                             p.orientations.push_back(false);
                             if (coverages.find(contig) == coverages.end()){
@@ -397,15 +522,49 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         }
                         //skip the next kmers
                         int length_of_contig_left = kmers_to_contigs[hash_reverse].second;
+
+                        // if (name == "SRR21295163.73966 73966 length=9354"){
+                        //     cout << "fell in " << kmers_to_contigs[hash_reverse].first << " and " << pos_to_look_at << endl;
+                        //     cout << "there is " << length_of_contig_left << " new pos is " << pos_to_look_at + length_of_contig_left*0.8 << endl;
+                            
+                        //     if (previous_contig != ""){
+                        //         // List all paths from this contig
+                        //         string contig = kmers_to_contigs[hash_reverse].first;
+                        //         int distance = pos_to_look_at - previous_match; // Distance since last kmer match
+                        //         vector<vector<pair<string, bool>>> paths = list_all_paths_from_contig(linked, contig, true, distance, length_of_contigs);
+                                
+
+                        //         cout << "Found " << paths.size() << " paths from " << contig << " (distance: " << distance << ") while looking for " << previous_contig << ":\n";
+                        //         for (const auto& path : paths) {
+                        //             for (const auto& node : path) {
+                        //                 cout << (node.second ? ">" : "<") << node.first << " ";
+                        //             }
+                        //             cout << "\n";
+                        //         }
+                        //     }
+                        // }
                         if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
                             pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
                             // cout << "dqddf" << endl;
                         }
                         // cout << "found in " << kmers_to_contigs[nth.get_reverse_hash()].first << " at pos " << kmers_to_contigs[nth.get_reverse_hash()].second << " " << pos_nth<< "\n";
+                        previous_match = pos_begin;
+                        previous_contig = kmers_to_contigs[hash_reverse].first;
                     }
                     pos_to_look_at++;
                 }
+
             }
+
+            // if (p.contigs.size() > 3){
+            //     cout << "Path so far: ";
+            //     for (int i = 0; i < p.contigs.size(); i++) {
+            //         cout << (p.orientations[i] ? ">" : "<") << p.contigs[i] << " ";
+            //     }
+            //     cout << "\n";
+            //     cout << name << endl;
+            //     exit(0);
+            // }
 
             if (p.contigs.size() > 0){
                 output << name << "\t-1\t-1\t-1\t+\t";
@@ -417,7 +576,8 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         output << "<" << p.contigs[i];
                     }
                 }
-                output << "\t\n";}
+                output << "\t\n";
+            }
         }
     }
 
@@ -425,6 +585,67 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     output.close();
 
 }
+
+/**
+ * @brief Given a starting position on a contig and an orientation, follow the graph and list all possible contigs and paths
+ * 
+ * @param linked adjacency list representing the graph structure
+ * @param start_contig_name name of the starting contig
+ * @param start_orientation true if we start from the right end ('+'), false if from the left end ('-')
+ * @param max_length maximum total length of contigs to explore in the paths
+ * @param length_of_contigs map from contig name to its length
+ * @return vector<vector<pair<string, bool>>> list of paths, each path is a list of (contig_name, orientation)
+ */
+vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>>& linked, string start_contig_name, bool start_orientation, int max_length, unordered_flat_map<string, int>& length_of_contigs, int km){
+    
+    // Recursive exploration function
+    std::function<vector<vector<pair<string, bool>>>(string, char, int, vector<pair<string, bool>>&, int)> explore;
+    explore = [&](string current_contig, char current_end, int length_left, vector<pair<string, bool>>& current_path, int km) -> vector<vector<pair<string, bool>>> {
+        
+        if (length_left <= 0){
+            return {current_path};
+        }
+        
+        vector<vector<pair<string, bool>>> all_paths;
+        
+        // Get neighbors from the appropriate end
+        vector<pair<string, char>>& neighbors = (current_end == 1) ? linked[current_contig].second : linked[current_contig].first;
+        
+        if (neighbors.size() == 0){
+            return {current_path};
+        }
+        
+        for (auto neighbor : neighbors){
+            vector<pair<string, bool>> new_path = current_path;
+            // neighbor.second tells us which end of the neighbor we arrive at
+            // if we arrive at end 0, we traverse it in forward orientation (true)
+            // if we arrive at end 1, we traverse it in reverse orientation (false)
+            bool neighbor_orientation = (neighbor.second == 0);
+            new_path.push_back({neighbor.first, neighbor_orientation});
+            
+            // Continue exploration from the opposite end of the neighbor
+            char next_end = 1 - neighbor.second;
+            int neighbor_length = length_of_contigs[neighbor.first]-km + 1;
+            vector<vector<pair<string, bool>>> sub_paths = explore(neighbor.first, next_end, length_left - neighbor_length, new_path, km);
+            
+            all_paths.insert(all_paths.end(), sub_paths.begin(), sub_paths.end());
+            
+            // Safety check: if we have more than 100 paths, return empty list, to avoid exploding the complexity
+            if (all_paths.size() > 100){
+                return {};
+            }
+        }
+        
+        return all_paths;
+    };
+    
+    // Start exploration
+    vector<pair<string, bool>> initial_path = {{start_contig_name, start_orientation}};
+    char start_end = start_orientation ? 1 : 0; // if orientation is true ('+'), we start from end 1 (right)
+    
+    return explore(start_contig_name, start_end, max_length, initial_path, km);
+}
+
 
 
 void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder){
@@ -1379,12 +1600,39 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
     
     //now trim the tips, isolated contigs and bubbles with a coverage below min_coverage and a length below min_length (bubbles need to have coverage 1)
     std::set<string> contigs_to_remove;
+    std::set<string> contigs_to_detach; //contigs that look valid but probably reduce contiguity, detach them from the graph
     for (auto c: linked){
         string contig_name = c.first;
         //remove tip
         if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
             if (coverage[contig_name] < min_coverage && (length_of_contigs[contig_name] < min_length || coverage[contig_name]==1)){
                 contigs_to_remove.insert(contig_name);
+            }
+            else { //the contig is valid but detaching it may improve the contiguity
+                if (linked[contig_name].first.size() > 0) {
+                    bool all_neighbors_higher_coverage = true;
+                    for (auto l : linked[contig_name].first) {
+                        if (coverage[l.first] < 2 * coverage[contig_name]) {
+                            all_neighbors_higher_coverage = false;
+                            break;
+                        }
+                    }
+                    if (all_neighbors_higher_coverage) {
+                        contigs_to_detach.insert(contig_name);
+                    }
+                }
+                if (linked[contig_name].second.size() > 0) {
+                    bool all_neighbors_higher_coverage = true;
+                    for (auto l : linked[contig_name].second) {
+                        if (coverage[l.first] < 2 * coverage[contig_name]) {
+                            all_neighbors_higher_coverage = false;
+                            break;
+                        }
+                    }
+                    if (all_neighbors_higher_coverage) {
+                        contigs_to_detach.insert(contig_name);
+                    }
+                }
             }
         }
         //remove bubble
@@ -1428,6 +1676,74 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
                 contigs_to_remove.insert(contig_name);
             }
         }
+        //if contig attached among contigs of higher coverage, detach
+        if (linked[contig_name].first.size() > 0 && linked[contig_name].second.size() > 0) {
+            // Check if all neighbors have significantly higher coverage
+            bool all_neighbors_higher_coverage = true;
+            for (auto l : linked[contig_name].first) {
+                if (coverage[l.first] < 2 * coverage[contig_name]) {
+                    all_neighbors_higher_coverage = false;
+                    break;
+                }
+            }
+            if (all_neighbors_higher_coverage) {
+                for (auto l : linked[contig_name].second) {
+                    if (coverage[l.first] < 2 * coverage[contig_name]) {
+                        all_neighbors_higher_coverage = false;
+                        break;
+                    }
+                }
+            }
+
+            // If all neighbors have higher coverage, check if they have alternative neighbors better covered
+            if (all_neighbors_higher_coverage) {
+                bool all_neighbors_have_alternatives = true;
+                
+                // Check left neighbors
+                for (auto l : linked[contig_name].first) {
+                    string neighbor = l.first;
+                    char neighbor_end = l.second;
+                    auto& neighbor_links = (neighbor_end == 0) ? linked[neighbor].first : linked[neighbor].second;
+                    
+                    bool has_better_alternative = false;
+                    for (auto alt_link : neighbor_links) {
+                        if (alt_link.first != contig_name && coverage[alt_link.first] >= 2*coverage[contig_name]) {
+                            has_better_alternative = true;
+                            break;
+                        }
+                    }
+                    if (!has_better_alternative) {
+                        all_neighbors_have_alternatives = false;
+                        break;
+                    }
+                }
+                
+                // Check right neighbors
+                if (all_neighbors_have_alternatives) {
+                    for (auto l : linked[contig_name].second) {
+                        string neighbor = l.first;
+                        char neighbor_end = l.second;
+                        auto& neighbor_links = (neighbor_end == 0) ? linked[neighbor].first : linked[neighbor].second;
+                        
+                        bool has_better_alternative = false;
+                        for (auto alt_link : neighbor_links) {
+                            if (alt_link.first != contig_name && coverage[alt_link.first] >= 2*coverage[contig_name]) {
+                                has_better_alternative = true;
+                                break;
+                            }
+                        }
+                        if (!has_better_alternative) {
+                            all_neighbors_have_alternatives = false;
+                            break;
+                        }
+                    }
+                }
+                
+                if (all_neighbors_have_alternatives) {
+                    contigs_to_detach.insert(contig_name);
+                }
+            }
+        }
     }
 
     //now write the gfa file without the contigs to remove
@@ -1456,7 +1772,10 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
             int i = 0;
             ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
 
-            if (contigs_to_remove.find(name1) == contigs_to_remove.end() && contigs_to_remove.find(name2) == contigs_to_remove.end()){
+            if (contigs_to_remove.find(name1) == contigs_to_remove.end() 
+                && contigs_to_remove.find(name2) == contigs_to_remove.end()
+                && contigs_to_detach.find(name1) == contigs_to_detach.end() 
+                && contigs_to_detach.find(name2) == contigs_to_detach.end()){
                 out << line << "\n";
             }
         }

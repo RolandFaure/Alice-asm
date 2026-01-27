@@ -12,6 +12,7 @@ set(TARGET_H
     basic_graph_manipulation.h,
     clipp.h,
     graphunzip.h,
+    graphunzip2.h,
     reduce_and_expand.h,
     rolling_hash.h,
     test.h
@@ -23,13 +24,14 @@ set(TARGET_SRC
     basic_graph_manipulation.cpp,
     main.cpp,
     graphunzip.cpp,
+    graphunzip2.cpp,
     reduce_and_expand.cpp,
     rolling_hash.cpp,
     test.cpp
     )
 
 
-file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp" "test.cpp")
+file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp" "test.cpp" "graphunzip2.cpp")
 add_executable(aliceasm ${SOURCE})
 target_compile_options (aliceasm PRIVATE -fopenmp)
 target_compile_options (aliceasm PRIVATE -lz)

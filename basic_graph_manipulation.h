@@ -184,6 +184,9 @@ void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::
 void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename, int num_threads);
 void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 
+std::vector<std::vector<std::pair<std::string, bool>>> list_all_paths_from_contig(robin_hood::unordered_map<std::string, std::pair<std::vector<std::pair<std::string, char>>, std::vector<std::pair<std::string,char>>>>& linked, std::string start_contig_name, bool start_orientation, int max_length, robin_hood::unordered_flat_map<std::string, int>& length_of_contigs, int km);
+
+
 
 
 #endif

@@ -175,6 +175,12 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
+    // unordered_map<string,float> coverages;
+    // string a = "out_alice/tmp/bcalm.unitigs.shaved.popped.merged.gfa";
+    // string b = "out_alice/tmp/compressed.fa";
+    // create_gaf_from_unitig_graph(a, 31, b, "trash.gaf", coverages);
+    // exit(0);
+
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;
@@ -221,12 +227,12 @@ int main(int argc, char** argv)
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
 
         //Other assemblers options
-        // clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
+        clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
         
         // clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
         // clipp::option("--hifiasm_meta").doc("path to hifiasm_meta [hifiasm_meta]") & clipp::opt_value("h", path_to_hifiasm),
-        // clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
+        clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
         // clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
         // // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
         // clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),

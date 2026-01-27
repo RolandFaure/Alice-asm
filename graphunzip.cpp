@@ -83,7 +83,7 @@ void Segment::compute_consensuses(){
         }
     }
 
-    // if (this->name == "8997"){
+    // if (this->name == "74"){
     //     cout << "****here are the neighbors right with their strengths: " << endl;
     //     for (auto neighbor : neighbors_right_with_strengths){
     //         for (auto contig : neighbor){
@@ -168,6 +168,21 @@ void Segment::compute_consensuses(){
             }
         }
     }
+
+    // if (this->name == "74"){
+    //     cout << "****here are the neighbors left with their strengths: " << endl;
+    //     for (auto neighbor : neighbors_left_with_strengths){
+    //         for (auto contig : neighbor){
+    //             cout << contig.first.first << " ";
+    //         }
+    //         cout << endl;
+    //         for (auto contig : neighbor){
+    //             cout << contig.second.first << "/" << contig.second.second << " ";
+    //         }
+    //         cout << endl;
+    //     }
+    // }
+
 
     //go through the neighbors with strengths and see if there is a consensus
     bool haploid_left = false;
@@ -1370,7 +1385,7 @@ int main(int argc, char *argv[])
     // cout << "Haploid contigs created" << endl;
 
     // //output the graph
-    // output_graph("out_alice/tmp/haploid.gfa", gfa_input, unzipped_segments);
+    output_graph("out_alice/tmp/haploid.gfa", gfa_input, unzipped_segments);
     // exit(0);
 
     // cout << "Listing non represented paths" << endl;
@@ -1382,6 +1397,8 @@ int main(int argc, char *argv[])
     // cout << "Non represented paths added" << endl;
 
     // cout << "Graph unzipped" << endl;
+
+    output_graph("out_alice/tmp/after_unzip.gfa", gfa_input, unzipped_segments);
 
     // cout << "Merging adjacent contigs" << endl;
     vector<Segment> merged_segments;
