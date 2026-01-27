@@ -1600,7 +1600,7 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
     
     //now trim the tips, isolated contigs and bubbles with a coverage below min_coverage and a length below min_length (bubbles need to have coverage 1)
     std::set<string> contigs_to_remove;
-    std::set<string> contigs_to_detach; //contigs that look valid but probably reduce contiguity, detach them from the graph
+    std::set<std::pair<string, string>> links_to_detach; //contigs that look valid but probably reduce contiguity, detach them from the graph
     for (auto c: linked){
         string contig_name = c.first;
         //remove tip
@@ -1610,27 +1610,17 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
             }
             else { //the contig is valid but detaching it may improve the contiguity
                 if (linked[contig_name].first.size() > 0) {
-                    bool all_neighbors_higher_coverage = true;
                     for (auto l : linked[contig_name].first) {
-                        if (coverage[l.first] < 2 * coverage[contig_name]) {
-                            all_neighbors_higher_coverage = false;
-                            break;
+                        if (coverage[l.first] > 2 * coverage[contig_name]) {
+                            links_to_detach.insert({contig_name, l.first});
                         }
-                    }
-                    if (all_neighbors_higher_coverage) {
-                        contigs_to_detach.insert(contig_name);
                     }
                 }
                 if (linked[contig_name].second.size() > 0) {
-                    bool all_neighbors_higher_coverage = true;
                     for (auto l : linked[contig_name].second) {
-                        if (coverage[l.first] < 2 * coverage[contig_name]) {
-                            all_neighbors_higher_coverage = false;
-                            break;
+                        if (coverage[l.first] > 2 * coverage[contig_name]) {
+                            links_to_detach.insert({contig_name, l.first});
                         }
-                    }
-                    if (all_neighbors_higher_coverage) {
-                        contigs_to_detach.insert(contig_name);
                     }
                 }
             }
@@ -1740,7 +1730,13 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
                 }
                 
                 if (all_neighbors_have_alternatives) {
-                    contigs_to_detach.insert(contig_name);
+                    // Detach all links of the contig
+                    for (auto l : linked[contig_name].first) {
+                        links_to_detach.insert({contig_name, l.first});
+                    }
+                    for (auto l : linked[contig_name].second) {
+                        links_to_detach.insert({contig_name, l.first});
+                    }
                 }
             }
         }
@@ -1774,8 +1770,8 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
 
             if (contigs_to_remove.find(name1) == contigs_to_remove.end() 
                 && contigs_to_remove.find(name2) == contigs_to_remove.end()
-                && contigs_to_detach.find(name1) == contigs_to_detach.end() 
-                && contigs_to_detach.find(name2) == contigs_to_detach.end()){
+                && links_to_detach.find({name1, name2}) == links_to_detach.end() 
+                && links_to_detach.find({name2, name1}) == links_to_detach.end()){
                 out << line << "\n";
             }
         }
