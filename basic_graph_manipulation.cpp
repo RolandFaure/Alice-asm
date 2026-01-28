@@ -273,6 +273,8 @@ void sort_GFA(std::string gfa){
 struct Path{
     vector<string> contigs;
     vector<bool> orientations;
+    int start_position_on_contig;
+    int end_position_on_contig;
 };
 
 /**
@@ -284,10 +286,11 @@ struct Path{
  * @param gaf_out
  * @param coverages
  */
-void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string gaf_out, robin_hood::unordered_map<std::string, float>& coverages){
+void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, bool output_gaf){
     
     unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
     unordered_flat_map<string, int> length_of_contigs;
+    unordered_flat_map<string, string> contig_sequences; // Store contig sequences in memory
     unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
 
     ifstream input(unitig_graph);
@@ -302,6 +305,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
             length_of_contigs[name] = sequence.size();
+            contig_sequences[name] = sequence; // Store sequence in memory
 
             if (linked.find(name) == linked.end()){
                 linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
@@ -310,7 +314,6 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             uint64_t hash_foward = -1;
             size_t pos_end = 0;
             long pos_begin = -km;
-            // (uint64_t &foward_hash, int k, std::string &seq, size_t &pos )
             while (roll_f(hash_foward, km, sequence, pos_end, pos_begin, false)){
                 
                 if (pos_begin>=0  && pos_begin % 5 == 0){
@@ -361,31 +364,24 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     string name;
     bool nextline = false;
     int nb_reads = 0;
-    auto time_now = std::chrono::system_clock::now();
-    ofstream output(gaf_out);
+    int nb_reads_single_path = 0;
+    ofstream output(output_file);
+    
     while (std::getline(input2, line))
     {
-        // if (nb_reads%1000==0){
-        //     auto time_now2 = std::chrono::system_clock::now();
-        //     cout << "aligned " << nb_reads << " on the graph, taking on average " << std::chrono::duration_cast<std::chrono::microseconds>(time_now2 - time_now).count() / (nb_reads+1) << " us per read\r";
-        // }
-        nb_reads++;
-        // cout << "mljqdklmjm " << line << endl;
-
         if (line[0] == '@' || line[0] == '>')
         {
             name = line.substr(1, line.size()-1);
-            if ("false" != name.substr(0, 5)){ //false reads are present e.g. when performing multi-k assembly
+            if ("false" != name.substr(0, 5)){
                 nextline = true;
             }
         }
         else if (nextline){
-            // if (name.substr(0, name.find_first_of(' ')) != "SRR21295163.5251"){
-            //     // cout << "skippple name " << name.substr(0, name.find_first_of(' ')) << "\n";
-            //     continue;
-            // }
-            Path p;
-            //go through the sequence and find the kmers
+            vector<Path> paths;
+            Path current_path;
+            current_path.start_position_on_contig = -1;
+            current_path.end_position_on_contig = -1;
+            
             if (line.size() < km){
                 continue;
             }
@@ -397,186 +393,230 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             size_t pos_end = 0;
             long pos_begin = -km;
             long pos_middle = -(km+1)/2;
-            int previous_match = 0; //previous position on the read
+            int previous_match = 0;
             string previous_contig = "";
+            
             while(roll(hash_foward, hash_reverse, km, line, pos_end, pos_begin, pos_middle, false)){
                 if (pos_begin == pos_to_look_at){
 
                     unsigned long kmer = hash_foward; 
 
-                    if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){ //foward kmer
-                        // if (name == "SRR21295163.27908 27908 length=11519"){
-                        //     cout << "fell in " << kmers_to_contigs[kmer].first << " and " << pos_to_look_at << endl;
-                        // }
-                        if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[kmer].first && p.orientations[p.orientations.size()-1] == true){
-                            //same contig, do nothing
+                    if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){
+                        string contig = kmers_to_contigs[kmer].first;
+                        int pos_in_contig = kmers_to_contigs[kmer].second;
+
+                        if (current_path.contigs.size() == 0){
+                            current_path.start_position_on_contig = pos_in_contig;
+                        }
+                        
+                        if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == true){
+                            //we stayed in the same contig, don't do much
+                            current_path.end_position_on_contig = pos_in_contig + km;
                         }
                         else{
-                            string contig = kmers_to_contigs[kmer].first;
-
                             if (previous_contig != ""){
-                                // List all paths from this contig
-                                int distance = pos_to_look_at - previous_match - kmers_to_contigs[kmer].second; // Distance since last kmer match
-                                vector<vector<pair<string, bool>>> paths = list_all_paths_from_contig(linked, contig, false, distance, length_of_contigs, km);
+                                int distance = pos_to_look_at - previous_match - pos_in_contig;
+                                vector<vector<pair<string, bool>>> all_paths = list_all_paths_from_contig(linked, contig, false, distance, length_of_contigs, km);
                                 
-                                // Check if any of the paths contain the previous contig
-                                bool found_path_with_previous = false;
-                                for (const auto& path : paths) {
-                                    auto node = path[path.size()-1];
+                                int valid_path_count = 0;
+                                int valid_path_index = -1;
+                                for (int path_idx = 0; path_idx < all_paths.size(); path_idx++) {
+                                    auto node = all_paths[path_idx][all_paths[path_idx].size()-1];
                                     if (node.first == previous_contig) {
-                                        found_path_with_previous = true;
-                                        // Add all contigs from this path to p (excluding the current contig which is added below and the last one which was already added)
-                                        for (int i = path.size() - 2; i >= 0; i--) {
-                                            if (path[i].first != contig) {
-                                                p.contigs.push_back(path[i].first);
-                                                p.orientations.push_back(!path[i].second); //reverse the orientation, we looked backward
-                                                if (coverages.find(path[i].first) == coverages.end()) {
-                                                    coverages[path[i].first] = 0;
-                                                }
-                                                coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                        valid_path_count++;
+                                        valid_path_index = path_idx;
+                                    }
+                                }
+                                
+                                if (valid_path_count == 1) {
+                                    const auto& path = all_paths[valid_path_index];
+                                    for (int i = path.size() - 2; i >= 0; i--) {
+                                        if (path[i].first != contig) {
+                                            current_path.contigs.push_back(path[i].first);
+                                            current_path.orientations.push_back(!path[i].second);
+                                            if (coverages.find(path[i].first) == coverages.end()) {
+                                                coverages[path[i].first] = 0;
                                             }
+                                            coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
                                         }
-
-                                        // if (name == "SRR21295163.104800 104800 length=16805"){
-                                        //     cout << "Found path from " << (p.orientations[p.orientations.size()-1] ? ">" : "<") << previous_contig << " to " << (true ? ">" : "<") << contig << " through:\n";
-                                        //     for (int i = path.size() - 1; i >= 0; i--) {
-                                        //         cout << (path[i].second ? ">" : "<") << path[i].first << " ";
-                                        //     }
-                                        //     cout << "\n";
-                                        //     cout << name << endl;
-                                        //     // exit(0);
-                                        // }
-                                        
-                                        break;
-                                        
                                     }
-                                    if (found_path_with_previous) {
-                                        break;
-                                    }
+                                }
+                                
+                                if (valid_path_count != 1 && current_path.contigs.size() > 0) {
+                                    paths.push_back(current_path);
+                                    current_path.contigs.clear();
+                                    current_path.orientations.clear();
+                                    current_path.start_position_on_contig = pos_in_contig;
+                                    current_path.end_position_on_contig = pos_in_contig + km;
                                 }
                             }
 
-                            p.contigs.push_back(contig);
-                            p.orientations.push_back(true);
-                            if (coverages.find(contig) == coverages.end()){
-                                coverages[contig] = 0;
+                            current_path.contigs.push_back(contig);
+                            current_path.orientations.push_back(true);
+                            if (current_path.start_position_on_contig == -1) {
+                                current_path.start_position_on_contig = pos_in_contig;
                             }
-                            coverages[contig]+= min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
-                        }
-                        //skip the next kmers
-                        int length_of_contig_left = length_of_contigs[kmers_to_contigs[kmer].first] - kmers_to_contigs[kmer].second - km;
-                        if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
-                            pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
-                        }
-                        // cout << "found in " << kmers_to_contigs[kmer].first << " at pos " << kmers_to_contigs[kmer].second <<" " << pos_nth << "\n";
-                        previous_match = pos_begin;
-                        previous_contig = kmers_to_contigs[kmer].first;
-                    }
-                    else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){ //reverse kmer
-                    
-                        if (p.contigs.size() > 0 && p.contigs[p.contigs.size()-1] == kmers_to_contigs[hash_reverse].first && p.orientations[p.orientations.size()-1] == false){
-                            //same contig, do nothing
-                        }
-                        else{
-                            // if (name == "SRR21295163.27908 27908 length=11519"){
-                            //     cout << "fell in " << kmers_to_contigs[hash_reverse].first << " and " << pos_to_look_at << endl;
-                            // }
-                            string contig = kmers_to_contigs[hash_reverse].first;
-
-                            if (previous_contig != ""){
-                                int distance = pos_to_look_at - previous_match - (length_of_contigs[kmers_to_contigs[hash_reverse].first] - kmers_to_contigs[hash_reverse].second - km) ; // Distance since last kmer match
-                                vector<vector<pair<string, bool>>> paths = list_all_paths_from_contig(linked, contig, true, distance, length_of_contigs, km);
-
-                                // Check if any of the paths contain the previous contig
-                                bool found_path_with_previous = false;
-                                for (const auto& path : paths) {
-                                    auto node = path[path.size()-1];
-
-                                    if (node.first == previous_contig) {
-                                        found_path_with_previous = true;
-                                        // Add all contigs from this path to p (excluding the current contig which is added below and the last one which was already added )
-                                        for (int i = path.size() - 2; i >= 0; i--) {
-                                            if (path[i].first != contig) {
-                                                p.contigs.push_back(path[i].first);
-                                                p.orientations.push_back(!path[i].second); // Invert orientation since we're in reverse
-                                                if (coverages.find(path[i].first) == coverages.end()) {
-                                                    coverages[path[i].first] = 0;
-                                                }
-                                                coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
-                                            }
-                                        }
-                                        break;
-                                    }
-                                    if (found_path_with_previous) {
-                                        break;
-                                    }
-                                }
-                            }
-
-                            p.contigs.push_back(contig);
-                            p.orientations.push_back(false);
-                            if (coverages.find(contig) == coverages.end()){
-                                coverages[contig] = 0;
-                            }
-                            coverages[contig]+= min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
-                        }
-                        //skip the next kmers
-                        int length_of_contig_left = kmers_to_contigs[hash_reverse].second;
-
-                        // if (name == "SRR21295163.73966 73966 length=9354"){
-                        //     cout << "fell in " << kmers_to_contigs[hash_reverse].first << " and " << pos_to_look_at << endl;
-                        //     cout << "there is " << length_of_contig_left << " new pos is " << pos_to_look_at + length_of_contig_left*0.8 << endl;
+                            current_path.end_position_on_contig = pos_in_contig + km;
                             
-                        //     if (previous_contig != ""){
-                        //         // List all paths from this contig
-                        //         string contig = kmers_to_contigs[hash_reverse].first;
-                        //         int distance = pos_to_look_at - previous_match; // Distance since last kmer match
-                        //         vector<vector<pair<string, bool>>> paths = list_all_paths_from_contig(linked, contig, true, distance, length_of_contigs);
-                                
-
-                        //         cout << "Found " << paths.size() << " paths from " << contig << " (distance: " << distance << ") while looking for " << previous_contig << ":\n";
-                        //         for (const auto& path : paths) {
-                        //             for (const auto& node : path) {
-                        //                 cout << (node.second ? ">" : "<") << node.first << " ";
-                        //             }
-                        //             cout << "\n";
-                        //         }
-                        //     }
-                        // }
-                        if (length_of_contig_left > 10){ //don't skip too close to the end, you may miss the next contig
-                            pos_to_look_at += (int) length_of_contig_left*0.8; // *0.8 to be sure not to skip the next contig
-                            // cout << "dqddf" << endl;
+                            if (coverages.find(contig) == coverages.end()){
+                                coverages[contig] = 0;
+                            }
+                            coverages[contig]+= std::min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
                         }
-                        // cout << "found in " << kmers_to_contigs[nth.get_reverse_hash()].first << " at pos " << kmers_to_contigs[nth.get_reverse_hash()].second << " " << pos_nth<< "\n";
+                        
+                        int length_of_contig_left = length_of_contigs[contig] - pos_in_contig - km;
+                        if (length_of_contig_left > 10){
+                            pos_to_look_at += min((int) (length_of_contig_left*0.8) , (int)(line.size() - pos_begin - km - 5)); //skip big part of the contig (or big part of the read if that's smaller)
+                        }
                         previous_match = pos_begin;
-                        previous_contig = kmers_to_contigs[hash_reverse].first;
+                        previous_contig = contig;
+                    }
+                    else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){
+                        string contig = kmers_to_contigs[hash_reverse].first;
+                        int pos_in_contig = kmers_to_contigs[hash_reverse].second;
+
+                        if (current_path.contigs.size() == 0){
+                            current_path.start_position_on_contig = length_of_contigs[contig] - pos_in_contig - km;
+                        }
+                        
+                        if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == false){
+                            current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
+                        }
+                        else{
+                            if (previous_contig != ""){
+                                int distance = pos_to_look_at - previous_match - (length_of_contigs[contig] - pos_in_contig - km);
+                                vector<vector<pair<string, bool>>> all_paths = list_all_paths_from_contig(linked, contig, true, distance, length_of_contigs, km);
+
+                                int valid_path_count = 0;
+                                int valid_path_index = -1;
+                                for (int path_idx = 0; path_idx < all_paths.size(); path_idx++) {
+                                    auto node = all_paths[path_idx][all_paths[path_idx].size()-1];
+                                    if (node.first == previous_contig) {
+                                        valid_path_count++;
+                                        valid_path_index = path_idx;
+                                    }
+                                }
+                                
+                                if (valid_path_count == 1) {
+                                    const auto& path = all_paths[valid_path_index];
+                                    for (int i = path.size() - 2; i >= 0; i--) {
+                                        if (path[i].first != contig) {
+                                            current_path.contigs.push_back(path[i].first);
+                                            current_path.orientations.push_back(!path[i].second);
+                                            if (coverages.find(path[i].first) == coverages.end()) {
+                                                coverages[path[i].first] = 0;
+                                            }
+                                            coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                        }
+                                    }
+                                }
+                                
+                                if (valid_path_count != 1 && current_path.contigs.size() > 0) {
+                                    paths.push_back(current_path);
+                                    current_path.contigs.clear();
+                                    current_path.orientations.clear();
+                                    current_path.start_position_on_contig = length_of_contigs[contig] - pos_in_contig - km;
+                                    current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
+                                }
+                            }
+
+                            current_path.contigs.push_back(contig);
+                            current_path.orientations.push_back(false);
+                            if (current_path.start_position_on_contig == -1) {
+                                current_path.start_position_on_contig = length_of_contigs[contig] - pos_in_contig - km;
+                            }
+                            current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
+                            
+                            if (coverages.find(contig) == coverages.end()){
+                                coverages[contig] = 0;
+                            }
+                            coverages[contig]+= min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
+                        }
+                        
+                        int length_of_contig_left = pos_in_contig;
+                        if (length_of_contig_left > 10){
+                            pos_to_look_at += min((int) (length_of_contig_left*0.8), (int)(line.size() - pos_begin - km - 5));
+                        }
+                        previous_match = pos_begin;
+                        previous_contig = contig;
                     }
                     pos_to_look_at++;
                 }
-
             }
 
-            // if (p.contigs.size() > 3){
-            //     cout << "Path so far: ";
-            //     for (int i = 0; i < p.contigs.size(); i++) {
-            //         cout << (p.orientations[i] ? ">" : "<") << p.contigs[i] << " ";
-            //     }
-            //     cout << "\n";
-            //     cout << name << endl;
-            //     exit(0);
-            // }
+            if (current_path.contigs.size() > 0){
+                paths.push_back(current_path);
+            }
 
-            if (p.contigs.size() > 0){
-                output << name << "\t-1\t-1\t-1\t+\t";
-                for (int i = 0 ; i < p.contigs.size() ; i++){
-                    if (p.orientations[i]){
-                        output << ">" << p.contigs[i];
-                    }
-                    else{
-                        output << "<" << p.contigs[i];
-                    }
+            if (paths.size() == 1){
+                nb_reads_single_path++;
+            }
+            // Validation check: ensure no paths have -1 start or end positions
+            for (const auto& p : paths) {
+                if (p.start_position_on_contig == -1 || p.end_position_on_contig == -1) {
+                    cerr << "Warning: Path for read " << name << " has invalid start/end position (-1)" << endl;
+                    exit(0);
                 }
-                output << "\t\n";
+            }
+            nb_reads++;
+
+            // Output based on format
+            int idx_of_path = 0;
+            for (const auto& p : paths) {
+                if (p.contigs.size() > 0){
+                    if (output_gaf) {
+                        // GAF format output
+                        output << name << "_" << idx_of_path << "\t" << line.size() << "\t0\t" << line.size() << "\t+\t";
+                        
+                        // Path string
+                        for (int i = 0; i < p.contigs.size(); i++){
+                            output << (p.orientations[i] ? ">" : "<") << p.contigs[i];
+                        }
+                        output << "\t";
+                        
+                        // Path length (sum of contig lengths)
+                        int path_length = 0;
+                        for (const auto& contig : p.contigs){
+                            path_length += length_of_contigs[contig];
+                        }
+                        output << path_length << "\t0\t" << path_length << "\t" << line.size() << "\t" << line.size() << "\t255\n";
+                    } else {
+                        // FASTA format output (corrected reads)
+                        output << ">" << name << "_" << idx_of_path << "\n";
+                        
+                        // Construct corrected sequence
+                        string corrected_seq = "";
+                        for (int i = 0; i < p.contigs.size(); i++){
+                            string contig_seq = contig_sequences[p.contigs[i]];
+                            
+                            // Reverse complement if needed
+                            if (!p.orientations[i]){
+                                contig_seq = reverse_complement(contig_seq);
+                            }
+                            
+                            int start = 0;
+                            int end = 0; 
+                            // Trim first contig from start position
+                            if (i == 0){
+                                start = p.start_position_on_contig;
+                            }
+                            else{
+                                start = km-1;
+                            }
+                            // Trim last contig to end position
+                            if (i == p.contigs.size() - 1){
+                                end = p.end_position_on_contig;
+                            }
+                            // Trim k-1 bp overlap for intermediate contigs
+                            contig_seq = contig_seq.substr(start, end-start);
+                            
+                            corrected_seq += contig_seq;
+                        }
+                        
+                        output << corrected_seq << "\n";                    
+                    }
+                    idx_of_path += 1;
+                }
             }
         }
     }
@@ -584,6 +624,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     input2.close();
     output.close();
 
+    cout << "    -> Number of cleanly corrected reads: " << nb_reads_single_path << " out of " << nb_reads << endl;
 }
 
 /**

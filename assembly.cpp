@@ -2,7 +2,6 @@
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
 #include "graphunzip.h"
-#include "graphunzip2.h"
 
 #include <vector>
 #include <iostream>
@@ -81,6 +80,101 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string file_with_hig
 }
 
 /**
+* brief Corrrect reads by building a DBG, trimming and popping bubbles & realigning reads on it
+ */
+void correct_reads(std::string read_file, int min_abundance, int size_longest_read, std::string tmp_folder, int num_threads, std::string corrected_reads_file, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA){
+    
+    time_t now2 = time(0);
+    tm *ltm2 = localtime(&now2);
+
+    cout << " - Correcting reads [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    int kmer_len = 25;
+
+    // launch bcalm        
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    int abundancemin = 2;
+    if (single_genome){ //if you have a single genome, aggressively delete low coverage kmers
+        abundancemin = min_abundance;
+    }
+    string assembly_file = tmp_folder+"bcalm_correction"+std::to_string(kmer_len);
+    string bcalm_command = path_to_bcalm + " -in " + read_file + " -kmer-size "+std::to_string(kmer_len)+" -abundance-min "+std::to_string(abundancemin)+" -nb-cores "+std::to_string(num_threads)
+        + " -out "+assembly_file+" > "+tmp_folder+"bcalm.log 2>&1";
+    auto time_start = std::chrono::high_resolution_clock::now();
+    auto bcalm_ok = system(bcalm_command.c_str());
+    if (bcalm_ok != 0){
+        cerr << "ERROR: bcalm failed\n";
+        cout << bcalm_command << endl;
+        exit(1);
+    }
+    auto time_bcalm = std::chrono::high_resolution_clock::now();
+
+    // convert to gfa
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Converting result to GFA [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    string unitig_file_fa = assembly_file + ".unitigs.fa";
+    string unitig_file_gfa = assembly_file + ".unitigs.gfa";
+    string convert_command = path_convertToGFA + " " + unitig_file_fa + " " + unitig_file_gfa +" "+ std::to_string(kmer_len) + " > " + tmp_folder + "convertToGFA.log 2>&1";
+    auto res = system(convert_command.c_str());
+    auto time_convert = std::chrono::high_resolution_clock::now();
+
+    // shave the resulting graph
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    string shaved_gfa = assembly_file+".unitigs.shaved.gfa";
+    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, true, kmer_len, shaved_gfa, 0, num_threads, single_genome);
+    auto time_shave = std::chrono::high_resolution_clock::now();
+
+    //merge the adjacent contigs
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    string merged_gfa = assembly_file+".unitigs.shaved.merged.gfa";
+    unordered_map<string, int> segments_IDs2;
+    vector<Segment> segments2;
+    vector<Segment> merged_segments2;
+    load_GFA(shaved_gfa, segments2, segments_IDs2, true); //the last true to load the contigs in memory
+    merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
+    output_graph(merged_gfa, shaved_gfa, merged_segments2);
+    auto time_merge = std::chrono::high_resolution_clock::now();
+
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+
+    string shaved_and_popped_gfa = tmp_folder+"bcalm_correction.unitigs.shaved.popped.gfa";
+    pop_bubbles(merged_gfa, size_longest_read, shaved_and_popped_gfa);
+    unordered_map<string, int> segments_IDs;
+    vector<Segment> segments;
+    vector<Segment> merged_segments;
+    load_GFA(shaved_and_popped_gfa, segments, segments_IDs, true);  //the last true to load the contigs in memory
+    string shaved_and_popped_merged = tmp_folder+"bcalm_correction.unitigs.shaved.popped.merged.gfa";
+    merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true, num_threads); //the last bool is to rename the contigs
+    output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
+    merged_gfa = shaved_and_popped_merged;
+
+    //sort the gfa to have S lines before L lines
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    sort_GFA(merged_gfa);
+
+    auto time_sort = std::chrono::high_resolution_clock::now();
+
+    //untangle the graph to improve contiguity
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    robin_hood::unordered_flat_map<string,float> coverages;
+    create_corrected_reads_or_gaf_from_unitig_graph(merged_gfa, kmer_len, read_file, corrected_reads_file, coverages, false);   
+    auto time_gaf = std::chrono::high_resolution_clock::now(); 
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+
+}
+
+/**
  * @brief Assemble the read file with k-iterative bcalm + graphunzip and output the final assembly in final_file
  * 
  * @param read_file Input read file
@@ -94,6 +188,10 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string file_with_hig
  */
 void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
     
+    string corrected_reads_file = tmp_folder + "corrected_reads.fa";
+    correct_reads(read_file, min_abundance, size_longest_read, tmp_folder, num_threads, corrected_reads_file, single_genome, path_to_bcalm, path_convertToGFA);
+    read_file = corrected_reads_file;
+
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
 
@@ -213,8 +311,8 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     ltm2 = localtime(&now2);
     cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
-    unordered_map<string,float> coverages;
-    create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages);   
+    robin_hood::unordered_flat_map<string,float> coverages;
+    create_corrected_reads_or_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages, true);   
     auto time_gaf = std::chrono::high_resolution_clock::now(); 
     now2 = time(0);
     ltm2 = localtime(&now2);
@@ -330,7 +428,7 @@ void assembly_flye(std::string read_file, std::string tmp_folder, int num_thread
 
     //move the output to the final file
     string command_move = "mv " + tmp_folder + "flye/assembly_graph.gfa " + final_file;
-    system(command_move.c_str());
+    int res = system(command_move.c_str());
 }
 
 void assembly_miniasm(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_miniasm, std::string path_to_minimap2, std::string path_to_minipolish, std::string parameters){
@@ -369,7 +467,7 @@ void assembly_megahit(std::string read_file, std::string tmp_folder, int num_thr
     
     //remove a potential already existing megahit folder
     string command_rm = "rm -rf " + tmp_folder + "megahit > /dev/null 2>&1";
-    system(command_rm.c_str());
+    int res = system(command_rm.c_str());
 
 
     string command_megahit = path_to_megahit + " -t " + std::to_string(num_threads) + " -o " + tmp_folder + "megahit -r " + read_file + " " + parameters + " > " + tmp_folder + "megahit.log 2>&1";
