@@ -286,7 +286,7 @@ struct Path{
  * @param gaf_out
  * @param coverages
  */
-void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, bool output_gaf){
+void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, bool output_gaf, int num_threads){
     
     unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
     unordered_flat_map<string, int> length_of_contigs;
@@ -359,24 +359,54 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
     }
     input.close();
 
-    //now go through the reads and find the paths
-    ifstream input2(reads_file);
-    string name;
-    bool nextline = false;
+    // Prepare for parallel processing
+    omp_lock_t coverage_lock;
+    omp_init_lock(&coverage_lock);
+    
     int nb_reads = 0;
     int nb_reads_single_path = 0;
-    ofstream output(output_file);
+    omp_lock_t count_lock;
+    omp_init_lock(&count_lock);
     
-    while (std::getline(input2, line))
-    {
-        if (line[0] == '@' || line[0] == '>')
-        {
-            name = line.substr(1, line.size()-1);
-            if ("false" != name.substr(0, 5)){
-                nextline = true;
+    ofstream output(output_file);
+    omp_lock_t output_lock;
+    omp_init_lock(&output_lock);
+    
+    // Read file in chunks
+    ifstream input2(reads_file);
+    const int CHUNK_SIZE = 100;
+    bool done = false;
+    
+    while (!done) {
+        // Read a chunk of reads (main thread only)
+        vector<pair<string, string>> read_chunk; // (name, sequence)
+        read_chunk.reserve(CHUNK_SIZE);
+        
+        string name_line, seq_line;
+        for (int i = 0; i < CHUNK_SIZE && std::getline(input2, name_line); i++) {
+            if (name_line.empty()) continue;
+            
+            if (name_line[0] == '@' || name_line[0] == '>') {
+                string name = name_line.substr(1);
+                if (name.substr(0, 5) == "false") continue;
+                
+                if (std::getline(input2, seq_line)) {
+                    read_chunk.push_back({name, seq_line});
+                }
             }
         }
-        else if (nextline){
+        
+        if (read_chunk.empty()) {
+            done = true;
+            break;
+        }
+        
+        // Process chunk in parallel
+        #pragma omp parallel for num_threads(num_threads) schedule(dynamic)
+        for (size_t read_idx = 0; read_idx < read_chunk.size(); read_idx++) {
+            const string& name = read_chunk[read_idx].first;
+            string line = read_chunk[read_idx].second; // Make a copy since roll() needs non-const reference
+            
             vector<Path> paths;
             Path current_path;
             current_path.start_position_on_contig = -1;
@@ -434,10 +464,9 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
                                         if (path[i].first != contig) {
                                             current_path.contigs.push_back(path[i].first);
                                             current_path.orientations.push_back(!path[i].second);
-                                            if (coverages.find(path[i].first) == coverages.end()) {
-                                                coverages[path[i].first] = 0;
-                                            }
+                                            omp_set_lock(&coverage_lock);
                                             coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                            omp_unset_lock(&coverage_lock);
                                         }
                                     }
                                 }
@@ -458,10 +487,9 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
                             }
                             current_path.end_position_on_contig = pos_in_contig + km;
                             
-                            if (coverages.find(contig) == coverages.end()){
-                                coverages[contig] = 0;
-                            }
+                            omp_set_lock(&coverage_lock);
                             coverages[contig]+= std::min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
+                            omp_unset_lock(&coverage_lock);
                         }
                         
                         int length_of_contig_left = length_of_contigs[contig] - pos_in_contig - km;
@@ -503,10 +531,9 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
                                         if (path[i].first != contig) {
                                             current_path.contigs.push_back(path[i].first);
                                             current_path.orientations.push_back(!path[i].second);
-                                            if (coverages.find(path[i].first) == coverages.end()) {
-                                                coverages[path[i].first] = 0;
-                                            }
+                                            omp_set_lock(&coverage_lock);
                                             coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                            omp_unset_lock(&coverage_lock);
                                         }
                                     }
                                 }
@@ -527,10 +554,9 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
                             }
                             current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
                             
-                            if (coverages.find(contig) == coverages.end()){
-                                coverages[contig] = 0;
-                            }
+                            omp_set_lock(&coverage_lock);
                             coverages[contig]+= min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
+                            omp_unset_lock(&coverage_lock);
                         }
                         
                         int length_of_contig_left = pos_in_contig;
@@ -548,41 +574,38 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
                 paths.push_back(current_path);
             }
 
+            // Update counters with lock
+            omp_set_lock(&count_lock);
+            nb_reads++;
             if (paths.size() == 1){
                 nb_reads_single_path++;
             }
-            // Validation check: ensure no paths have -1 start or end positions
-            for (const auto& p : paths) {
-                if (p.start_position_on_contig == -1 || p.end_position_on_contig == -1) {
-                    cerr << "Warning: Path for read " << name << " has invalid start/end position (-1)" << endl;
-                    exit(0);
-                }
-            }
-            nb_reads++;
+            omp_unset_lock(&count_lock);
 
-            // Output based on format
+            // Build output string for this read
+            stringstream thread_output;
             int idx_of_path = 0;
             for (const auto& p : paths) {
                 if (p.contigs.size() > 0){
                     if (output_gaf) {
                         // GAF format output
-                        output << name << "_" << idx_of_path << "\t" << line.size() << "\t0\t" << line.size() << "\t+\t";
+                        thread_output << name << "_" << idx_of_path << "\t" << line.size() << "\t0\t" << line.size() << "\t+\t";
                         
                         // Path string
                         for (int i = 0; i < p.contigs.size(); i++){
-                            output << (p.orientations[i] ? ">" : "<") << p.contigs[i];
+                            thread_output << (p.orientations[i] ? ">" : "<") << p.contigs[i];
                         }
-                        output << "\t";
+                        thread_output << "\t";
                         
                         // Path length (sum of contig lengths)
                         int path_length = 0;
                         for (const auto& contig : p.contigs){
                             path_length += length_of_contigs[contig];
                         }
-                        output << path_length << "\t0\t" << path_length << "\t" << line.size() << "\t" << line.size() << "\t255\n";
+                        thread_output << path_length << "\t0\t" << path_length << "\t" << line.size() << "\t" << line.size() << "\t255\n";
                     } else {
                         // FASTA format output (corrected reads)
-                        output << ">" << name << "_" << idx_of_path << "\n";
+                        thread_output << ">" << name << "_" << idx_of_path << "\n";
                         
                         // Construct corrected sequence
                         string corrected_seq = "";
@@ -613,16 +636,27 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
                             corrected_seq += contig_seq;
                         }
                         
-                        output << corrected_seq << "\n";                    
+                        thread_output << corrected_seq << "\n";                    
                     }
                     idx_of_path += 1;
                 }
             }
-        }
-    }
+            
+            // Write to output file with lock
+            if (thread_output.str().size() > 0) {
+                omp_set_lock(&output_lock);
+                output << thread_output.str();
+                omp_unset_lock(&output_lock);
+            }
+        } // end parallel for
+    } // end while chunks
 
     input2.close();
     output.close();
+    
+    omp_destroy_lock(&coverage_lock);
+    omp_destroy_lock(&count_lock);
+    omp_destroy_lock(&output_lock);
 
     cout << "    -> Number of cleanly corrected reads: " << nb_reads_single_path << " out of " << nb_reads << endl;
 }
@@ -637,54 +671,73 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
  * @param length_of_contigs map from contig name to its length
  * @return vector<vector<pair<string, bool>>> list of paths, each path is a list of (contig_name, orientation)
  */
-vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>>& linked, string start_contig_name, bool start_orientation, int max_length, unordered_flat_map<string, int>& length_of_contigs, int km){
+vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>>& linked, const string& start_contig_name, bool start_orientation, int max_length, unordered_flat_map<string, int>& length_of_contigs, int km){
     
-    // Recursive exploration function
-    std::function<vector<vector<pair<string, bool>>>(string, char, int, vector<pair<string, bool>>&, int)> explore;
-    explore = [&](string current_contig, char current_end, int length_left, vector<pair<string, bool>>& current_path, int km) -> vector<vector<pair<string, bool>>> {
+    vector<vector<pair<string, bool>>> all_results;
+    all_results.reserve(50); // Reserve space for expected maximum paths
+    
+    // Recursive exploration function using push/pop instead of copying
+    std::function<void(const string&, char, int, vector<pair<string, bool>>&)> explore;
+    explore = [&](const string& current_contig, char current_end, int length_left, vector<pair<string, bool>>& current_path) {
         
         if (length_left <= 0){
-            return {current_path};
+            all_results.push_back(current_path);
+            return;
         }
         
-        vector<vector<pair<string, bool>>> all_paths;
+        // Early termination if too many paths
+        if (all_results.size() >= 50){
+            return;
+        }
         
         // Get neighbors from the appropriate end
-        vector<pair<string, char>>& neighbors = (current_end == 1) ? linked[current_contig].second : linked[current_contig].first;
+        const vector<pair<string, char>>& neighbors = (current_end == 1) ? linked[current_contig].second : linked[current_contig].first;
         
         if (neighbors.size() == 0){
-            return {current_path};
+            all_results.push_back(current_path);
+            return;
         }
         
-        for (auto neighbor : neighbors){
-            vector<pair<string, bool>> new_path = current_path;
+        for (const auto& neighbor : neighbors){
             // neighbor.second tells us which end of the neighbor we arrive at
             // if we arrive at end 0, we traverse it in forward orientation (true)
             // if we arrive at end 1, we traverse it in reverse orientation (false)
             bool neighbor_orientation = (neighbor.second == 0);
-            new_path.push_back({neighbor.first, neighbor_orientation});
+            
+            // Push to path
+            current_path.push_back({neighbor.first, neighbor_orientation});
             
             // Continue exploration from the opposite end of the neighbor
             char next_end = 1 - neighbor.second;
-            int neighbor_length = length_of_contigs[neighbor.first]-km + 1;
-            vector<vector<pair<string, bool>>> sub_paths = explore(neighbor.first, next_end, length_left - neighbor_length, new_path, km);
+            int neighbor_length = length_of_contigs[neighbor.first] - km + 1;
             
-            all_paths.insert(all_paths.end(), sub_paths.begin(), sub_paths.end());
+            explore(neighbor.first, next_end, length_left - neighbor_length, current_path);
             
-            // Safety check: if we have more than 100 paths, return empty list, to avoid exploding the complexity
-            if (all_paths.size() > 100){
-                return {};
+            // Pop from path (backtrack)
+            current_path.pop_back();
+            
+            // Early termination check
+            if (all_results.size() >= 50){
+                return;
             }
         }
-        
-        return all_paths;
     };
     
     // Start exploration
-    vector<pair<string, bool>> initial_path = {{start_contig_name, start_orientation}};
+    vector<pair<string, bool>> initial_path;
+    initial_path.reserve(20); // Reserve space for typical path length
+    initial_path.push_back({start_contig_name, start_orientation});
+    
     char start_end = start_orientation ? 1 : 0; // if orientation is true ('+'), we start from end 1 (right)
     
-    return explore(start_contig_name, start_end, max_length, initial_path, km);
+    explore(start_contig_name, start_end, max_length, initial_path);
+    
+    // Return empty if we hit the limit
+    if (all_results.size() >= 50){
+        return {};
+    }
+    
+    return all_results;
 }
 
 

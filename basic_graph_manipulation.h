@@ -18,7 +18,7 @@ void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa
 void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out);
 void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder);
 
-void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, bool output_gaf);
+void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, bool output_gaf, int num_threads);
 void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::string, float>& coverages);
 
 void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overlap, int default_overlap);
@@ -184,7 +184,7 @@ void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::
 void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename, int num_threads);
 void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 
-std::vector<std::vector<std::pair<std::string, bool>>> list_all_paths_from_contig(robin_hood::unordered_map<std::string, std::pair<std::vector<std::pair<std::string, char>>, std::vector<std::pair<std::string,char>>>>& linked, std::string start_contig_name, bool start_orientation, int max_length, robin_hood::unordered_flat_map<std::string, int>& length_of_contigs, int km);
+std::vector<std::vector<std::pair<std::string, bool>>> list_all_paths_from_contig(robin_hood::unordered_map<std::string, std::pair<std::vector<std::pair<std::string, char>>, std::vector<std::pair<std::string,char>>>>& linked, const std::string& start_contig_name, bool start_orientation, int max_length, robin_hood::unordered_flat_map<std::string, int>& length_of_contigs, int km);
 
 
 

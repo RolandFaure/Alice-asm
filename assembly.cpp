@@ -167,7 +167,7 @@ void correct_reads(std::string read_file, int min_abundance, int size_longest_re
     ltm2 = localtime(&now2);
     cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     robin_hood::unordered_flat_map<string,float> coverages;
-    create_corrected_reads_or_gaf_from_unitig_graph(merged_gfa, kmer_len, read_file, corrected_reads_file, coverages, false);   
+    create_corrected_reads_or_gaf_from_unitig_graph(merged_gfa, kmer_len, read_file, corrected_reads_file, coverages, false, num_threads);   
     auto time_gaf = std::chrono::high_resolution_clock::now(); 
     now2 = time(0);
     ltm2 = localtime(&now2);
@@ -312,7 +312,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
     robin_hood::unordered_flat_map<string,float> coverages;
-    create_corrected_reads_or_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages, true);   
+    create_corrected_reads_or_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages, true, num_threads);   
     auto time_gaf = std::chrono::high_resolution_clock::now(); 
     now2 = time(0);
     ltm2 = localtime(&now2);
