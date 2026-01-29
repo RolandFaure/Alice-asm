@@ -658,7 +658,9 @@ void create_corrected_reads_or_gaf_from_unitig_graph(std::string unitig_graph, i
     omp_destroy_lock(&count_lock);
     omp_destroy_lock(&output_lock);
 
-    cout << "    -> Number of cleanly corrected reads: " << nb_reads_single_path << " out of " << nb_reads << endl;
+    add_coverages_to_graph(unitig_graph, coverages);
+
+    cout << "    -> Number of cleanly corrected/aligned reads: " << nb_reads_single_path << " out of " << nb_reads << endl;
 }
 
 /**

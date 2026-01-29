@@ -201,7 +201,7 @@ int main(int argc, char** argv)
     bool contiguity = true;
     bool single_genome= false;
     int min_abundance = 5;
-    string kmer_sizes = "17,21,31,61,101";
+    string kmer_sizes = "17,21,31,61,101,191";
     int order = 101;
     int compression = 20;
     int num_threads = 1;
