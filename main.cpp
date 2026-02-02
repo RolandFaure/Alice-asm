@@ -227,7 +227,7 @@ int main(int argc, char** argv)
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
 
         //Other assemblers options
-        clipp::option("-a", "--assembler").doc("assembler to use {custom, hifiasm, spades, raven, gatb-minia, megahit} [custom]") & clipp::opt_value("a", assembler),
+        clipp::option("-a", "--assembler").doc("assembler to use {custom, spades} [custom]") & clipp::opt_value("a", assembler),
         
         // clipp::option("--parameters").doc("extra parameters to pass to the assembler (between quotation marks) [\"\"]") & clipp::opt_value("p", assembler_parameters),
         clipp::option("--bcalm").doc("path to bcalm [bcalm]") & clipp::opt_value("b", path_to_bcalm),
