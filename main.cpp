@@ -36,8 +36,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.3";
-string date = "2026-01-28";
+string version = "0.7.4";
+string date = "2026-02-04";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result
@@ -176,9 +176,10 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 int main(int argc, char** argv)
 {
     // unordered_map<string,float> coverages;
-    // string a = "out_alice/tmp/bcalm.unitigs.shaved.popped.merged.gfa";
+    // string a = "out_alice/tmp/bcalm_correction.unitigs.shaved.popped.merged.gfa";
     // string b = "out_alice/tmp/compressed.fa";
-    // create_gaf_from_unitig_graph(a, 31, b, "trash.gaf", coverages);
+    // create_corrected_reads_from_unitig_graph(a, 25, b, "trash.fa", coverages, 1);
+
     // exit(0);
 
     //use clipp to parse the command line
