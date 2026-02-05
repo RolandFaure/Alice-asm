@@ -82,7 +82,7 @@ void output_unitigs_for_next_k(std::string unitig_gfa, std::string file_with_hig
 /**
 * brief Corrrect reads by building a DBG, trimming and popping bubbles & realigning reads on it
  */
-void correct_reads(std::string read_file, int min_abundance, int size_longest_read, std::string tmp_folder, int num_threads, std::string corrected_reads_file, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA){
+void correct_reads(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string corrected_reads_file, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA){
     
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
@@ -125,7 +125,7 @@ void correct_reads(std::string read_file, int min_abundance, int size_longest_re
     ltm2 = localtime(&now2);
     cout << "    - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     string shaved_gfa = assembly_file+".unitigs.shaved.gfa";
-    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, false, kmer_len, shaved_gfa, 0, num_threads, single_genome);
+    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+10, kmer_len, shaved_gfa, 0, num_threads, single_genome);
     auto time_shave = std::chrono::high_resolution_clock::now();
 
     //merge the adjacent contigs
@@ -140,20 +140,6 @@ void correct_reads(std::string read_file, int min_abundance, int size_longest_re
     merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
     output_graph(merged_gfa, shaved_gfa, merged_segments2);
     auto time_merge = std::chrono::high_resolution_clock::now();
-
-    now2 = time(0);
-    ltm2 = localtime(&now2);
-
-    string shaved_and_popped_gfa = tmp_folder+"bcalm_correction.unitigs.shaved.popped.gfa";
-    pop_bubbles(merged_gfa, size_longest_read, shaved_and_popped_gfa);
-    unordered_map<string, int> segments_IDs;
-    vector<Segment> segments;
-    vector<Segment> merged_segments;
-    load_GFA(shaved_and_popped_gfa, segments, segments_IDs, true);  //the last true to load the contigs in memory
-    string shaved_and_popped_merged = tmp_folder+"bcalm_correction.unitigs.shaved.popped.merged.gfa";
-    merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true, num_threads); //the last bool is to rename the contigs
-    output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
-    merged_gfa = shaved_and_popped_merged;
 
     //sort the gfa to have S lines before L lines
     now2 = time(0);
@@ -186,10 +172,10 @@ void correct_reads(std::string read_file, int min_abundance, int size_longest_re
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_custom(std::string read_file, int min_abundance, bool contiguity, int size_longest_read, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
+void assembly_custom(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip){
     
     string corrected_reads_file = tmp_folder + "corrected_reads.fa";
-    correct_reads(read_file, min_abundance, size_longest_read, tmp_folder, num_threads, corrected_reads_file, single_genome, path_to_bcalm, path_convertToGFA);
+    correct_reads(read_file, min_abundance, tmp_folder, num_threads, corrected_reads_file, single_genome, path_to_bcalm, path_convertToGFA);
     read_file = corrected_reads_file;
 
     time_t now2 = time(0);
@@ -244,7 +230,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
             output_unitigs_for_next_k(unitig_file_gfa, file_with_higher_kmers, values_of_k[round+1], 2, num_threads);
             //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
             string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
-            system(command_concatenate.c_str());
+            res = system(command_concatenate.c_str());
         }
 
         auto time_nextk = std::chrono::high_resolution_clock::now();
@@ -261,7 +247,7 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     int kmer_len = values_of_k[values_of_k.size()-1];
     cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+1, contiguity, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads, single_genome); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
+    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+10, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads, single_genome); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
     auto time_shave = std::chrono::high_resolution_clock::now();
 
     //merge the adjacent contigs
@@ -284,18 +270,16 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     cout << " - Untangling the final compressed assembly [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     auto time_start = std::chrono::high_resolution_clock::now();
-    if (contiguity){
-        string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
-        pop_bubbles(merged_gfa, size_longest_read, shaved_and_popped_gfa);
-        unordered_map<string, int> segments_IDs;
-        vector<Segment> segments;
-        vector<Segment> merged_segments;
-        load_GFA(shaved_and_popped_gfa, segments, segments_IDs, true);  //the last true to load the contigs in memory
-        string shaved_and_popped_merged = tmp_folder+"bcalm.unitigs.shaved.popped.merged.gfa";
-        merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true, num_threads); //the last bool is to rename the contigs
-        output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
-        merged_gfa = shaved_and_popped_merged;
-    }
+    string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
+    cut_links_for_contiguity(merged_gfa, shaved_and_popped_gfa);
+    unordered_map<string, int> segments_IDs;
+    vector<Segment> segments;
+    vector<Segment> merged_segments;
+    load_GFA(shaved_and_popped_gfa, segments, segments_IDs, true);  //the last true to load the contigs in memory
+    string shaved_and_popped_merged = tmp_folder+"bcalm.unitigs.shaved.popped.merged.gfa";
+    merge_adjacent_contigs(segments, merged_segments, shaved_and_popped_gfa, true, num_threads); //the last bool is to rename the contigs
+    output_graph(shaved_and_popped_merged, shaved_and_popped_gfa, merged_segments);
+    merged_gfa = shaved_and_popped_merged;
     auto time_pop = std::chrono::high_resolution_clock::now();
 
     //sort the gfa to have S lines before L lines
@@ -320,7 +304,9 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     
     // string command_unzip = path_graphunzip + " unzip -R -e -l " + gaf_file + " -g " + merged_gfa + " -o " + final_gfa + " -t " + std::to_string(num_threads) + " > " + tmp_folder + "graphunzip.log 2>&1";
     string unzipped_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gfa";
-    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + std::to_string(num_threads) + " 0 " + unzipped_gfa + " " + std::to_string(contiguity) + + " " + std::to_string(single_genome) + " " + tmp_folder + "graphunzip.log";
+    string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + 
+        std::to_string(num_threads) + " 0 " + unzipped_gfa + " 1 " + std::to_string(single_genome)
+         + " " + std::to_string(kmer_sizes_vector[kmer_sizes_vector.size()-1]) + " " + tmp_folder + "graphunzip.log";
     cout << "    - Command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
@@ -332,9 +318,9 @@ void assembly_custom(std::string read_file, int min_abundance, bool contiguity, 
     //trim the tips and isolated contigs that result from the unzipping of the graph. Then merge the adjacent contigs
     string tmp_gfa = tmp_folder+"tmp.gfa";
     trim_tips_isolated_contigs_and_bubbles(unzipped_gfa, min_abundance, 2*values_of_k[values_of_k.size()-1], tmp_gfa);
-    unordered_map<string, int> segments_IDs;
-    vector<Segment> segments;
-    vector<Segment> merged_segments;
+    segments_IDs.clear();
+    segments.clear();
+    merged_segments.clear();
     load_GFA(tmp_gfa, segments, segments_IDs, true);
     merge_adjacent_contigs(segments, merged_segments, tmp_gfa, true, num_threads); //the last bool is to rename the contigs
     output_graph(final_gfa, tmp_gfa, merged_segments);
@@ -380,7 +366,7 @@ void assembly_minia(std::string read_file, std::string tmp_folder, int num_threa
 
     //rm everything starting with minia in the tmp_folder
     string command_rm = "rm -rf " + tmp_folder + "minia*";
-    system(command_rm.c_str());
+    auto res = system(command_rm.c_str());
 
     string minia_output = tmp_folder + "minia";
     string command_minia = path_gatb + " --no-scaffolding --no-error-correction -s " + read_file + " --nb-cores " + std::to_string(num_threads) 
@@ -400,7 +386,7 @@ void assembly_minia(std::string read_file, std::string tmp_folder, int num_threa
 
     //move the output to the final file
     string command_move = "cp " + minia_gfa + " " + final_file;
-    system(command_move.c_str());
+    res = system(command_move.c_str());
 }
 
 void assembly_raven(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_to_raven, std::string parameters){

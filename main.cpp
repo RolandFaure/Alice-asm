@@ -36,8 +36,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.4";
-string date = "2026-02-04";
+string version = "0.7.5";
+string date = "2026-02-05";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result
@@ -175,11 +175,10 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
-    // unordered_map<string,float> coverages;
-    // string a = "out_alice/tmp/bcalm_correction.unitigs.shaved.popped.merged.gfa";
-    // string b = "out_alice/tmp/compressed.fa";
-    // create_corrected_reads_from_unitig_graph(a, 25, b, "trash.fa", coverages, 1);
-
+    // string merged_gfa2 = "/home/roland-faure/Documents/these/Alice/Escherichia/out_alice/tmp/bcalm_correction25.unitigs.shaved.merged.gfa";
+    // string out_gfa = "/home/roland-faure/Documents/these/Alice/Escherichia/out_alice/tmp/trash.gfa";
+    // // pop_and_shave_graph(merged_gfa2, 2, 2*25+10, true, 25, out_gfa, 0, 10, false);
+    // cut_links_for_contiguity(merged_gfa2, out_gfa);
     // exit(0);
 
     //use clipp to parse the command line
@@ -416,7 +415,7 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
-        assembly_custom(compressed_file, min_abundance, contiguity, (int) 20000/compression, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip);
+        assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);

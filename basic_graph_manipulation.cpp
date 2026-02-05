@@ -1232,7 +1232,7 @@ int explore_neighborhood(string contig, int endOfContig, unordered_map<string, p
  * @param gfa_out 
  * @param extra_coverage //to retreat to the coverage because it comes from extra contigs added to the reads from previous assembly rounds
  */
-void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out, int extra_coverage, int num_threads, bool single_contig){
+void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k, string gfa_out, int extra_coverage, int num_threads, bool single_genome){
 
     if (min_length == -1){ //then no length is sufficient to keep a contig, it has to be done on the coverage
         //set min_length to the max int
@@ -1383,7 +1383,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
             if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
                 bubble = true;
             }
-            if (single_contig && other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 2*coverage[contig] < coverage[other_neighbor_of_contig_left]){
+            if (single_genome && other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 2*coverage[contig] < coverage[other_neighbor_of_contig_left]){
                 bubble = true;
             }
     
@@ -1435,12 +1435,8 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
             }
 
             //now decide if the contig is to be kept
-            if (overcovered_left == 1 && overcovered_right == 1){ //overcovered on both sides, if contiguity mode is on pop it
-                if (!contiguity){
-                    omp_set_lock(&lock_contigs_to_keep);
-                    to_keep.insert(contig);
-                    omp_unset_lock(&lock_contigs_to_keep);
-                }
+            if (overcovered_left == 1 && overcovered_right == 1){ //overcovered on both sides, pop it
+
             }
             else if (overcovered_left == 0 && overcovered_right == 0 && length_of_contigs[contig] > min_length){ //if the contig has two dead ends, keep it under conditiosn that it is long enough
                 omp_set_lock(&lock_contigs_to_keep);
@@ -1456,8 +1452,8 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
                 //do nothing, and most importantly, do not add the contig to the to_keep set
             }
 
-            //if single contig mode is on, delete badly covered dead ends
-            if (single_contig) {
+            //if single genome mode is on, delete badly covered dead ends
+            if (single_genome) {
                 if (linked[contig].first.size() == 0 && linked[contig].second.size() > 0  ){
                     float max_neighbor_coverage = 0;
                     for (auto neighbor : linked[contig].second) {
@@ -1581,51 +1577,13 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool 
 }
 
 /**
- * @brief Recursive function that lists all the paths from a given end of a contig up to a certain distance
- * 
- * @param contig_name 
- * @param contig_end 
- * @param length_to_explore 
- * @param linked 
- * @param length_of_contigs 
- * @return vector<vector<pair<int,int>>> 
- */
-vector<vector<pair<string,char>>> list_all_paths_from_this_end(string contig_name, int contig_end, int length_to_explore, unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> &linked, unordered_map<string, int> &length_of_contigs){
-    if (length_to_explore <= 0){
-        return {{{contig_name, contig_end}}};
-    }
-
-    vector<vector<pair<string,char>>> paths;
-    if (contig_end == 0){
-        for (auto l: linked[contig_name].first){
-            vector<vector<pair<string,char>>> paths_from_this_neighbor = list_all_paths_from_this_end(l.first, 1-l.second, length_to_explore - length_of_contigs[l.first], linked, length_of_contigs);
-            for (vector<pair<string,char>> p: paths_from_this_neighbor){
-                p.push_back({contig_name, 0});
-                paths.push_back(p);
-            }
-        }
-    }
-    else if (contig_end == 1){
-        for (auto l: linked[contig_name].second){
-            vector<vector<pair<string,char>>> paths_from_this_neighbor = list_all_paths_from_this_end(l.first, 1-l.second, length_to_explore - length_of_contigs[l.first], linked, length_of_contigs);
-            for (vector<pair<string,char>> p: paths_from_this_neighbor){
-                p.push_back({contig_name, 1});
-                paths.push_back(p);
-            }
-        }
-    }
-    return paths;
-
-}
-
-/**
  * @brief In small bubbles, take only one side and discard the other
  * 
  * @param gfa_in 
  * @param length_of_longest_read only pop bubbles that are between two contigs that are at least this length and at most this length/2 apart
  * @param gfa_out 
  */
-void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa_out){
+void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
 
     //load the graph
     ifstream input(gfa_in);
@@ -1711,154 +1669,35 @@ void pop_bubbles(std::string gfa_in, int length_of_longest_read, std::string gfa
     }
     input.close();
 
-    //now pop the bubbles
+    //now cut the links that are not good for contiguity
 
     std::set<pair<pair<string,char>,pair<string,char>>> links_to_delete;
     //iterate through all contigs: if it is longer than the longest read, see if there is a bubble left or right
     for (auto c: linked){
         string contig_name = c.first;
-        if (length_of_contigs[contig_name] > length_of_longest_read){
-
-            //list all paths from the left end of the contig
-            vector<vector<pair<string,char>>> paths_left = list_all_paths_from_this_end(contig_name, 0, (int) length_of_longest_read/2, linked, length_of_contigs);
-            
-            //check if all paths lead to the same contig
-            pair<string,char> contig_to_reach = {"", 0};
-            bool all_paths_to_same_contig = false;
-            for (auto p: paths_left){
-                if (p[0].first != contig_name && contig_to_reach.first == ""){
-                    contig_to_reach = p[0];
-                    all_paths_to_same_contig = true;
-                }
-                else if (p[0].first != contig_name && contig_to_reach != p[0]){
-                    all_paths_to_same_contig = false;
-                }
+        for (char end = 0 ; end < 2 ; end++){
+            vector<pair<string, char>>& neighbors = linked[contig_name].first;
+            if (end == 1){
+                neighbors = linked[contig_name].second;
             }
-
-            //if there is all paths lead there check to see if it is reciprocal
-            if (all_paths_to_same_contig){
-                vector<vector<pair<string,char>>> paths_right = list_all_paths_from_this_end(contig_to_reach.first, 1-contig_to_reach.second, (int) length_of_longest_read/2, linked, length_of_contigs);
-                bool all_paths_reciprocal = true;
-                for (auto p: paths_right){
-                    if (p[0].first != contig_to_reach.first &&  (p[0].first != contig_name || p[0].second != 1)){
-                        all_paths_reciprocal = false;
+            if (neighbors.size() > 1){
+                float max_coverage = 0;
+                for (auto& neighbor : neighbors){
+                    if (coverage[neighbor.first] > max_coverage){
+                        max_coverage = coverage[neighbor.first];
                     }
                 }
-
-                if (all_paths_reciprocal){
-
-                    // cout << "popping bubble between " << contig_name << " and " << contig_to_reach.first << "\n";
-                    
-                    //now compute the average coverage of each path of the bubble
-                    vector<float> coverages (paths_left.size(), 0);
-                    int best_path = 0;
-                    float best_coverage = 0;
-                    for (int i = 0 ; i < paths_left.size() ; i++){
-                        int length_of_path = 0;
-                        for (auto p: paths_left[i]){
-                            coverages[i] += coverage[p.first]*length_of_contigs[p.first];
-                            length_of_path += length_of_contigs[p.first];
-                        }
-                        coverages[i] /= length_of_path;
-                        if (coverages[i] >= best_coverage && paths_left[i][0].first != contig_name){
-                            best_coverage = coverages[i];
-                            best_path = i;
-                        }
-                    }
-
-                    //take the path with the highest coverage, go through it and detach all the other paths
-                    std::set<pair<pair<string,char>,pair<string,char>>> links_to_keep;
-                    for (int co = 1 ; co < paths_left[best_path].size() ; co++){
-                        links_to_keep.insert({{paths_left[best_path][co-1].first, 1-paths_left[best_path][co-1].second}, paths_left[best_path][co]});
-                    }
-                    for (int i = 0 ; i < paths_left.size() ; i++){
-                        if (i != best_path){
-                            for (int co = 1 ; co < paths_left[i].size() ; co++){
-                                //check if it is not in the links to keep
-                                if (links_to_keep.find({{paths_left[i][co-1].first, 1-paths_left[i][co-1].second}, paths_left[i][co]}) == links_to_keep.end() 
-                                        && links_to_keep.find({paths_left[i][co],{paths_left[i][co-1].first, 1-paths_left[i][co-1].second} }) == links_to_keep.end()  ){
-                                    links_to_delete.insert({paths_left[i][co],{paths_left[i][co-1].first, 1-paths_left[i][co-1].second} });
-                                    links_to_delete.insert({{paths_left[i][co-1].first, 1-paths_left[i][co-1].second}, paths_left[i][co]});
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            //do the same thing for the right end of the contig
-            paths_left = list_all_paths_from_this_end(contig_name, 1, (int) length_of_longest_read/2, linked, length_of_contigs);
-            all_paths_to_same_contig = false;
-            contig_to_reach = {"", 0};
-            for (auto p: paths_left){
-                if (contig_to_reach.first == ""){
-                    contig_to_reach = p[0];
-                    all_paths_to_same_contig = true;
-                }
-                else if (contig_to_reach != p[0]){
-                    all_paths_to_same_contig = false;
-                }
-            }
-
-            // cout << "here are all the paths from the right end of " << contig_name.substr(0,30) << "\n";
-            // for (auto p: paths_left){
-            //     for (auto c: p){
-            //         cout << c.first.substr(0,30)  << " ";
-            //     }
-            //     cout << "\n";
-            // }
-
-            //if there is all paths lead there check to see if it is reciprocal
-            if (all_paths_to_same_contig){
-                vector<vector<pair<string,char>>> paths_right = list_all_paths_from_this_end(contig_to_reach.first, 1-contig_to_reach.second, (int) length_of_longest_read/2, linked, length_of_contigs);
-                bool all_paths_reciprocal = true;
-                for (auto p: paths_right){
-                    if (p[0].first != contig_name || p[0].second != 0){
-                        all_paths_reciprocal = false;
-                    }
-                }
-
-                if (all_paths_reciprocal){
-
-                    // cout << "popping bubble between " << contig_name << " and " << contig_to_reach.first << "\n";
-
-                    //now compute the average coverage of each path of the bubble
-                    vector<float> coverages (paths_left.size(), 0);
-                    int best_path = 0;
-                    float best_coverage = 0;
-                    for (int i = 0 ; i < paths_left.size() ; i++){
-                        int length_of_path = 0;
-                        for (auto p: paths_left[i]){
-                            coverages[i] += coverage[p.first]*length_of_contigs[p.first];
-                            length_of_path += length_of_contigs[p.first];
-                        }
-                        coverages[i] /= length_of_path;
-                        if (coverages[i] >= best_coverage){
-                            best_coverage = coverages[i];
-                            best_path = i;
-                        }
-                    }
-
-                    //take the path with the highest coverage, go through it and detach all the other paths
-                    std::set<pair<pair<string,char>,pair<string,char>>> links_to_keep;
-                    for (int co = 1 ; co < paths_left[best_path].size() ; co++){
-                        links_to_keep.insert({{paths_left[best_path][co-1].first, 1-paths_left[best_path][co-1].second}, paths_left[best_path][co]});
-                    }
-                    for (int i = 0 ; i < paths_left.size() ; i++){
-                        if (i != best_path){
-                            for (int co = 1 ; co < paths_left[i].size() ; co++){
-                                //check if it is not in the links to keep
-                                if (links_to_keep.find({{paths_left[i][co-1].first, 1-paths_left[i][co-1].second}, paths_left[i][co]}) == links_to_keep.end() 
-                                    && links_to_keep.find({paths_left[i][co],{paths_left[i][co-1].first, 1-paths_left[i][co-1].second} }) == links_to_keep.end()  ){
-                                    links_to_delete.insert({paths_left[i][co],{paths_left[i][co-1].first, 1-paths_left[i][co-1].second} });
-                                    links_to_delete.insert({{paths_left[i][co-1].first, 1-paths_left[i][co-1].second}, paths_left[i][co]});
-                                }
-                            }
-                        }
+                for (auto& neighbor : neighbors){
+                    if (coverage[neighbor.first] < max_coverage/5.0
+                            && coverage[neighbor.first] < coverage[contig_name]/5.0
+                            && length_of_contigs[neighbor.first] < 2*length_of_contigs[contig_name]){
+                        links_to_delete.insert({neighbor, {contig_name,end}});
+                        links_to_delete.insert({{contig_name,end}, neighbor});
                     }
                 }
             }
         }
+        
     }
 
     //now write the gfa file without the links to delete
