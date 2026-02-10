@@ -42,7 +42,7 @@ void assembly_hifiasm(std::string read_file, std::string tmp_folder, int num_thr
 
     //move the output to the final file
     string command_move = "mv " + untangled_gfa + " " + final_file;
-    system(command_move.c_str());
+    auto res = system(command_move.c_str());
 }
 
 /**
@@ -188,7 +188,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
     string file_with_unitigs_from_past_k_and_reads = read_file+".with_unitigs_from_previous_k.fa";
     //copy the reads to the file with unitigs
     string command_copy = "cp " + read_file + " " + file_with_unitigs_from_past_k_and_reads;
-    system(command_copy.c_str());
+    auto res = system(command_copy.c_str());
     string unitig_file_gfa, unitig_file_fa;
     for (auto kmer_len: values_of_k){
         // launch bcalm        
@@ -221,13 +221,31 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
         auto res = system(convert_command.c_str());
         auto time_convert = std::chrono::high_resolution_clock::now();
 
+        //now trim and merge the graph
+        now2 = time(0);
+        ltm2 = localtime(&now2);
+        cout << "       - Trimming the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+        string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
+        trim_graph_for_next_k(unitig_file_gfa, shaved_gfa, kmer_len, std::min(1,round)*2, num_threads);
+
+        string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
+        unordered_map<string, int> segments_IDs2;
+        vector<Segment> segments2;
+        vector<Segment> merged_segments2;
+        load_GFA(shaved_gfa, segments2, segments_IDs2, true);
+        merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads);
+        output_graph(merged_gfa, shaved_gfa, merged_segments2);
+
+        now2 = time(0);
+        ltm2 = localtime(&now2);
+
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
         if (round < values_of_k.size()-1){
-            cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k" << endl;
+            cout << "       - Concatenating the contigs to the reads to relaunch assembly with higher k [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
         
             string file_with_higher_kmers = read_file + ".higher_k.fa";
-            output_unitigs_for_next_k(unitig_file_gfa, file_with_higher_kmers, values_of_k[round+1], 2, num_threads);
+            output_unitigs_for_next_k(merged_gfa, file_with_higher_kmers, values_of_k[round+1], 2, num_threads);
             //concatenate the originial reads with the file_with_higher_kmers to relaunch the assembly
             string command_concatenate = "cat " + read_file + " " + file_with_higher_kmers + " > " + file_with_unitigs_from_past_k_and_reads;
             res = system(command_concatenate.c_str());
@@ -354,7 +372,7 @@ void assembly_spades(std::string read_file, std::string tmp_folder, int num_thre
 
     //move the output to the final file
     string command_move = "cp " + spades_gfa + " " + final_file;
-    system(command_move.c_str());
+    auto res = system(command_move.c_str());
 }
 
 void assembly_minia(std::string read_file, std::string tmp_folder, int num_threads, std::string final_file, std::string path_gatb, std::string path_convertToGFA, std::string parameters){

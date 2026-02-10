@@ -14,6 +14,7 @@ void sort_GFA(std::string gfa);
 
 void shave(std::string input_file, std::string output_file, int max_length);
 void pop_and_shave_graph(std::string gfa_in, int abundance_min, int min_length, int k, std::string gfa_out, int extra_coverage, int num_threads, bool single_genome);
+void trim_graph_for_next_k(std::string gfa_in, std::string gfa_out,  int k, int extra_coverage, int num_threads);
 void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out);
 void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out);
 void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder);

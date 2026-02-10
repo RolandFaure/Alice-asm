@@ -36,8 +36,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.5";
-string date = "2026-02-05";
+string version = "0.7.6";
+string date = "2026-02-10";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result
@@ -175,10 +175,9 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
-    // string merged_gfa2 = "/home/roland-faure/Documents/these/Alice/Escherichia/out_alice/tmp/bcalm_correction25.unitigs.shaved.merged.gfa";
-    // string out_gfa = "/home/roland-faure/Documents/these/Alice/Escherichia/out_alice/tmp/trash.gfa";
-    // // pop_and_shave_graph(merged_gfa2, 2, 2*25+10, true, 25, out_gfa, 0, 10, false);
-    // cut_links_for_contiguity(merged_gfa2, out_gfa);
+    // string input_file1 = "out_alice/tmp/bcalm21.unitigs.gfa";
+    // string output_file1 = "out_alice/tmp/bcalm21.unitigs.shaved.gfa";
+    // trim_graph_for_next_k(input_file1, output_file1, 21, 0, 10);
     // exit(0);
 
     //use clipp to parse the command line
@@ -201,7 +200,7 @@ int main(int argc, char** argv)
     bool contiguity = true;
     bool single_genome= false;
     int min_abundance = 5;
-    string kmer_sizes = "17,21,31,61,101,191";
+    string kmer_sizes = "21,31,61,101,191";
     int order = 101;
     int compression = 20;
     int num_threads = 1;

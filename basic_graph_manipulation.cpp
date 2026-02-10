@@ -1577,6 +1577,197 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
 }
 
 /**
+ * @brief Function that takes as input a graph, cleans it for building long contigs to ouptut for next k. The goal is to improve contiguity at next step
+ * 
+ * @param gfa_in 
+ * @param gfa_out 
+ * @param k
+ * @param extra_coverage //to retreat to the coverage because it comes from extra contigs added to the reads from previous assembly rounds
+ * @param num_threads
+ */
+void trim_graph_for_next_k(string gfa_in, string gfa_out,  int k, int extra_coverage, int num_threads){
+
+    ifstream input(gfa_in);
+    //first go through the gfa and find all the places where an end of contig is connected with two links
+    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
+    unordered_map<string, pair<int,int>> number_of_links; //number of links on each side of the contig
+
+    unordered_map<string, long int> pos_of_contig_seq_in_file;
+    unordered_map<string, float> coverage;
+    unordered_map<string, int> length_of_contigs;
+    vector<string> list_of_contigs;
+
+    //parse the gfa file
+    string line;
+    long int pos = 0;
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            string depth_string = "  ";
+            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
+                string nds;
+                ss >> nds;
+                depth_string = nds;
+            }
+
+            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
+                cerr << "ERROR: no depth found for contig " << name << "\n";
+                exit(1);
+            }
+            double depth = std::stof(depth_string.substr(5, depth_string.size()-5));
+            depth = std::max(1.0, depth- extra_coverage);
+            coverage[name] = depth;
+            pos_of_contig_seq_in_file[name] = pos;
+            length_of_contigs[name] = sequence.size();
+            list_of_contigs.push_back(name);
+
+            if (linked.find(name) == linked.end()){
+                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            int i = 0;
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            char or1 = (orientation1 == "+" ? 1 : 0);
+            char or2 = (orientation2 == "+" ? 0 : 1);
+            auto neighbor = make_pair(name2, or2);
+            if (orientation1 == "+"){
+                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
+                    linked[name1].second.push_back(neighbor);
+                    number_of_links[name1].second++;
+                }
+            }
+            else{
+                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
+                    linked[name1].first.push_back(neighbor);
+                    number_of_links[name1].first++;
+                }
+            }
+
+            neighbor = make_pair(name1, or1);
+            if (orientation2 == "+"){
+                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
+                    linked[name2].first.push_back(neighbor);
+                    number_of_links[name2].first++;
+                }
+            }
+            else{
+                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
+                    linked[name2].second.push_back(neighbor);
+                    number_of_links[name2].second++;
+                }
+            }
+        }
+        pos += line.size() + 1;
+    }
+    input.close();
+    input.open(gfa_in);
+
+
+    std::set<pair<pair<string,char>,pair<string,char>>> links_to_erase; //links to erase
+
+    //cleaning of the graph
+
+    omp_lock_t lock_to_erase;
+    omp_init_lock(&lock_to_erase);
+
+    int nb_changes = 11;
+    while (nb_changes > 10){
+        nb_changes = 0;
+
+        //find the tips in parallel
+        #pragma omp parallel for num_threads(num_threads)
+        for (int c = 0 ; c < list_of_contigs.size() ; c++){
+
+            string contig = list_of_contigs[c];
+
+
+            if (number_of_links[contig].first*number_of_links[contig].second == 0 && number_of_links[contig].first + number_of_links[contig].second == 1){
+
+                char end_of_contig = (number_of_links[contig].first == 1 ? 0 : 1);
+                string neighbor = (end_of_contig == 0 ? linked[contig].first[0].first : linked[contig].second[0].first);
+                char end_of_neighbor = (end_of_contig == 0 ? linked[contig].first[0].second : linked[contig].second[0].second);
+                auto& neighbors_of_neighbor = (end_of_neighbor == 0 ? linked[neighbor].first : linked[neighbor].second);
+
+                for (auto l: neighbors_of_neighbor){
+                    if (l.first == contig){
+                        continue;
+                    }
+                    char end_of_neighbor_neighbor = l.second;
+                    int number_of_links_other_side_neighbor_of_neighbor = (end_of_neighbor_neighbor == 0 ? linked[l.first].second.size() : linked[l.first].first.size());
+
+                    if (coverage[l.first] > 2*coverage[contig] || length_of_contigs[contig] < k + 10 || number_of_links_other_side_neighbor_of_neighbor > 0){
+                        omp_set_lock(&lock_to_erase);
+                        links_to_erase.insert(make_pair(make_pair(contig, end_of_contig), make_pair(neighbor, end_of_neighbor)));
+                        links_to_erase.insert(make_pair(make_pair(neighbor, end_of_neighbor), make_pair(contig, end_of_contig)));
+                        if (end_of_contig == 0){
+                            number_of_links[contig].first--;
+                        }
+                        else{
+                            number_of_links[contig].second--;
+                        }
+                        if (end_of_neighbor == 0){
+                            number_of_links[neighbor].first--;
+                        }
+                        else{
+                            number_of_links[neighbor].second--;
+                        }
+                        nb_changes++;
+
+                        omp_unset_lock(&lock_to_erase);
+                    }
+                }
+            }
+        }
+    }
+
+    omp_destroy_lock(&lock_to_erase);
+
+    //now wirte the gfa file without the links to remove
+    input.close();
+    input.open(gfa_in);
+    ofstream out(gfa_out);
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            out << line << "\n";
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            int i = 0;
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+
+            char or1 = (orientation1 == "+" ? 1 : 0);
+            char or2 = (orientation2 == "+" ? 0 : 1);
+            if (links_to_erase.find(make_pair(make_pair(name1, or1), make_pair(name2, or2))) == links_to_erase.end()){
+                out << line << "\n";
+            }
+        }
+    }
+    out.close();
+}
+
+
+/**
  * @brief In small bubbles, take only one side and discard the other
  * 
  * @param gfa_in 
