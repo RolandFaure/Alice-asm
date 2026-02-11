@@ -36,8 +36,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.6";
-string date = "2026-02-10";
+string version = "0.7.7";
+string date = "2026-02-11";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result

@@ -1629,6 +1629,7 @@ void trim_graph_for_next_k(string gfa_in, string gfa_out,  int k, int extra_cove
 
             if (linked.find(name) == linked.end()){
                 linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
+                number_of_links[name] = {0, 0};
             }
         }
         else if (line[0] == 'L'){
