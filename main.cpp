@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 #include <omp.h> //for efficient parallelization
 #include <set>
 
@@ -36,7 +37,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.7";
+string version = "0.7.8";
 string date = "2026-02-11";
 string author = "Roland Faure";
 
@@ -175,9 +176,12 @@ void check_dependencies(string assembler, string path_bcalm, string path_hifiasm
 
 int main(int argc, char** argv)
 {
-    // string input_file1 = "out_alice/tmp/bcalm21.unitigs.gfa";
-    // string output_file1 = "out_alice/tmp/bcalm21.unitigs.shaved.gfa";
-    // trim_graph_for_next_k(input_file1, output_file1, 21, 0, 10);
+    // string input_file1 = "out_alice/tmp/bcalm_correction25.unitigs.shaved.merged.gfa";
+    // string output_file1 = "out_alice/tmp/trash.gfa";
+    // string read_file1 = "out_alice/tmp/compressed.fa";
+    // robin_hood::unordered_flat_map<std::string, float> coverages1;
+    // create_corrected_reads_from_unitig_graph(input_file1, 25, read_file1, "trash.fa", true,coverages1, 15);
+
     // exit(0);
 
     //use clipp to parse the command line
@@ -200,7 +204,7 @@ int main(int argc, char** argv)
     bool contiguity = true;
     bool single_genome= false;
     int min_abundance = 5;
-    string kmer_sizes = "21,31,61,101,191";
+    string kmer_sizes = "17,21,31,61,101,191";
     int order = 101;
     int compression = 20;
     int num_threads = 1;
@@ -449,14 +453,23 @@ int main(int argc, char** argv)
     cout << " - Listing the kmers needed for the expansion [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     unordered_map<uint64_t, pair<unsigned long long, unsigned long long>> kmers;
-    std::unordered_set<uint64_t> central_kmers_needed;
-    std::unordered_set<uint64_t> full_kmers_needed;
+    std::vector<uint64_t> central_kmers_needed;
+    std::vector<uint64_t> full_kmers_needed;
     string decompressed_assembly = tmp_folder+"assembly_decompressed.gfa";
     string central_kmer_file = tmp_folder+"central_kmers.txt";
     string full_kmer_file = tmp_folder+"full_kmers.txt";
 
     //list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
     expand_or_list_kmers_needed_for_expansion("index", compressed_assembly, km, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
+
+    // Sort vectors for thread-safe binary search during parallel processing
+    cout << " - Sorting kmer vectors for efficient lookup [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    std::sort(central_kmers_needed.begin(), central_kmers_needed.end());
+    std::sort(full_kmers_needed.begin(), full_kmers_needed.end());
+    
+    // Remove duplicates to optimize memory and search performance
+    central_kmers_needed.erase(std::unique(central_kmers_needed.begin(), central_kmers_needed.end()), central_kmers_needed.end());
+    full_kmers_needed.erase(std::unique(full_kmers_needed.begin(), full_kmers_needed.end()), full_kmers_needed.end());
 
     now2 = time(0);
     ltm2 = localtime(&now2);

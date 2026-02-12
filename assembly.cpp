@@ -153,7 +153,8 @@ void correct_reads(std::string read_file, int min_abundance, std::string tmp_fol
     ltm2 = localtime(&now2);
     cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     robin_hood::unordered_flat_map<string,float> coverages;
-    create_corrected_reads_from_unitig_graph(merged_gfa, kmer_len, read_file, corrected_reads_file, coverages, num_threads);   
+    bool hard_correct = true;  //if hard_correct is true, only keep the reads that can be perfectly corrected (i.e. for which we can find a single path in the graph). If false, keep all reads but only correct the part of the read that can be unambiguously corrected
+    create_corrected_reads_from_unitig_graph(merged_gfa, kmer_len, read_file, corrected_reads_file, hard_correct, coverages, num_threads);   
     auto time_gaf = std::chrono::high_resolution_clock::now(); 
     now2 = time(0);
     ltm2 = localtime(&now2);
@@ -196,7 +197,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
         now2 = time(0);
         ltm2 = localtime(&now2);
         cout << "       - Unitig generation with bcalm [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        int abundancemin = 2;
+        int abundancemin = 1;
         if (single_genome){ //if you have a single genome, aggressively delete low coverage kmers
             abundancemin = min_abundance;
         }
@@ -221,23 +222,24 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
         auto res = system(convert_command.c_str());
         auto time_convert = std::chrono::high_resolution_clock::now();
 
-        //now trim and merge the graph
-        now2 = time(0);
-        ltm2 = localtime(&now2);
-        cout << "       - Trimming the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-        string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-        trim_graph_for_next_k(unitig_file_gfa, shaved_gfa, kmer_len, std::min(1,round)*2, num_threads);
+        // //now trim and merge the graph
+        // now2 = time(0);
+        // ltm2 = localtime(&now2);
+        // cout << "       - Trimming the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+        // string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
+        // trim_graph_for_next_k(unitig_file_gfa, shaved_gfa, kmer_len, std::min(1,round)*2, num_threads);
 
-        string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-        unordered_map<string, int> segments_IDs2;
-        vector<Segment> segments2;
-        vector<Segment> merged_segments2;
-        load_GFA(shaved_gfa, segments2, segments_IDs2, true);
-        merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads);
-        output_graph(merged_gfa, shaved_gfa, merged_segments2);
+        // string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
+        // unordered_map<string, int> segments_IDs2;
+        // vector<Segment> segments2;
+        // vector<Segment> merged_segments2;
+        // load_GFA(shaved_gfa, segments2, segments_IDs2, true);
+        // merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads);
+        // output_graph(merged_gfa, shaved_gfa, merged_segments2);
 
-        now2 = time(0);
-        ltm2 = localtime(&now2);
+        // now2 = time(0);
+        // ltm2 = localtime(&now2);
+        string merged_gfa = unitig_file_gfa;
 
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file

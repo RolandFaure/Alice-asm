@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 #include <omp.h> //for efficient parallelization
 #include <filesystem>
 // #include <zlib.h>  // Include the gzstream header
@@ -217,8 +218,8 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
     int order, 
     int compression, 
     int km, 
-    std::unordered_set<uint64_t> &central_kmers_in_assembly,
-    std::unordered_set<uint64_t> &full_kmers_in_assembly,
+    std::vector<uint64_t> &central_kmers_in_assembly,
+    std::vector<uint64_t> &full_kmers_in_assembly,
     unordered_map<uint64_t, pair<unsigned long long,unsigned long long>>& kmers,
     string central_kmers_file, 
     string full_kmers_file,
@@ -320,11 +321,12 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
 
                             if (positions_sampled.size() >= km){
 
-                                bool foward_central_kmer_in_assembly = central_kmers_in_assembly.find(hash_foward_compressed) != central_kmers_in_assembly.end();
-                                bool reverse_central_kmer_in_assembly = central_kmers_in_assembly.find(hash_reverse_compressed) != central_kmers_in_assembly.end();
+                                // Thread-safe binary search on sorted vectors (O(log n) vs O(1) but no locks)
+                                bool foward_central_kmer_in_assembly = std::binary_search(central_kmers_in_assembly.begin(), central_kmers_in_assembly.end(), hash_foward_compressed);
+                                bool reverse_central_kmer_in_assembly = std::binary_search(central_kmers_in_assembly.begin(), central_kmers_in_assembly.end(), hash_reverse_compressed);
                                 bool central_kmer_in_assembly = foward_central_kmer_in_assembly || reverse_central_kmer_in_assembly;
-                                bool foward_full_kmer_in_assembly = full_kmers_in_assembly.find(hash_foward_compressed) != full_kmers_in_assembly.end();
-                                bool reverse_full_kmer_in_assembly = full_kmers_in_assembly.find(hash_reverse_compressed) != full_kmers_in_assembly.end();
+                                bool foward_full_kmer_in_assembly = std::binary_search(full_kmers_in_assembly.begin(), full_kmers_in_assembly.end(), hash_foward_compressed);
+                                bool reverse_full_kmer_in_assembly = std::binary_search(full_kmers_in_assembly.begin(), full_kmers_in_assembly.end(), hash_reverse_compressed);
                                 bool full_kmer_in_assembly = foward_full_kmer_in_assembly || reverse_full_kmer_in_assembly;
 
                                 if (central_kmer_in_assembly || full_kmer_in_assembly){
@@ -435,7 +437,7 @@ void go_through_the_reads_again_and_index_interesting_kmers(string reads_file,
  * @param kmers dictionary mapping compressed kmers to their positions in the kmer file
  * @param output output file (uselss for index mode)
  */
-void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, int km, std::unordered_set<uint64_t> &central_kmers_needed, std::unordered_set<uint64_t> &full_kmers_needed, string central_kmers_file, string full_kmers_file, unordered_map<uint64_t, pair<unsigned long long,unsigned long long>>& kmers, string output){
+void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, int km, std::vector<uint64_t> &central_kmers_needed, std::vector<uint64_t> &full_kmers_needed, string central_kmers_file, string full_kmers_file, unordered_map<uint64_t, pair<unsigned long long,unsigned long long>>& kmers, string output){
     
     if (mode != "expand" && mode != "index"){
         cerr << "ERROR (code 190) mode not supported in expand_or_list_kmers_needed_for_expansion " << mode << "\n";
@@ -615,7 +617,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                 string kmer = sequence.substr(i, km);
                 uint64_t hash_foward_kmer = hash_string(km, kmer, false);
                 if (mode == "index"){
-                    central_kmers_needed.insert(hash_foward_kmer);
+                    central_kmers_needed.push_back(hash_foward_kmer);
                 }
                 else{
                     if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].first != 1){
@@ -645,7 +647,7 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
                 string first_kmer = sequence.substr(0, km);
                 uint64_t hash_foward_kmer = hash_string(km, first_kmer, false);
                 if (mode == "index"){
-                    full_kmers_needed.insert(hash_foward_kmer);
+                    full_kmers_needed.push_back(hash_foward_kmer);
                 }
                 else {
                     if (kmers.find(hash_foward_kmer) != kmers.end() && kmers[hash_foward_kmer].second != 1){
@@ -681,10 +683,10 @@ void expand_or_list_kmers_needed_for_expansion(string mode, string asm_reduced, 
 
             if (mode == "index"){
                 if (right_seq.find(name) != right_seq.end()){
-                    central_kmers_needed.insert(hash_foward_kmer);
+                    central_kmers_needed.push_back(hash_foward_kmer);
                 }
                 else{
-                    full_kmers_needed.insert(hash_foward_kmer);
+                    full_kmers_needed.push_back(hash_foward_kmer);
                 }
             }
             else

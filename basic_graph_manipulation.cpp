@@ -283,10 +283,11 @@ struct Path{
  * @param unitig_graph 
  * @param km 
  * @param reads_file 
- * @param gaf_out
+ * @param output_file
+ * @param hard_correct if true, only keep the reads that can be perfectly corrected (i.e. for which we can find a single path in the graph). If false, keep all reads but only correct the part of the read that can be unambiguously corrected
  * @param coverages
  */
-void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, int num_threads){
+void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, bool hard_correct, robin_hood::unordered_flat_map<std::string, float>& coverages, int num_threads){
     
     unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
     unordered_flat_map<string, int> length_of_contigs;
@@ -454,8 +455,15 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
 
                         // Handle sequence before this match
                         if (previous_match_pos == -1){
-                            // First match: add read sequence from start to this position
-                            corrected_seq += line.substr(0, pos_begin);
+                            // First match: add pos_begin bases of contig sequence
+                            string contig_seq = contig_sequences[contig];
+                            if (!forward_orientation) {
+                                contig_seq = reverse_complement(contig_seq);
+                            }
+                            corrected_seq += contig_seq.substr(std::max((long int) 0, pos_in_contig - pos_begin), min(pos_begin, (long int) pos_in_contig));
+                            if (pos_in_contig - pos_begin < 0 && !hard_correct){
+                                corrected_seq = line.substr(0, pos_begin - pos_in_contig) + corrected_seq;
+                            }
                             last_corrected_pos = pos_begin;
                         }
                         else if (contig == previous_contig && forward_orientation == previous_orientation){ //do a special case because that is very frequent
@@ -504,7 +512,7 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
                                 if (!previous_orientation){
                                     prev_seq = reverse_complement(prev_seq);
                                 }
-                                correct_seq += prev_seq.substr(previous_match_pos_on_contig, min((long int) prev_seq.size()-previous_match_pos_on_contig, pos_begin-previous_match_pos+km-1));
+                                correct_seq += prev_seq.substr(previous_match_pos_on_contig, prev_seq.size()-previous_match_pos_on_contig);
                                 // Update coverage for the previous contig based on the portion used
                                 omp_set_lock(&coverage_lock);
                                 int length_used = min((long int) prev_seq.size()-previous_match_pos_on_contig, pos_begin-previous_match_pos+km-1);
@@ -538,26 +546,27 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
                                     omp_unset_lock(&coverage_lock);
                                 }
                                 correct_seq = correct_seq.substr(0, correct_seq.size()-km+1);
-
-                                if (bridging_path.size() == 3 && correct_seq == line.substr(previous_match_pos, pos_begin-previous_match_pos)){
-                                    for (auto p : bridging_path) {
-                                        cout << p.first << " " << p.second << " ";
-                                    }
-                                    cout << "WHIAHIAH " << endl;
-                                    exit(0);
-                                }
-                                // else if (bridging_path.size() == 3){
-                                //     cout << "pos on read : " << previous_match_pos << " and " << pos_begin << endl;
-                                //     cout << "dou fqsd " << endl << correct_seq << endl << line.substr(previous_match_pos, pos_begin-previous_match_pos) << endl;
-                                //     exit(0);
-                                // }
-
                                 corrected_seq += correct_seq;
 
                                 last_corrected_pos = pos_begin;
                             }
-                            else {                                
-                                corrected_seq += line.substr(last_corrected_pos, pos_begin - last_corrected_pos);
+                            else {        
+                                if (!hard_correct){
+                                    corrected_seq += line.substr(last_corrected_pos, pos_begin - last_corrected_pos);
+                                }
+                                else {
+                                    //output the corrected seq we have and reset the corrected seq for the next path
+                                    if (corrected_seq.size() > 0){
+                                        stringstream thread_output;
+                                        thread_output << ">" << name << "\n";
+                                        thread_output << corrected_seq << "\n";
+                                        // Write to output file with lock
+                                        omp_set_lock(&output_lock);
+                                        output << thread_output.str();
+                                        omp_unset_lock(&output_lock);
+                                    }
+                                    corrected_seq = "";
+                                }
                                 last_corrected_pos = pos_begin;
                                 read_is_single_path = false;
                             }
@@ -579,7 +588,25 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
 
             // Add any remaining sequence at the end
             if (last_corrected_pos < line.size()){
-                corrected_seq += line.substr(last_corrected_pos);
+                // Add the sequence of the contig after the last match if it is long enough. If not, add the remaining read sequence (only if not in hard_correct mode), or add the rest of the contig (if in hard_correct mode)
+                if (previous_match_pos != -1){
+                    string last_seq = contig_sequences[previous_contig];
+                    int remaining_contig_length = length_of_contigs[previous_contig] - previous_match_pos_on_contig;
+                    if (!previous_orientation){
+                        last_seq = reverse_complement(last_seq);
+                    }
+                    int remaining_read_length = line.size() - last_corrected_pos;
+                    corrected_seq += last_seq.substr(previous_match_pos_on_contig, min(remaining_contig_length, remaining_read_length));
+                    if (remaining_contig_length < remaining_read_length && !hard_correct){
+                        corrected_seq += line.substr(last_corrected_pos + remaining_contig_length);
+                    }
+                }
+                else{
+                    read_is_single_path = false;
+                    if (!hard_correct){
+                        corrected_seq += line.substr(last_corrected_pos);
+                    }
+                } 
             }
 
             // Update counters with lock
