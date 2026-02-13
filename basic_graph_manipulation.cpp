@@ -1842,7 +1842,12 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
                 linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
             }
         }
-        else if (line[0] == 'L'){
+    }
+    input.close();
+    input.open(gfa_in);
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'L'){
             string name1;
             string name2;
             string orientation1;
@@ -1891,7 +1896,6 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
     //now cut the links that are not good for contiguity
 
     std::set<pair<pair<string,char>,pair<string,char>>> links_to_delete;
-    //iterate through all contigs: if it is longer than the longest read, see if there is a bubble left or right
     for (auto c: linked){
         string contig_name = c.first;
         for (char end = 0 ; end < 2 ; end++){
@@ -1901,15 +1905,26 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
             }
             if (neighbors.size() > 1){
                 float max_coverage = 0;
+                bool all_neighbors_are_dead_ends = true;
                 for (auto& neighbor : neighbors){
                     if (coverage[neighbor.first] > max_coverage){
                         max_coverage = coverage[neighbor.first];
                     }
+                    if (linked[neighbor.first].first.size() > 0 && linked[neighbor.first].second.size() > 0){
+                        all_neighbors_are_dead_ends = false;
+                    }
                 }
                 for (auto& neighbor : neighbors){
+                    //choose the path with highest coverage
                     if (coverage[neighbor.first] < max_coverage/5.0
                             && coverage[neighbor.first] < coverage[contig_name]/5.0
                             && length_of_contigs[neighbor.first] < 2*length_of_contigs[contig_name]){
+                        links_to_delete.insert({neighbor, {contig_name,end}});
+                        links_to_delete.insert({{contig_name,end}, neighbor});
+                    }
+                    //if the neighbor is a dead end cut it
+                    if (!all_neighbors_are_dead_ends &&
+                            (linked[neighbor.first].first.size() == 0 || linked[neighbor.first].second.size() == 0)){
                         links_to_delete.insert({neighbor, {contig_name,end}});
                         links_to_delete.insert({{contig_name,end}, neighbor});
                     }

@@ -190,7 +190,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
     //copy the reads to the file with unitigs
     string command_copy = "cp " + read_file + " " + file_with_unitigs_from_past_k_and_reads;
     auto res = system(command_copy.c_str());
-    string unitig_file_gfa, unitig_file_fa;
+    string unitig_file_gfa, unitig_file_fa, merged_gfa;
     for (auto kmer_len: values_of_k){
         // launch bcalm        
         cout << "    - Launching assembly with k=" << kmer_len << endl;
@@ -239,7 +239,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
 
         // now2 = time(0);
         // ltm2 = localtime(&now2);
-        string merged_gfa = unitig_file_gfa;
+        merged_gfa = unitig_file_gfa;
 
 
         //take the contigs of bcalm.unitigs.shaved.merged.unzipped.gfa and put them in a fasta file min_abundance times, and concatenate with compressed_file
@@ -261,28 +261,29 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
         round++;
     }
 
-    // shave the resulting graph and //-min_abundance on all the abundances for each round (to remove the contigs that were added at the end of assembly for higher k)
-    now2 = time(0);
-    ltm2 = localtime(&now2);
-    int kmer_len = values_of_k[values_of_k.size()-1];
-    cout << "       - Shaving the graph of small dead ends [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    string shaved_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.gfa";
-    pop_and_shave_graph(unitig_file_gfa, min_abundance, 2*kmer_len+10, kmer_len, shaved_gfa, std::min(1,round)*2, num_threads, single_genome); //std::min(1,round)*2 because we want to remove the contigs that were added at the end of the previous assembly in two copies
-    auto time_shave = std::chrono::high_resolution_clock::now();
-
-    //merge the adjacent contigs
-    now2 = time(0);
-    ltm2 = localtime(&now2);
-    cout << "       - Merging resulting contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    string merged_gfa = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.shaved.merged.gfa";
-    unordered_map<string, int> segments_IDs2;
-    vector<Segment> segments2;
-    vector<Segment> merged_segments2;
-    load_GFA(shaved_gfa, segments2, segments_IDs2, true); //the last true to load the contigs in memory
-    merge_adjacent_contigs(segments2, merged_segments2, shaved_gfa, true, num_threads); //the last bool is to rename the contigs
-    output_graph(merged_gfa, shaved_gfa, merged_segments2);
-    auto time_merge = std::chrono::high_resolution_clock::now();
-
+    //among all the assemblies with different k, keep ideally the one with highest k, but if it is too small compared to the previous one, keep the previous one (typically if coverage is too low to build a good graph with the higher k)
+    //measure the size of all the files
+    vector<std::pair<string, long int>> gfa_files_and_sizes;
+    for (auto kmer_len: values_of_k){
+        string gfa_file = tmp_folder+"bcalm"+std::to_string(kmer_len)+".unitigs.gfa";
+        gfa_files_and_sizes.push_back({gfa_file, std::filesystem::file_size(gfa_file)});
+    }
+    string best_gfa = gfa_files_and_sizes[0].first;
+    int best_size = gfa_files_and_sizes[0].second;
+    int best_k = values_of_k[0];
+    for (int i = 1; i < gfa_files_and_sizes.size(); i++){
+        if (gfa_files_and_sizes[i].second > 0.9*gfa_files_and_sizes[i-1].second){ //if the size of the gfa is not too small compared to the previous one, keep it
+            best_gfa = gfa_files_and_sizes[i].first;
+            best_size = gfa_files_and_sizes[i].second;
+            best_k = values_of_k[i];
+        }
+    }
+    merged_gfa = best_gfa;
+    cout << " - Best kmer size is " << best_k;
+    if (best_k != values_of_k[values_of_k.size()-1]){
+        cout << " above this k the assembly completeness decreases";
+    }
+    cout << endl;
     cout << " =>Done with the iterative assembly, the graph is in " << merged_gfa << "\n" << endl;
 
     now2 = time(0);

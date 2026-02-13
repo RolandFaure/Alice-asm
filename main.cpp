@@ -37,8 +37,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.8";
-string date = "2026-02-11";
+string version = "0.7.9";
+string date = "2026-02-13";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result
@@ -204,7 +204,7 @@ int main(int argc, char** argv)
     bool contiguity = true;
     bool single_genome= false;
     int min_abundance = 5;
-    string kmer_sizes = "17,21,31,61,101,191";
+    string kmer_sizes = "21,31,61,101,191";
     int order = 101;
     int compression = 20;
     int num_threads = 1;
