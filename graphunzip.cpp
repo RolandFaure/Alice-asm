@@ -1435,7 +1435,7 @@ int main(int argc, char *argv[])
 
         string gfa_output_tmp2 = gfa_output + "_tmp2.gfa";
         //void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, bool contiguity, int k, string gfa_out, int extra_coverage, int num_threads, bool single_contig){
-        pop_and_shave_graph(gfa_output_tmp, 5, 100, 191, gfa_output_tmp2, 0, threads, single_genome);
+        pop_and_shave_graph(gfa_output_tmp, min_coverage, 2*last_k+10, last_k, gfa_output_tmp2, 0, threads, single_genome);
         //now merge the contigs
         segments.clear();
         segment_IDs.clear();

@@ -290,6 +290,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
     ltm2 = localtime(&now2);
     cout << " - Untangling the final compressed assembly [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
+    cout << "    - Improving contiguity of assembly by keeping only most covered paths [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     auto time_start = std::chrono::high_resolution_clock::now();
     string shaved_and_popped_gfa = tmp_folder+"bcalm.unitigs.shaved.popped.gfa";
     cut_links_for_contiguity(merged_gfa, shaved_and_popped_gfa);
@@ -317,7 +318,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
     cout << "    - Aligning the reads to the graph [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     string gaf_file = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gaf";
     robin_hood::unordered_flat_map<string,float> coverages;
-    create_gaf_from_unitig_graph(merged_gfa, values_of_k[values_of_k.size()-1], read_file, gaf_file, coverages, num_threads);   
+    create_gaf_from_unitig_graph(merged_gfa, best_k, read_file, gaf_file, coverages, num_threads);   
     auto time_gaf = std::chrono::high_resolution_clock::now(); 
     now2 = time(0);
     ltm2 = localtime(&now2);
@@ -327,7 +328,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
     string unzipped_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.unzipped.gfa";
     string command_unzip = path_graphunzip + " " + merged_gfa + " " + gaf_file + " 5 " + 
         std::to_string(num_threads) + " 0 " + unzipped_gfa + " 1 " + std::to_string(single_genome)
-         + " " + std::to_string(kmer_sizes_vector[kmer_sizes_vector.size()-1]) + " " + tmp_folder + "graphunzip.log";
+         + " " + std::to_string(best_k) + " " + tmp_folder + "graphunzip.log";
     cout << "    - Command of graphunzip : " << command_unzip << endl;
     auto unzip_ok = system(command_unzip.c_str());
     if (unzip_ok != 0){
