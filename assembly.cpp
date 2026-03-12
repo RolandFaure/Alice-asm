@@ -173,7 +173,7 @@ void correct_reads(std::string read_file, int min_abundance, std::string tmp_fol
  * @param path_convertToGFA Path to the convertToGFA executable
  * @param path_src Path to the src folder (to get GraphUnzip)
  */
-void assembly_custom(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, long long genome_size){
+void assembly_custom(std::string read_file, int min_abundance, std::string tmp_folder, int num_threads, std::string final_gfa, std::vector<int> kmer_sizes_vector, bool single_genome, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_graphunzip, bool hard_contiguity){
     
     string corrected_reads_file = tmp_folder + "corrected_reads.fa";
     correct_reads(read_file, min_abundance, tmp_folder, num_threads, corrected_reads_file, single_genome, path_to_bcalm, path_convertToGFA);
@@ -339,7 +339,7 @@ void assembly_custom(std::string read_file, int min_abundance, std::string tmp_f
 
     //trim the tips and isolated contigs that result from the unzipping of the graph. Then merge the adjacent contigs
     string tmp_gfa = tmp_folder+"tmp.gfa";
-    trim_tips_isolated_contigs_and_bubbles(unzipped_gfa, min_abundance, 2*values_of_k[values_of_k.size()-1], tmp_gfa, single_genome, genome_size);
+    trim_tips_isolated_contigs_and_bubbles(unzipped_gfa, min_abundance, 2*values_of_k[values_of_k.size()-1], tmp_gfa, single_genome, hard_contiguity);
     segments_IDs.clear();
     segments.clear();
     merged_segments.clear();

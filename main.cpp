@@ -37,8 +37,8 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.11";
-string date = "2026-02-24";
+string version = "0.7.12";
+string date = "2026-03-12";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result
@@ -202,9 +202,8 @@ int main(int argc, char** argv)
     string assembler_parameters = "";
     string test_ref_gfa = "";
     bool rescue = false;
-    bool contiguity = true;
+    bool contiguity = false;
     bool single_genome= false;
-    long long genome_size = 0;
     int min_abundance = 5;
     string kmer_sizes = "21,31,61,101,191";
     int order = 101;
@@ -228,9 +227,8 @@ int main(int argc, char** argv)
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2 if single-genome [5]") & clipp::opt_value("m", min_abundance),
         clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,21,31]") & clipp::opt_value("k", kmer_sizes),
-        // clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"), //in our tests, contiguity is better turned on
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
-        clipp::option("--genome-size").doc("(single-genome only) estimated genome size in bp, Alice will actively try to fit the assembly to this size") & clipp::opt_value("g", genome_size),
+        clipp::option("--contiguity").set(contiguity).doc("Favors contiguity by popping bubbles in the gfa graph [off]"),
 
         //Other assemblers options
         clipp::option("-a", "--assembler").doc("assembler to use {custom, spades} [custom]") & clipp::opt_value("a", assembler),
@@ -314,10 +312,6 @@ int main(int argc, char** argv)
                 exit(1);
             }
         }
-    }
-
-    if (!single_genome && genome_size > 0){
-        cerr << "ERROR: genome_size can only be used with single_genome" << endl;
     }
 
     if (order % 2 == 0){
@@ -425,7 +419,7 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
-        assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip, genome_size/compression);
+        assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip, contiguity);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);
@@ -494,7 +488,7 @@ int main(int argc, char** argv)
     now2 = time(0);
     ltm2 = localtime(&now2);
     cout << " - Computing the exact overlaps between the contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    compute_exact_CIGARs(decompressed_assembly, output_file, 150*compression, 70*compression);
+    compute_exact_CIGARs(decompressed_assembly, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * 2 * compression, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * 1 * compression);
 
     //convert to fasta
     now2 = time(0);
@@ -515,11 +509,6 @@ int main(int argc, char** argv)
     cout << "Assembly: " << std::chrono::duration_cast<std::chrono::seconds>(time_assembled - time_reduced).count() << "s\n";
     cout << "Decompression: " << std::chrono::duration_cast<std::chrono::seconds>(time_end - time_assembled).count() << "s\n";
     cout << "Total time: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() << "s\n";
-
-    if (test_ref_gfa != ""){
-        cout << "Comparing the result with the reference " << test_ref_gfa << endl;
-        test_assembly(output_file, test_ref_gfa);
-    }
 
     // Remove the trash.log file if it exists
     std::remove("trash.log");
