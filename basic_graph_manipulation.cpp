@@ -1967,7 +1967,7 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
  * @param min_length 
  * @param gfa_out 
  */
-void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out){
+void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out, bool single_genome, long long genome_size){
     //load the graph
     ifstream input(gfa_in);
     unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
@@ -2051,15 +2051,36 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
         pos += line.size() + 1;
     }
     input.close();
+
+    double haploid_coverage = 0;
+    if (single_genome){
+        //determine the haploid coverage, to cut contigs that are below this coverage
+        if (genome_size > 0) {
+            // Calculate total bases weighted by coverage: sum(length * coverage)
+            // This represents the total read bases aligned (counting each read once per coverage)
+            long long total_weighted_bp = 0;
+            for (auto& c : coverage) {
+                string contig_name = c.first;
+                int length = length_of_contigs[contig_name];
+                float cov = c.second;
+                total_weighted_bp += (long long)(length * cov);
+            }
+            
+            // haploid_coverage = total_weighted_bp / genome_size
+            haploid_coverage = (double)total_weighted_bp / (double)genome_size;
+            // cerr << "Calculated haploid coverage: " << haploid_coverage << " (total weighted bp: " << total_weighted_bp << ", genome size: " << genome_size << ")" << std::endl;
+            min_coverage = (int)(haploid_coverage / 2.0);
+        }
+    }
     
     //now trim the tips, isolated contigs and bubbles with a coverage below min_coverage and a length below min_length (bubbles need to have coverage 1)
     std::set<string> contigs_to_remove;
     std::set<std::pair<string, string>> links_to_detach; //contigs that look valid but probably reduce contiguity, detach them from the graph
     for (auto c: linked){
         string contig_name = c.first;
-        //remove tip
+        //remove tip or isolated contig
         if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
-            if (coverage[contig_name] < min_coverage && (length_of_contigs[contig_name] < min_length || coverage[contig_name]==1)){
+            if (coverage[contig_name] < min_coverage && (length_of_contigs[contig_name] < min_length || haploid_coverage > 0 || coverage[contig_name]==1)){
                 contigs_to_remove.insert(contig_name);
             }
             else { //the contig is valid but detaching it may improve the contiguity
@@ -2080,44 +2101,65 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
             }
         }
         //remove bubble
-        if (linked[contig_name].first.size() == 1 && linked[contig_name].second.size() == 1 && coverage[contig_name] == 1) {
+        if (linked[contig_name].first.size() == 1 && linked[contig_name].second.size() == 1) {
             string neighbor_left = linked[contig_name].first[0].first;
             char end_of_neighbor_left = linked[contig_name].first[0].second;
             string neighbor_right = linked[contig_name].second[0].first;
             char end_of_neighbor_right = linked[contig_name].second[0].second;
 
-            string other_neighbor_of_contig_left = "";
-            if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2) {
-                for (auto l : linked[neighbor_left].first) {
-                    if (l.first != contig_name) {
-                        other_neighbor_of_contig_left = l.first;
-                    }
-                }
-            } else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2) {
-                for (auto l : linked[neighbor_left].second) {
-                    if (l.first != contig_name) {
-                        other_neighbor_of_contig_left = l.first;
-                    }
-                }
-            }
-
-            string other_neighbor_of_contig_right = "";
-            if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2) {
-                for (auto l : linked[neighbor_right].first) {
-                    if (l.first != contig_name) {
-                        other_neighbor_of_contig_right = l.first;
-                    }
-                }
-            } else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2) {
-                for (auto l : linked[neighbor_right].second) {
-                    if (l.first != contig_name) {
-                        other_neighbor_of_contig_right = l.first;
-                    }
+            // Check if this looks like a bubble to remove or detach
+            bool is_simple_bubble = (coverage[contig_name] == 1);
+            bool is_haploid_bubble = false;
+            
+            if (single_genome && haploid_coverage > 0) {
+                // Check if this is a bubble between two haploid contigs
+                // A haploid bubble has: intermediate node with low coverage and both neighbors with haploid coverage
+                bool neighbor_left_is_haploid = (coverage[neighbor_left] > 0.7 * haploid_coverage && coverage[neighbor_left] < 1.5 * haploid_coverage);
+                bool neighbor_right_is_haploid = (coverage[neighbor_right] > 0.7 * haploid_coverage && coverage[neighbor_right] < 1.5 * haploid_coverage);
+                
+                if (coverage[contig_name] < 0.7 * haploid_coverage && neighbor_left_is_haploid && neighbor_right_is_haploid) {
+                    is_haploid_bubble = true;
                 }
             }
 
-            if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "") {
-                contigs_to_remove.insert(contig_name);
+            if (is_simple_bubble || is_haploid_bubble) {
+                string other_neighbor_of_contig_left = "";
+                if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2) {
+                    for (auto l : linked[neighbor_left].first) {
+                        if (l.first != contig_name) {
+                            other_neighbor_of_contig_left = l.first;
+                        }
+                    }
+                } else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2) {
+                    for (auto l : linked[neighbor_left].second) {
+                        if (l.first != contig_name) {
+                            other_neighbor_of_contig_left = l.first;
+                        }
+                    }
+                }
+
+                string other_neighbor_of_contig_right = "";
+                if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2) {
+                    for (auto l : linked[neighbor_right].first) {
+                        if (l.first != contig_name) {
+                            other_neighbor_of_contig_right = l.first;
+                        }
+                    }
+                } else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2) {
+                    for (auto l : linked[neighbor_right].second) {
+                        if (l.first != contig_name) {
+                            other_neighbor_of_contig_right = l.first;
+                        }
+                    }
+                }
+
+                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "") {
+                    // This is a real bubble with two paths between same pair of nodes
+                    if (coverage[contig_name] < coverage[other_neighbor_of_contig_left] ) {
+                        contigs_to_remove.insert(contig_name);
+                        contigs_to_remove.insert(contig_name);
+                    }
+                }
             }
         }
         //if contig attached among contigs of higher coverage, detach

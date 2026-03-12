@@ -37,7 +37,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.10";
+string version = "0.7.11";
 string date = "2026-02-24";
 string author = "Roland Faure";
 
@@ -182,6 +182,7 @@ int main(int argc, char** argv)
     // robin_hood::unordered_flat_map<std::string, float> coverages1;
     // create_corrected_reads_from_unitig_graph(input_file1, 25, read_file1, "trash.fa", true,coverages1, 15);
 
+    // trim_tips_isolated_contigs_and_bubbles("/home/roland-faure/Documents/these/Alice/Adineta/assembly_compressed.gfa", 20, 400, "/home/roland-faure/Documents/these/Alice/Adineta/trash.gfa", true, 9000000);
     // exit(0);
 
     //use clipp to parse the command line
@@ -203,6 +204,7 @@ int main(int argc, char** argv)
     bool rescue = false;
     bool contiguity = true;
     bool single_genome= false;
+    long long genome_size = 0;
     int min_abundance = 5;
     string kmer_sizes = "21,31,61,101,191";
     int order = 101;
@@ -228,6 +230,7 @@ int main(int argc, char** argv)
         clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,21,31]") & clipp::opt_value("k", kmer_sizes),
         // clipp::option("--contiguity").set(contiguity).doc("Favor contiguity over recovery of rare strains [off]"), //in our tests, contiguity is better turned on
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
+        clipp::option("--genome-size").doc("(single-genome only) estimated genome size in bp, Alice will actively try to fit the assembly to this size") & clipp::opt_value("g", genome_size),
 
         //Other assemblers options
         clipp::option("-a", "--assembler").doc("assembler to use {custom, spades} [custom]") & clipp::opt_value("a", assembler),
@@ -311,6 +314,10 @@ int main(int argc, char** argv)
                 exit(1);
             }
         }
+    }
+
+    if (!single_genome && genome_size > 0){
+        cerr << "ERROR: genome_size can only be used with single_genome" << endl;
     }
 
     if (order % 2 == 0){
@@ -418,7 +425,7 @@ int main(int argc, char** argv)
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
     if (assembler == "custom"){
-        assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip);
+        assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip, genome_size/compression);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);
