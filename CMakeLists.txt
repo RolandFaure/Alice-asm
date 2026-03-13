@@ -10,6 +10,7 @@ project(AliceAsm)
 set(TARGET_H
     assembly.h,
     basic_graph_manipulation.h,
+    bluntify.h,
     clipp.h,
     graphunzip.h,
     graphunzip2.h,
@@ -22,6 +23,8 @@ set(TARGET_H
 set(TARGET_SRC
     assembly.cpp,
     basic_graph_manipulation.cpp,
+    bluntify.cpp,
+    bluntify_standalone.cpp,
     main.cpp,
     graphunzip.cpp,
     graphunzip2.cpp,
@@ -31,7 +34,7 @@ set(TARGET_SRC
     )
 
 
-file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp" "test.cpp" "graphunzip2.cpp")
+file(GLOB SOURCE "main.cpp" "assembly.cpp" "reduce_and_expand.cpp" "basic_graph_manipulation.cpp" "rolling_hash.cpp" "test.cpp" "graphunzip2.cpp" "bluntify.cpp")
 add_executable(aliceasm ${SOURCE})
 target_compile_options (aliceasm PRIVATE -fopenmp)
 target_compile_options (aliceasm PRIVATE -g)
@@ -75,6 +78,14 @@ target_compile_options (graphunzip PRIVATE -std=c++17)
 target_compile_options (graphunzip PRIVATE -O3)
 target_compile_options (graphunzip PRIVATE -march=x86-64)
 target_link_libraries(graphunzip PRIVATE z m)
+
+file(GLOB SOURCE "bluntify.cpp" "bluntify_standalone.cpp")
+add_executable(bluntify ${SOURCE})
+target_compile_options (bluntify PRIVATE -g)
+target_compile_options (bluntify PRIVATE -std=c++17)
+target_compile_options (bluntify PRIVATE -O3)
+target_compile_options (bluntify PRIVATE -march=x86-64)
+target_link_libraries(bluntify PRIVATE z m)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

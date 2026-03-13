@@ -19,6 +19,7 @@
 #include "assembly.h"
 #include "clipp.h"
 #include "test.h"
+#include "bluntify.h"
 
 using std::cout;
 using std::endl;
@@ -37,7 +38,7 @@ using std::set;
 #define GREEN_TEXT "\033[1;32m"
 #define RESET_TEXT "\033[0m"
 
-string version = "0.7.12";
+string version = "0.7.13";
 string date = "2026-03-12";
 string author = "Roland Faure";
 
@@ -490,11 +491,17 @@ int main(int argc, char** argv)
     cout << " - Computing the exact overlaps between the contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     compute_exact_CIGARs(decompressed_assembly, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * 2 * compression, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * 1 * compression);
 
+    if (single_genome){
+        // bluntify the graph for single-genome assemblies
+        bluntify(output_file, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * compression, tmp_folder);
+    }
+
     //convert to fasta
     now2 = time(0);
     ltm2 = localtime(&now2);
     cout << " - Converting the assembly to fasta [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     gfa_to_fasta(output_file, output_file.substr(0, output_file.find_last_of('.')) + ".fasta");
+
 
     //clean the tmp folder if the user wants
     if (clean){
