@@ -1409,7 +1409,7 @@ int main(int argc, char *argv[])
     // output_graph("out_alice/tmp/before_dup.gfa", gfa_input, merged_segments);
 
     // cout << "NOT Duplicating contigs" << endl;
-    duplicate_contigs(merged_segments, 0.1, 5, 0.2);
+    // duplicate_contigs(merged_segments, 0.1, 5, 0.2);
     // cout << "Contigs duplicated" << endl;
 
     // output_graph("out_alice/tmp/after_dup.gfa", gfa_input, merged_segments);
