@@ -400,10 +400,6 @@ int main(int argc, char** argv)
         input_file = tmp_folder+fasta_file;
     }
 
-    if (single_genome){
-        contiguity = true;
-    }
-
     string compressed_file = tmp_folder+"compressed.fa";
     string sampled_file = tmp_folder+"sampled.fa";
     string merged_gfa = tmp_folder+"bcalm.unitigs.shaved.merged.gfa";
@@ -493,7 +489,7 @@ int main(int argc, char** argv)
 
     if (single_genome){
         // bluntify the graph for single-genome assemblies
-        bluntify(output_file, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * compression, tmp_folder);
+        bluntify(output_file, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * compression * 0.8, tmp_folder);
     }
 
     //convert to fasta
