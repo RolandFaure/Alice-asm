@@ -9,7 +9,6 @@
  * - Supporting both basic and advanced ("fancier") overlap removal strategies.
  *
  * Main Functions:
- * - reverse_complement: Computes the reverse complement of a DNA sequence.
  * - basic_overlap_removal: Removes overlaps from GFA links and trims contigs accordingly.
  * - fancier_overlap_removal: Splits contigs at overlap breakpoints and updates links, with options for minimum contig length and overlap reporting.
  * - remove_contigs_of_length_0: Removes contigs with zero length and rewires links to maintain graph connectivity.
@@ -21,19 +20,22 @@
  * - Various hash functors for use in unordered containers.
  *
  * Utility Functions:
- * - split_tab, join_tail_with_tabs, split_name_parts: String manipulation helpers for parsing GFA lines.
- * - parse_overlap1, parse_overlap2: Parse CIGAR strings to determine overlap lengths.
+ * - split_tab, join_tail_with_tabs: String manipulation helpers for parsing GFA lines.
+ * - parse_overlaps: Parse CIGAR strings to determine overlap lengths.
  * - orient_from_end1, orient_from_end2: Determine orientation symbols from link ends.
  * - parse_gfa_for_overlap_steps: Parses a GFA file and populates data structures for contigs and links.
  *
+ * Self-links are supported: a circular self-link (A + A + ov) is trimmed once (the circle keeps len-ov bases),
+ * a hairpin (A + A - ov, the end of A is a palindrome of length ov) is trimmed by ov/2.
+ *
  * Usage:
- *   bluntify <input.gfa> <output.gfa> [-n|--no_overlaps] [--tmpdir TMPDIR] [--version]
+ *   bluntify <input.gfa> <output.gfa> [-t|--trim_isolated LENGTH] [--tmpdir TMPDIR] [--version]
  *
  * Dependencies:
  *   Requires C++17 or later for <filesystem> and other standard library features.
  *
  * Author: Roland Faure
- * Version: 0.1
+ * Version: 0.2
  */
 #include "bluntify.h"
 
@@ -62,15 +64,16 @@ using std::vector;
 
 namespace {
 
-const string kVersion = "0.1";
+const string kVersion = "0.2";
 
 struct Link {
 	string name1;
-	int end1 = 0;
+	int end1 = 0; //0 = left end of name1, 1 = right end
 	int overlap1 = 0;
 	string name2;
-	int end2 = 0;
+	int end2 = 0; //0 = left end of name2, 1 = right end
 	int overlap2 = 0;
+	bool written = false; //the link has already been output
 };
 
 struct ContigSides {
@@ -137,59 +140,76 @@ struct WrittenLinkHash {
 	}
 };
 
+/**
+ * @brief Reverse complement, kept internal to bluntify (and named differently) so that it can never be confused with
+ * reverse_complement(string&) of basic_graph_manipulation.h.
+ */
+[[maybe_unused]] string bluntify_reverse_complement(const string& seq) {
+	string out;
+	out.reserve(seq.size());
+	for (auto it = seq.rbegin(); it != seq.rend(); ++it) {
+		switch (*it) {
+			case 'A': out.push_back('T'); break;
+			case 'C': out.push_back('G'); break;
+			case 'G': out.push_back('C'); break;
+			case 'T': out.push_back('A'); break;
+			default: out.push_back(*it); break;
+		}
+	}
+	return out;
+}
+
+//same result as reading the fields with getline(..., '\t') (a trailing empty field is dropped), without a stringstream
 vector<string> split_tab(const string& line) {
 	vector<string> fields;
-	std::stringstream ss(line);
-	string field;
-	while (std::getline(ss, field, '\t')) {
-		fields.push_back(field);
+	size_t start = 0;
+	while (start < line.size()) {
+		size_t tab = line.find('\t', start);
+		if (tab == string::npos) {
+			fields.push_back(line.substr(start));
+			break;
+		}
+		fields.push_back(line.substr(start, tab - start));
+		start = tab + 1;
 	}
 	return fields;
 }
 
-int parse_overlap1(const string& cigar, bool print_error_on_i) {
-	int overlap1 = 0;
+/**
+ * @brief Parses a CIGAR string. overlap1 is the length of the overlap on the first contig, overlap2 on the second.
+ * M, = and X count on both contigs, D only on the first, I only on the second. "*" means no overlap (0).
+ *
+ * @return true if the overlap is not a perfect match (contains I, D or another operation)
+ */
+bool parse_overlaps(const string& cigar, int& overlap1, int& overlap2) {
+	overlap1 = 0;
+	overlap2 = 0;
+	bool imperfect = false;
+	if (cigar == "*") {
+		return false;
+	}
 	string len_string;
 	for (char c : cigar) {
 		if (std::isdigit(static_cast<unsigned char>(c))) {
 			len_string.push_back(c);
 		} else {
 			int n = len_string.empty() ? 0 : std::stoi(len_string);
-			if (c == 'M') {
+			if (c == 'M' || c == '=' || c == 'X') {
 				overlap1 += n;
+				overlap2 += n;
 			} else if (c == 'D') {
 				overlap1 += n;
+				imperfect = true;
 			} else if (c == 'I') {
-				if (print_error_on_i) {
-					std::cout << "ERROR: bluntify only works with perfect overlaps" << std::endl;
-				}
+				overlap2 += n;
+				imperfect = true;
+			} else {
+				imperfect = true;
 			}
 			len_string.clear();
 		}
 	}
-	return overlap1;
-}
-
-int parse_overlap2(const string& cigar, bool print_error_on_i) {
-	int overlap2 = 0;
-	string len_string;
-	for (char c : cigar) {
-		if (std::isdigit(static_cast<unsigned char>(c))) {
-			len_string.push_back(c);
-		} else {
-			int n = len_string.empty() ? 0 : std::stoi(len_string);
-			if (c == 'M') {
-				overlap2 += n;
-			} else if (c == 'I') {
-				overlap2 += n;
-				if (print_error_on_i) {
-					std::cout << "ERROR: bluntify only works with perfect overlaps" << std::endl;
-				}
-			}
-			len_string.clear();
-		}
-	}
-	return overlap2;
+	return imperfect;
 }
 
 string join_tail_with_tabs(const vector<string>& fields, int start) {
@@ -210,16 +230,6 @@ string join_tab(const vector<string>& fields) {
 	return join_tail_with_tabs(fields, 0);
 }
 
-vector<string> split_name_parts(const string& s) {
-	vector<string> parts;
-	std::stringstream ss(s);
-	string chunk;
-	while (getline(ss, chunk, '_')) {
-		parts.push_back(chunk);
-	}
-	return parts;
-}
-
 string orient_from_end1(int end1) {
 	return string(1, "-+"[end1]);
 }
@@ -228,6 +238,34 @@ string orient_from_end2(int end2) {
 	return string(1, "+-"[end2]);
 }
 
+//circular self-link, e.g. A + A +: it is both on the left and on the right of the contig
+bool is_circular_self_link(const Link& link) {
+	return link.name1 == link.name2 && link.end1 != link.end2;
+}
+
+//hairpin, e.g. A + A -: the end of the contig is a palindrome of length overlap, it appears twice in the same side
+bool is_hairpin(const Link& link) {
+	return link.name1 == link.name2 && link.end1 == link.end2;
+}
+
+/**
+ * @brief Number of bases that the contig must lose at this end to make the link blunt: the overlap, except for hairpins where
+ * trimming t bases at the end of the contig decreases the overlap by 2t
+ */
+int effective_overlap(const Link& link) {
+	return is_hairpin(link) ? link.overlap1 / 2 : link.overlap1;
+}
+
+void write_link(ofstream& fo, const Link& link) {
+	fo << "L\t" << link.name1 << "\t" << orient_from_end1(link.end1) << "\t"
+	   << link.name2 << "\t" << orient_from_end2(link.end2) << "\t"
+	   << link.overlap1 << "M\n";
+}
+
+/**
+ * @brief Parses the GFA. Contigs are listed in contig_order in the order of their S lines (also when L lines come first);
+ * links pointing to contigs without S line are reported in contigs_without_S_line.
+ */
 void parse_gfa_for_overlap_steps(
 	const string& gfa_in,
 	unordered_map<string, ContigSides>& list_of_contigs,
@@ -236,7 +274,7 @@ void parse_gfa_for_overlap_steps(
 	unordered_map<string, std::streampos>& location_of_contigs_in_gfa,
 	vector<Link>& list_of_links,
 	unordered_map<string, string>* coverage,
-	bool print_error_on_i
+	bool print_error_on_imperfect_overlaps
 ) {
 	ifstream gfa_open(gfa_in);
 	if (!gfa_open) {
@@ -244,6 +282,8 @@ void parse_gfa_for_overlap_steps(
 	}
 
 	unordered_set<LinkKey, LinkKeyHash> set_of_already_appended_links;
+	unordered_set<string> contigs_with_S_line;
+	int number_of_imperfect_overlaps = 0;
 
 	while (true) {
 		std::streampos pos = gfa_open.tellg();
@@ -261,11 +301,10 @@ void parse_gfa_for_overlap_steps(
 				continue;
 			}
 			const string& name = fields[1];
-			if (list_of_contigs.find(name) == list_of_contigs.end()) {
-				list_of_contigs[name] = ContigSides{};
+			//do not reset the entry: links of this contig may have been parsed before its S line
+			list_of_contigs[name];
+			if (contigs_with_S_line.insert(name).second) {
 				contig_order.push_back(name);
-			} else {
-				list_of_contigs[name] = ContigSides{};
 			}
 
 			int length = 0;
@@ -277,10 +316,8 @@ void parse_gfa_for_overlap_steps(
 
 			if (coverage != nullptr) {
 				for (const string& field : fields) {
-					string upper = field;
-					std::transform(upper.begin(), upper.end(), upper.begin(),
-								   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-					if (upper.rfind("DP:", 0) == 0) {
+					if (field.size() >= 3 && std::toupper(static_cast<unsigned char>(field[0])) == 'D' &&
+						std::toupper(static_cast<unsigned char>(field[1])) == 'P' && field[2] == ':') {
 						(*coverage)[name] = field;
 						break;
 					}
@@ -292,9 +329,9 @@ void parse_gfa_for_overlap_steps(
 				continue;
 			}
 
-			string name1 = fields[1];
+			const string& name1 = fields[1];
 			int end1 = static_cast<int>(fields[2] == "+");
-			string name2 = fields[3];
+			const string& name2 = fields[3];
 			int end2 = static_cast<int>(fields[4] == "-");
 
 			LinkKey key{name1, end1, name2, end2};
@@ -305,13 +342,14 @@ void parse_gfa_for_overlap_steps(
 			set_of_already_appended_links.insert(key);
 			set_of_already_appended_links.insert(LinkKey{name2, end2, name1, end1});
 
-			const string& cigar = fields[5];
-			int overlap1 = parse_overlap1(cigar, print_error_on_i);
-			int overlap2 = parse_overlap2(cigar, print_error_on_i);
+			int overlap1 = 0;
+			int overlap2 = 0;
+			if (parse_overlaps(fields[5], overlap1, overlap2)) {
+				number_of_imperfect_overlaps += 1;
+			}
 
 			list_of_links.push_back(Link{name1, end1, overlap1, name2, end2, overlap2});
 			int idx = static_cast<int>(list_of_links.size()) - 1;
-			list_of_contigs[name1].left.reserve(list_of_contigs[name1].left.size());
 			if (end1 == 0) {
 				list_of_contigs[name1].left.push_back(idx);
 			} else {
@@ -325,20 +363,18 @@ void parse_gfa_for_overlap_steps(
 			}
 		}
 	}
+
+	if (print_error_on_imperfect_overlaps && number_of_imperfect_overlaps > 0) {
+		std::cout << "ERROR: bluntify only works with perfect overlaps, " << number_of_imperfect_overlaps
+				  << " links of " << gfa_in << " have a CIGAR that is not only made of M/=/X" << std::endl;
+	}
+	if (print_error_on_imperfect_overlaps && contigs_with_S_line.size() != list_of_contigs.size()) {
+		std::cout << "WARNING: in bluntify, " << list_of_contigs.size() - contigs_with_S_line.size()
+				  << " contigs of " << gfa_in << " appear in L lines but have no S line, their links are ignored" << std::endl;
+	}
 }
 
 }  // namespace
-
-std::string reverse_complement(const std::string& seq) {
-	unordered_map<char, char> complement{{'A', 'T'}, {'C', 'G'}, {'G', 'C'}, {'T', 'A'}, {'N', 'N'}};
-	string out;
-	out.reserve(seq.size());
-	for (auto it = seq.rbegin(); it != seq.rend(); ++it) {
-		auto found = complement.find(*it);
-		out.push_back(found == complement.end() ? *it : found->second);
-	}
-	return out;
-}
 
 void basic_overlap_removal(const std::string& gfa_in, const std::string& gfa_out) {
 	unordered_map<string, ContigSides> list_of_contigs;
@@ -351,53 +387,63 @@ void basic_overlap_removal(const std::string& gfa_in, const std::string& gfa_out
 								location_of_contigs_in_gfa, list_of_links, nullptr, true);
 
 	unordered_map<string, pair<int, int>> trimmed_lengths;
+	int number_of_odd_hairpins = 0;
 	for (const string& contig : contig_order) {
-		int min_length_left = length_of_contigs[contig];
-		int max_length_left = 0;
-		if (list_of_contigs[contig].left.empty()) {
-			min_length_left = 0;
-		}
+		const ContigSides& sides = list_of_contigs[contig];
+		int length = length_of_contigs[contig];
 
-		int min_length_right = length_of_contigs[contig];
+		//trim the left end by the smallest overlap on the left, without eating into the overlaps on the right
+		//(circular self-links are not counted on the right: trimming the left end shortens them too)
+		int min_length_left = sides.left.empty() ? 0 : length;
 		int max_length_right = 0;
-		if (list_of_contigs[contig].right.empty()) {
-			min_length_right = 0;
+		for (int link_idx : sides.left) {
+			min_length_left = std::min(min_length_left, effective_overlap(list_of_links[link_idx]));
 		}
-
-		for (int link_idx : list_of_contigs[contig].left) {
-			int overlap_length = list_of_links[link_idx].overlap1;
-			if (overlap_length > max_length_left) {
-				max_length_left = overlap_length;
-			}
-			if (overlap_length < min_length_left) {
-				min_length_left = overlap_length;
+		for (int link_idx : sides.right) {
+			if (!is_circular_self_link(list_of_links[link_idx])) {
+				max_length_right = std::max(max_length_right, list_of_links[link_idx].overlap1);
 			}
 		}
-
-		for (int link_idx : list_of_contigs[contig].right) {
-			int overlap_length = list_of_links[link_idx].overlap1;
-			if (overlap_length > max_length_right) {
-				max_length_right = overlap_length;
-			}
-			if (overlap_length < min_length_right) {
-				min_length_right = overlap_length;
-			}
-		}
-
-		int trim_left = std::min(min_length_left, length_of_contigs[contig] - max_length_right);
-		int trim_right = std::min(min_length_right, length_of_contigs[contig] - max_length_left);
-
-		for (int link_idx : list_of_contigs[contig].left) {
+		int trim_left = std::max(0, std::min(min_length_left, length - max_length_right));
+		for (int link_idx : sides.left) {
 			list_of_links[link_idx].overlap1 -= trim_left;
 			list_of_links[link_idx].overlap2 -= trim_left;
 		}
-		for (int link_idx : list_of_contigs[contig].right) {
-			if (list_of_links[link_idx].name1 != list_of_links[link_idx].name2) {
-				list_of_links[link_idx].overlap1 -= trim_right;
+
+		//then the right end, recomputing the overlaps after the left trimming (a circular self-link has just been shortened
+		//by trim_left and must not be trimmed a second time)
+		int min_length_right = sides.right.empty() ? 0 : length - trim_left;
+		int max_length_left = 0;
+		for (int link_idx : sides.right) {
+			min_length_right = std::min(min_length_right, effective_overlap(list_of_links[link_idx]));
+		}
+		for (int link_idx : sides.left) {
+			if (!is_circular_self_link(list_of_links[link_idx])) {
+				max_length_left = std::max(max_length_left, list_of_links[link_idx].overlap1);
+			}
+		}
+		int trim_right = std::max(0, std::min(min_length_right, length - trim_left - max_length_left));
+		for (int link_idx : sides.right) {
+			list_of_links[link_idx].overlap1 -= trim_right;
+			list_of_links[link_idx].overlap2 -= trim_right;
+		}
+
+		for (int link_idx : sides.left) {
+			if (is_hairpin(list_of_links[link_idx]) && list_of_links[link_idx].overlap1 % 2 == 1) {
+				number_of_odd_hairpins += 1;
+			}
+		}
+		for (int link_idx : sides.right) {
+			if (is_hairpin(list_of_links[link_idx]) && list_of_links[link_idx].overlap1 % 2 == 1) {
+				number_of_odd_hairpins += 1;
 			}
 		}
 
 		trimmed_lengths[contig] = {trim_left, trim_right};
+	}
+	if (number_of_odd_hairpins > 0) {
+		std::cout << "WARNING: in bluntify, " << number_of_odd_hairpins / 2
+				  << " hairpin links have an odd overlap (not a palindrome), they cannot be made perfectly blunt" << std::endl;
 	}
 
 	ofstream fo(gfa_out);
@@ -406,6 +452,7 @@ void basic_overlap_removal(const std::string& gfa_in, const std::string& gfa_out
 		throw std::runtime_error("Cannot open files for basic_overlap_removal output");
 	}
 
+	unordered_set<string> contigs_already_written;
 	string line;
 	while (getline(fi, line)) {
 		if (!line.empty() && line.back() == '\r') {
@@ -413,52 +460,52 @@ void basic_overlap_removal(const std::string& gfa_in, const std::string& gfa_out
 		}
 		if (!line.empty() && line[0] == 'S') {
 			vector<string> ls = split_tab(line);
-			if (ls.size() < 2) {
+			if (ls.size() < 2 || !contigs_already_written.insert(ls[1]).second) {
 				continue;
 			}
-			string seq;
+			const pair<int, int>& trimmed = trimmed_lengths[ls[1]];
+			int length = length_of_contigs[ls[1]];
+			int left = std::max(0, trimmed.first);
+			int right = std::max(left, length - trimmed.second);
+			fo << "S\t" << ls[1] << "\t";
 			if (ls.size() > 2) {
-				seq = ls[2];
+				fo.write(ls[2].data() + left, right - left);
 			}
-
-			int left = trimmed_lengths[ls[1]].first;
-			int right = length_of_contigs[ls[1]] - trimmed_lengths[ls[1]].second;
-			if (left < 0) {
-				left = 0;
-			}
-			if (right < left) {
-				right = left;
-			}
-			string clipped = seq.substr(static_cast<size_t>(left), static_cast<size_t>(right - left));
-			fo << "S\t" << ls[1] << "\t" << clipped << "\t" << join_tail_with_tabs(ls, 3) << "\n";
+			fo << "\t" << join_tail_with_tabs(ls, 3) << "\n";
 		}
 	}
 
 	for (const string& contig : contig_order) {
 		for (int link_idx : list_of_contigs[contig].left) {
-			if (list_of_links[link_idx].name1 != "None") {
-				fo << "L\t" << list_of_links[link_idx].name1 << "\t"
-				   << orient_from_end1(list_of_links[link_idx].end1) << "\t"
-				   << list_of_links[link_idx].name2 << "\t"
-				   << orient_from_end2(list_of_links[link_idx].end2) << "\t"
-				   << list_of_links[link_idx].overlap1 << "M\n";
-				list_of_links[link_idx].name1 = "None";
+			if (!list_of_links[link_idx].written) {
+				write_link(fo, list_of_links[link_idx]);
+				list_of_links[link_idx].written = true;
 			}
 		}
 
 		for (int link_idx : list_of_contigs[contig].right) {
-			if (list_of_links[link_idx].name1 != "None") {
-				fo << "L\t" << list_of_links[link_idx].name1 << "\t"
-				   << orient_from_end1(list_of_links[link_idx].end1) << "\t"
-				   << list_of_links[link_idx].name2 << "\t"
-				   << orient_from_end2(list_of_links[link_idx].end2) << "\t"
-				   << list_of_links[link_idx].overlap1 << "M\n";
-				list_of_links[link_idx].name1 = "None";
+			if (!list_of_links[link_idx].written) {
+				write_link(fo, list_of_links[link_idx]);
+				list_of_links[link_idx].written = true;
 			}
 		}
 	}
 }
 
+/**
+ * @brief Splits the contigs at the breakpoints of the remaining overlaps and rewires the links as 0M.
+ *
+ * The overlap of each link is "cut" between its two sides: cut1 bases are removed on the side of name1 and cut2 on the side
+ * of name2, with cut1 + cut2 = overlap. A side with a cut c is attached to the sub-contig starting at c (left end) or ending
+ * at length-c (right end), so the overlapping sequence is kept exactly once on every walk. A contig can take the cuts only if
+ * (max cut on the left) + (max cut on the right) <= length (when equal, a zero-length sub-contig is put at the junction and
+ * removed later by remove_contigs_of_length_0).
+ * - Contigs where this holds for all their overlaps ("splittable") take the whole overlap of the links they are the first
+ *   (in GFA order) to see, as before.
+ * - Links between two non-splittable contigs are cut on a non-splittable contig that can take all of them, if any (iterated),
+ *   then by splitting the overlap between the two sides according to the budget of each contig end.
+ * - Links that still cannot be made blunt are output with their remaining overlap and a warning is printed.
+ */
 void fancier_overlap_removal(const std::string& gfa_in, const std::string& gfa_out,
 							  int short_contig_length) {
 	unordered_map<string, ContigSides> list_of_contigs;
@@ -471,245 +518,448 @@ void fancier_overlap_removal(const std::string& gfa_in, const std::string& gfa_o
 	parse_gfa_for_overlap_steps(gfa_in, list_of_contigs, contig_order, length_of_contigs,
 								location_of_contigs_in_gfa, list_of_links, &coverage, false);
 
-	unordered_map<string, ContigSides> new_list_of_contigs;
-	vector<string> new_contig_order;
-	vector<Link> new_list_of_links;
-	unordered_set<string> contigs_already_dealt_with;
-	unordered_map<string, pair<string, string>> old_contigs_to_new_contigs;
-
-	auto set_contig_lists = [&](const string& name, const vector<int>& left, const vector<int>& right) {
-		if (new_list_of_contigs.find(name) == new_list_of_contigs.end()) {
-			new_contig_order.push_back(name);
-		}
-		new_list_of_contigs[name] = ContigSides{left, right};
-	};
-
-	for (const string& contig : contig_order) {
+	//rank of each contig in the GFA and whether all its overlaps can be cut on it
+	unordered_map<string, int> rank_of_contig;
+	unordered_map<string, bool> splittable;
+	for (int r = 0; r < static_cast<int>(contig_order.size()); ++r) {
+		const string& contig = contig_order[r];
+		rank_of_contig[contig] = r;
 		int max_length_left = 0;
 		int max_length_right = 0;
-		vector<pair<int, int>> list_breakpoints_left;
-		vector<pair<int, int>> list_breakpoints_right;
-
 		for (int link_idx : list_of_contigs[contig].left) {
-			int overlap_length = list_of_links[link_idx].overlap1;
-			if (overlap_length > max_length_left) {
-				max_length_left = overlap_length;
-			}
-			list_breakpoints_left.push_back({overlap_length, link_idx});
+			max_length_left = std::max(max_length_left, effective_overlap(list_of_links[link_idx]));
 		}
-		if (list_breakpoints_left.empty()) {
-			list_breakpoints_left.push_back({0, -1});
-		}
-
 		for (int link_idx : list_of_contigs[contig].right) {
-			int overlap_length = list_of_links[link_idx].overlap1;
-			if (overlap_length > max_length_right) {
-				max_length_right = overlap_length;
-			}
-			list_breakpoints_right.push_back({length_of_contigs[contig] - overlap_length, link_idx});
+			max_length_right = std::max(max_length_right, effective_overlap(list_of_links[link_idx]));
 		}
-		if (list_breakpoints_right.empty()) {
-			list_breakpoints_right.push_back({length_of_contigs[contig], -1});
+		splittable[contig] = max_length_left + max_length_right <= length_of_contigs[contig];
+	}
+
+	//decide the cuts. -1 = not decided (yet)
+	const int number_of_links = static_cast<int>(list_of_links.size());
+	vector<int> cut1(number_of_links, -1);
+	vector<int> cut2(number_of_links, -1);
+	vector<bool> link_is_valid(number_of_links, true); //both contigs have an S line
+	vector<int> pending; //links between two non-splittable contigs
+	int number_of_links_to_missing_contigs = 0;
+	for (int link_idx = 0; link_idx < number_of_links; ++link_idx) {
+		const Link& link = list_of_links[link_idx];
+		if (rank_of_contig.find(link.name1) == rank_of_contig.end() || rank_of_contig.find(link.name2) == rank_of_contig.end()) {
+			link_is_valid[link_idx] = false;
+			number_of_links_to_missing_contigs += 1;
+			continue;
 		}
-
-		if (max_length_left + max_length_right < length_of_contigs[contig]) {
-			contigs_already_dealt_with.insert(contig);
-
-			vector<pair<int, int>> breakpoints = list_breakpoints_left;
-			breakpoints.insert(breakpoints.end(), list_breakpoints_right.begin(), list_breakpoints_right.end());
-			std::stable_sort(breakpoints.begin(), breakpoints.end(),
-							 [](const pair<int, int>& a, const pair<int, int>& b) {
-								 return a.first < b.first;
-							 });
-
-			string new_contig_name;
-			for (int sub = 0; sub < static_cast<int>(breakpoints.size()); ++sub) {
-				if (sub > 0 && breakpoints[sub - 1].first != breakpoints[sub].first) {
-					new_contig_name = contig + "_" + std::to_string(breakpoints[sub - 1].first) + "_" +
-									  std::to_string(breakpoints[sub].first);
-					int n = 2;
-					while (sub - n >= 0 && breakpoints[sub - 1].first == breakpoints[sub - n].first) {
-						n += 1;
-					}
-					if (sub - n >= 0) {
-						string past_contig_name = contig + "_" + std::to_string(breakpoints[sub - n].first) + "_" +
-												  std::to_string(breakpoints[sub - 1].first);
-
-						new_list_of_links.push_back(Link{new_contig_name, 0, 0, past_contig_name, 1, 0});
-						set_contig_lists(new_contig_name,
-										 vector<int>{static_cast<int>(new_list_of_links.size()) - 1},
-										 vector<int>{});
-					} else {
-						set_contig_lists(new_contig_name, vector<int>{}, vector<int>{});
-					}
-				}
-
-				if (sub == 0) {
-					int n = 1;
-					while (sub + n < static_cast<int>(breakpoints.size()) &&
-						   std::to_string(breakpoints[sub].first) == std::to_string(breakpoints[sub + n].first)) {
-						n += 1;
-					}
-					string future_contig_name = contig + "_" + std::to_string(breakpoints[sub].first) + "_" +
-												std::to_string(breakpoints[sub + n].first);
-					old_contigs_to_new_contigs[contig] = {future_contig_name, ""};
-				}
-				if (sub == static_cast<int>(breakpoints.size()) - 1) {
-					old_contigs_to_new_contigs[contig].second = new_contig_name;
-				}
+		int overlap = effective_overlap(link);
+		if (overlap <= 0) {
+			cut1[link_idx] = 0;
+			cut2[link_idx] = 0;
+		} else if (is_hairpin(link)) {
+			//both sides are the same end: it loses overlap/2 bases
+			if (splittable[link.name1]) {
+				cut1[link_idx] = overlap;
+				cut2[link_idx] = overlap;
+			} else {
+				pending.push_back(link_idx);
 			}
-
-			for (int sub = 0; sub < static_cast<int>(breakpoints.size()); ++sub) {
-				if (breakpoints[sub].second != -1) {
-					Link link = list_of_links[breakpoints[sub].second];
-					link.overlap1 = 0;
-					link.overlap2 = 0;
-					if (link.name1 == "-1") {
-						continue;
-					}
-
-					if ((link.name1 == contig && link.end1 == 0) || (link.name2 == contig && link.end2 == 0)) {
-						int n = 1;
-						while (sub + n < static_cast<int>(breakpoints.size()) &&
-							   std::to_string(breakpoints[sub].first) == std::to_string(breakpoints[sub + n].first)) {
-							n += 1;
-						}
-						string future_contig_name = contig + "_" + std::to_string(breakpoints[sub].first) + "_" +
-													std::to_string(breakpoints[sub + n].first);
-						if (link.name1 == contig && link.end1 == 0) {
-							link.name1 = future_contig_name;
-						} else if (link.name2 == contig && link.end2 == 0) {
-							link.name2 = future_contig_name;
-						}
-						new_list_of_links.push_back(link);
-						new_list_of_contigs[future_contig_name].left.push_back(static_cast<int>(new_list_of_links.size()) - 1);
-
-					} else {
-						int n = 1;
-						while (sub - n >= 0 && breakpoints[sub].first == breakpoints[sub - n].first) {
-							n += 1;
-						}
-						string curr_contig_name = contig + "_" + std::to_string(breakpoints[sub - n].first) + "_" +
-												  std::to_string(breakpoints[sub].first);
-						if (link.name1 == contig && link.end1 == 1) {
-							link.name1 = curr_contig_name;
-						}
-						if (link.name2 == contig && link.end2 == 1) {
-							link.name2 = curr_contig_name;
-						}
-						new_list_of_links.push_back(link);
-						new_list_of_contigs[curr_contig_name].right.push_back(static_cast<int>(new_list_of_links.size()) - 1);
-					}
-
-					list_of_links[breakpoints[sub].second].name1 = "-1";
-					list_of_links[breakpoints[sub].second].name2 = "-1";
-				}
-			}
-
 		} else {
-			string new_name = contig + "_0_" + std::to_string(length_of_contigs[contig]);
-			set_contig_lists(new_name, vector<int>{}, vector<int>{});
-			old_contigs_to_new_contigs[contig] = {new_name, new_name};
+			bool first_is_name1 = rank_of_contig[link.name1] <= rank_of_contig[link.name2];
+			const string& first = first_is_name1 ? link.name1 : link.name2;
+			const string& second = first_is_name1 ? link.name2 : link.name1;
+			if (splittable[first]) {
+				(first_is_name1 ? cut1 : cut2)[link_idx] = overlap;
+				(first_is_name1 ? cut2 : cut1)[link_idx] = 0;
+			} else if (splittable[second]) {
+				(first_is_name1 ? cut2 : cut1)[link_idx] = overlap;
+				(first_is_name1 ? cut1 : cut2)[link_idx] = 0;
+			} else {
+				pending.push_back(link_idx);
+			}
+		}
+	}
+	if (number_of_links_to_missing_contigs > 0) {
+		std::cout << "WARNING: in bluntify, " << number_of_links_to_missing_contigs
+				  << " links point to contigs without S line, they are dropped" << std::endl;
+	}
+
+	//links between non-splittable contigs. First, a non-splittable contig that can take all its pending overlaps takes them
+	//(which frees its neighbours), until no such contig is left
+	if (!pending.empty()) {
+		unordered_map<string, vector<int>> pending_links_of_contig;
+		for (int link_idx : pending) {
+			pending_links_of_contig[list_of_links[link_idx].name1].push_back(link_idx);
+			if (list_of_links[link_idx].name2 != list_of_links[link_idx].name1) {
+				pending_links_of_contig[list_of_links[link_idx].name2].push_back(link_idx);
+			}
+		}
+		//max pending overlap on the left / right of the contig
+		auto pending_needs = [&](const string& contig) {
+			pair<int, int> needs = {0, 0};
+			for (int link_idx : pending_links_of_contig[contig]) {
+				if (cut1[link_idx] != -1) {
+					continue;
+				}
+				const Link& link = list_of_links[link_idx];
+				int overlap = effective_overlap(link);
+				if (link.name1 == contig) {
+					(link.end1 == 0 ? needs.first : needs.second) = std::max(link.end1 == 0 ? needs.first : needs.second, overlap);
+				}
+				if (link.name2 == contig) {
+					(link.end2 == 0 ? needs.first : needs.second) = std::max(link.end2 == 0 ? needs.first : needs.second, overlap);
+				}
+			}
+			return needs;
+		};
+
+		vector<string> queue;
+		for (const auto& kv : pending_links_of_contig) {
+			queue.push_back(kv.first);
+		}
+		std::sort(queue.begin(), queue.end(), [&rank_of_contig](const string& a, const string& b) {
+			return rank_of_contig[a] < rank_of_contig[b];
+		});
+		unordered_set<string> in_queue(queue.begin(), queue.end());
+		while (!queue.empty()) {
+			string contig = queue.back();
+			queue.pop_back();
+			in_queue.erase(contig);
+			pair<int, int> needs = pending_needs(contig);
+			if (needs.first + needs.second > length_of_contigs[contig]) {
+				continue;
+			}
+			for (int link_idx : pending_links_of_contig[contig]) {
+				if (cut1[link_idx] != -1) {
+					continue;
+				}
+				const Link& link = list_of_links[link_idx];
+				int overlap = effective_overlap(link);
+				if (link.name1 == link.name2) { //self-link: cut on the left end for a circle, on its only end for a hairpin
+					cut1[link_idx] = (is_hairpin(link) || link.end1 == 0) ? overlap : 0;
+					cut2[link_idx] = (is_hairpin(link) || link.end2 == 0) ? overlap : 0;
+				} else {
+					cut1[link_idx] = (link.name1 == contig) ? overlap : 0;
+					cut2[link_idx] = (link.name2 == contig) ? overlap : 0;
+					const string& neighbor = (link.name1 == contig) ? link.name2 : link.name1;
+					if (in_queue.insert(neighbor).second) {
+						queue.push_back(neighbor);
+					}
+				}
+			}
+		}
+
+		//then share the remaining overlaps between both sides, each contig end having a budget proportional to its needs
+		unordered_map<string, pair<int, int>> budgets;
+		for (const auto& kv : pending_links_of_contig) {
+			pair<int, int> needs = pending_needs(kv.first);
+			int length = length_of_contigs[kv.first];
+			if (needs.first + needs.second <= length) {
+				budgets[kv.first] = needs;
+			} else {
+				int left = static_cast<int>(static_cast<long long>(length) * needs.first / (needs.first + needs.second));
+				//hairpins can only be cut on this contig: keep their part of the budget if possible
+				pair<int, int> hairpin_needs = {0, 0};
+				for (int link_idx : kv.second) {
+					const Link& link = list_of_links[link_idx];
+					if (cut1[link_idx] == -1 && is_hairpin(link)) {
+						int& need = (link.end1 == 0) ? hairpin_needs.first : hairpin_needs.second;
+						need = std::max(need, effective_overlap(link));
+					}
+				}
+				if (hairpin_needs.first + hairpin_needs.second <= length) {
+					left = std::min(std::max(left, hairpin_needs.first), length - hairpin_needs.second);
+				}
+				budgets[kv.first] = {left, length - left};
+			}
+		}
+		for (int link_idx : pending) {
+			if (cut1[link_idx] != -1) {
+				continue;
+			}
+			const Link& link = list_of_links[link_idx];
+			int overlap = effective_overlap(link);
+			const pair<int, int>& budget1 = budgets[link.name1];
+			const pair<int, int>& budget2 = budgets[link.name2];
+			int available1 = (link.end1 == 0) ? budget1.first : budget1.second;
+			int available2 = (link.end2 == 0) ? budget2.first : budget2.second;
+			if (is_hairpin(link)) {
+				if (overlap <= available1) {
+					cut1[link_idx] = overlap;
+					cut2[link_idx] = overlap;
+				}
+			} else if (overlap <= available1 + available2) {
+				cut1[link_idx] = std::min(overlap, available1);
+				cut2[link_idx] = overlap - cut1[link_idx];
+			}
+		}
+
+		//last chance for the links left: use what the contigs have not used of their length (hairpins first, they have only one side)
+		unordered_map<string, pair<int, int>> used; //max cut on the left / right of each contig
+		auto use = [&used](const string& contig, int end, int cut) {
+			int& u = (end == 0) ? used[contig].first : used[contig].second;
+			u = std::max(u, cut);
+		};
+		vector<int> links_left;
+		for (int link_idx : pending) {
+			const Link& link = list_of_links[link_idx];
+			if (cut1[link_idx] != -1) {
+				use(link.name1, link.end1, cut1[link_idx]);
+				use(link.name2, link.end2, cut2[link_idx]);
+			} else {
+				links_left.push_back(link_idx);
+			}
+		}
+		std::stable_partition(links_left.begin(), links_left.end(),
+							  [&list_of_links](int link_idx) { return is_hairpin(list_of_links[link_idx]); });
+		for (int link_idx : links_left) {
+			const Link& link = list_of_links[link_idx];
+			int overlap = effective_overlap(link);
+			pair<int, int> used1 = used[link.name1];
+			int available1 = length_of_contigs[link.name1] - ((link.end1 == 0) ? used1.second : used1.first);
+			int c1 = is_hairpin(link) ? overlap : std::min(overlap, std::max(0, available1));
+			int c2 = is_hairpin(link) ? overlap : overlap - c1;
+			//check the constraint of both contigs with the new cuts
+			pair<int, int> new_used1 = used[link.name1];
+			(link.end1 == 0 ? new_used1.first : new_used1.second) = std::max(link.end1 == 0 ? new_used1.first : new_used1.second, c1);
+			pair<int, int> new_used2 = (link.name2 == link.name1) ? new_used1 : used[link.name2];
+			(link.end2 == 0 ? new_used2.first : new_used2.second) = std::max(link.end2 == 0 ? new_used2.first : new_used2.second, c2);
+			if (link.name2 == link.name1) {
+				new_used1 = new_used2;
+			}
+			if (new_used1.first + new_used1.second <= length_of_contigs[link.name1] &&
+				new_used2.first + new_used2.second <= length_of_contigs[link.name2]) {
+				cut1[link_idx] = c1;
+				cut2[link_idx] = c2;
+				used[link.name1] = new_used1;
+				used[link.name2] = new_used2;
+			}
 		}
 	}
 
-	for (Link& link : new_list_of_links) {
-		if (old_contigs_to_new_contigs.find(link.name1) != old_contigs_to_new_contigs.end()) {
-			if (link.end1 == 0) {
-				link.name1 = old_contigs_to_new_contigs[link.name1].first;
-			} else {
-				link.name1 = old_contigs_to_new_contigs[link.name1].second;
+	struct Attachment {
+		int position;
+		int link_idx;
+		int end; //end of the contig on which the link is
+		int side; //1 if the link is attached by name1, 2 by name2
+	};
+	struct SubContig {
+		string original_name;
+		int start;
+		int end;
+	};
+
+	unordered_map<string, ContigSides> new_list_of_contigs;
+	vector<string> new_contig_order;
+	vector<SubContig> new_contig_coordinates; //parallel to new_contig_order
+	vector<Link> new_list_of_links;
+	vector<int> new_index_of_link(number_of_links, -1);
+	vector<int> number_of_sides_rewired(number_of_links, 0);
+
+	auto sub_contig_name = [](const string& contig, int start, int end) {
+		return contig + "_" + std::to_string(start) + "_" + std::to_string(end);
+	};
+
+	for (const string& contig : contig_order) {
+		int length = length_of_contigs[contig];
+
+		//where each link is attached on the contig
+		vector<Attachment> attachments;
+		for (int end = 0; end < 2; ++end) {
+			const vector<int>& links_of_this_end = (end == 0) ? list_of_contigs[contig].left : list_of_contigs[contig].right;
+			for (int i = 0; i < static_cast<int>(links_of_this_end.size()); ++i) {
+				int link_idx = links_of_this_end[i];
+				if (!link_is_valid[link_idx] || (i > 0 && links_of_this_end[i - 1] == link_idx)) { //hairpins are listed twice
+					continue;
+				}
+				const Link& link = list_of_links[link_idx];
+				for (int side = 1; side <= 2; ++side) {
+					const string& name = (side == 1) ? link.name1 : link.name2;
+					int link_end = (side == 1) ? link.end1 : link.end2;
+					if (name != contig || link_end != end) {
+						continue;
+					}
+					int cut = std::max(0, (side == 1) ? cut1[link_idx] : cut2[link_idx]); //undecided links are attached to the extremities
+					attachments.push_back({(end == 0) ? cut : length - cut, link_idx, end, side});
+				}
 			}
 		}
-		if (old_contigs_to_new_contigs.find(link.name2) != old_contigs_to_new_contigs.end()) {
-			if (link.end2 == 0) {
-				link.name2 = old_contigs_to_new_contigs[link.name2].first;
-			} else {
-				link.name2 = old_contigs_to_new_contigs[link.name2].second;
+		std::stable_sort(attachments.begin(), attachments.end(),
+						 [](const Attachment& a, const Attachment& b) {
+							 return a.position < b.position;
+						 });
+
+		//the breakpoints delimit the sub-contigs. A breakpoint where links are attached both on the left and on the right
+		//gets a zero-length sub-contig, so that links entering there can exit there
+		unordered_set<int> left_positions;
+		unordered_set<int> right_positions;
+		vector<int> positions = {0, length};
+		for (const Attachment& attachment : attachments) {
+			positions.push_back(attachment.position);
+			(attachment.end == 0 ? left_positions : right_positions).insert(attachment.position);
+		}
+		std::sort(positions.begin(), positions.end());
+		positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
+		vector<int> positions_with_junctions;
+		for (int position : positions) {
+			positions_with_junctions.push_back(position);
+			if (left_positions.count(position) > 0 && right_positions.count(position) > 0) {
+				positions_with_junctions.push_back(position);
 			}
 		}
+		positions = std::move(positions_with_junctions);
+		if (length == 0) {
+			positions = {0, 0};
+		} else {
+			//links entering at the very end (or leaving at the very start) of the contig need a zero-length sub-contig there
+			if (left_positions.count(length) > 0 && right_positions.count(length) == 0) {
+				positions.push_back(length);
+			}
+			if (right_positions.count(0) > 0 && left_positions.count(0) == 0) {
+				positions.insert(positions.begin(), 0);
+			}
+		}
+
+		vector<string> sub_names;
+		for (int sub = 0; sub + 1 < static_cast<int>(positions.size()); ++sub) {
+			sub_names.push_back(sub_contig_name(contig, positions[sub], positions[sub + 1]));
+			new_contig_order.push_back(sub_names.back());
+			new_contig_coordinates.push_back({contig, positions[sub], positions[sub + 1]});
+			new_list_of_contigs[sub_names.back()] = ContigSides{};
+			if (sub > 0) {
+				new_list_of_links.push_back(Link{sub_names[sub], 0, 0, sub_names[sub - 1], 1, 0});
+				new_list_of_contigs[sub_names[sub]].left.push_back(static_cast<int>(new_list_of_links.size()) - 1);
+			}
+		}
+
+		for (const Attachment& attachment : attachments) {
+			int sub = 0;
+			if (attachment.end == 0) {
+				//the link enters the sub-contig starting at the breakpoint
+				sub = static_cast<int>(std::lower_bound(positions.begin(), positions.end(), attachment.position) - positions.begin());
+				sub = std::min(sub, static_cast<int>(sub_names.size()) - 1);
+			} else {
+				//the link leaves from the sub-contig ending at the breakpoint
+				sub = static_cast<int>(std::upper_bound(positions.begin(), positions.end(), attachment.position) - positions.begin()) - 2;
+				sub = std::max(sub, 0);
+			}
+			const string& new_name = sub_names[sub];
+
+			int& new_idx = new_index_of_link[attachment.link_idx];
+			if (new_idx == -1) {
+				new_list_of_links.push_back(list_of_links[attachment.link_idx]);
+				new_idx = static_cast<int>(new_list_of_links.size()) - 1;
+				Link& new_link = new_list_of_links[new_idx];
+				new_link.written = false;
+				if (cut1[attachment.link_idx] != -1) {
+					new_link.overlap1 = 0;
+					new_link.overlap2 = 0;
+				}
+				if (attachment.end == 0) {
+					new_list_of_contigs[new_name].left.push_back(new_idx);
+				} else {
+					new_list_of_contigs[new_name].right.push_back(new_idx);
+				}
+			}
+			(attachment.side == 1 ? new_list_of_links[new_idx].name1 : new_list_of_links[new_idx].name2) = new_name;
+			number_of_sides_rewired[attachment.link_idx] += 1;
+		}
+	}
+
+	//checks: both sides of every link have been rewired, and the cuts of each link remove exactly its overlap (otherwise the
+	//neighbour would keep an overlap that is written as 0M and sequence would be lost or duplicated)
+	int number_of_links_not_blunt = 0;
+	int number_of_links_badly_rewired = 0;
+	int number_of_imperfect_links = 0;
+	for (int link_idx = 0; link_idx < number_of_links; ++link_idx) {
+		if (!link_is_valid[link_idx]) {
+			continue;
+		}
+		const Link& link = list_of_links[link_idx];
+		if (number_of_sides_rewired[link_idx] != 2) {
+			number_of_links_badly_rewired += 1;
+		}
+		if (cut1[link_idx] == -1) {
+			number_of_links_not_blunt += 1;
+		} else if (!is_hairpin(link) && cut1[link_idx] + cut2[link_idx] != link.overlap1) {
+			number_of_links_badly_rewired += 1;
+		} else if (link.overlap1 != link.overlap2) {
+			number_of_imperfect_links += 1;
+		}
+	}
+	if (number_of_links_badly_rewired > 0) {
+		std::cout << "WARNING: in bluntify, " << number_of_links_badly_rewired
+				  << " links were not rewired correctly, some sequence may be lost or duplicated. This is a bug, please report it" << std::endl;
+	}
+	if (number_of_imperfect_links > 0) {
+		std::cout << "WARNING: in bluntify, " << number_of_imperfect_links
+				  << " links have an imperfect overlap, some bases may be duplicated or lost around them" << std::endl;
+	}
+	if (number_of_links_not_blunt > 0) {
+		std::cout << "WARNING: in bluntify, " << number_of_links_not_blunt
+				  << " links could not be made blunt (overlaps of short contigs overlap each other), they are kept with their overlap" << std::endl;
 	}
 
 	ofstream fo(gfa_out);
 	if (!fo) {
 		throw std::runtime_error("Cannot open output GFA: " + gfa_out);
 	}
+	ifstream open2(gfa_in);
+	if (!open2) {
+		throw std::runtime_error("Cannot open input GFA: " + gfa_in);
+	}
 
-	unordered_map<string, int> new_contigs_length;
-	for (const string& contig : new_contig_order) {
-		ifstream open2(gfa_in);
-		if (!open2) {
-			throw std::runtime_error("Cannot open input GFA: " + gfa_in);
-		}
+	//sub-contigs of a same contig are consecutive in new_contig_order: read each original sequence only once
+	string current_original_name;
+	string seq;
+	bool has_current_original = false;
+	for (int i = 0; i < static_cast<int>(new_contig_order.size()); ++i) {
+		const string& contig = new_contig_order[i];
+		const SubContig& coordinates = new_contig_coordinates[i];
 
-		vector<string> contig_parts = split_name_parts(contig);
-		string original_name;
-		for (int i = 0; i < static_cast<int>(contig_parts.size()) - 2; ++i) {
-			if (i > 0) {
-				original_name += "_";
+		if (!has_current_original || coordinates.original_name != current_original_name) {
+			current_original_name = coordinates.original_name;
+			has_current_original = true;
+			open2.clear();
+			open2.seekg(location_of_contigs_in_gfa[current_original_name]);
+			string sline;
+			getline(open2, sline);
+			if (!sline.empty() && sline.back() == '\r') {
+				sline.pop_back();
 			}
-			original_name += contig_parts[i];
+			vector<string> ls = split_tab(sline);
+			seq = (ls.size() > 2) ? std::move(ls[2]) : string();
 		}
 
-		open2.seekg(location_of_contigs_in_gfa[original_name]);
-		string sline;
-		getline(open2, sline);
-		if (!sline.empty() && sline.back() == '\r') {
-			sline.pop_back();
-		}
-		vector<string> ls = split_tab(sline);
-		string seq;
-		if (ls.size() > 2) {
-			seq = ls[2];
-		}
-
-		string left = contig_parts[contig_parts.size() - 2];
-		string right = contig_parts[contig_parts.size() - 1];
-		int ileft = std::stoi(left);
-		int iright = std::stoi(right);
-
-		if (iright - ileft >= short_contig_length) {
-			fo << "S\t" << contig << "\t" << seq.substr(static_cast<size_t>(ileft), static_cast<size_t>(iright - ileft)) << "\t";
-			if (coverage.find(original_name) != coverage.end()) {
-				fo << coverage[original_name] << "\n";
+		if (coordinates.end - coordinates.start >= short_contig_length) {
+			fo << "S\t" << contig << "\t";
+			fo.write(seq.data() + coordinates.start, coordinates.end - coordinates.start);
+			fo << "\t";
+			auto cov = coverage.find(current_original_name);
+			if (cov != coverage.end()) {
+				fo << cov->second << "\n";
 			} else {
 				fo << "\n";
 			}
 		}
-		new_contigs_length[contig] = iright - ileft;
 	}
 
 	for (const string& contig : new_contig_order) {
 		for (int link_idx : new_list_of_contigs[contig].left) {
-			if (new_list_of_links[link_idx].name1 != "None") {
-				if (new_list_of_links[link_idx].overlap1 == 0) {
-					fo << "L\t" << new_list_of_links[link_idx].name1 << "\t"
-					   << orient_from_end1(new_list_of_links[link_idx].end1) << "\t"
-					   << new_list_of_links[link_idx].name2 << "\t"
-					   << orient_from_end2(new_list_of_links[link_idx].end2) << "\t"
-					   << new_list_of_links[link_idx].overlap1 << "M\n";
-				}
-				new_list_of_links[link_idx].name1 = "None";
+			if (!new_list_of_links[link_idx].written) {
+				write_link(fo, new_list_of_links[link_idx]);
+				new_list_of_links[link_idx].written = true;
 			}
 		}
 
 		for (int link_idx : new_list_of_contigs[contig].right) {
-			if (new_list_of_links[link_idx].name1 != "None") {
-				if (new_list_of_links[link_idx].overlap1 == 0) {
-					fo << "L\t" << new_list_of_links[link_idx].name1 << "\t"
-					   << orient_from_end1(new_list_of_links[link_idx].end1) << "\t"
-					   << new_list_of_links[link_idx].name2 << "\t"
-					   << orient_from_end2(new_list_of_links[link_idx].end2) << "\t"
-					   << new_list_of_links[link_idx].overlap1 << "M\n";
-				}
-				new_list_of_links[link_idx].name1 = "None";
+			if (!new_list_of_links[link_idx].written) {
+				write_link(fo, new_list_of_links[link_idx]);
+				new_list_of_links[link_idx].written = true;
 			}
 		}
 	}
 }
 
 void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gfa_out) {
-	unordered_map<string, string> contig_seqs;
+	unordered_map<string, bool> contig_is_empty;
 	unordered_map<string, string> contig_lines;
 	vector<string> contig_order;
 	vector<vector<string>> links;
@@ -730,15 +980,11 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
 				if (fields.size() < 2) {
 					continue;
 				}
-				string name = fields[1];
-				string seq;
-				if (fields.size() > 2) {
-					seq = fields[2];
-				}
-				if (contig_seqs.find(name) == contig_seqs.end()) {
+				const string& name = fields[1];
+				if (contig_is_empty.find(name) == contig_is_empty.end()) {
 					contig_order.push_back(name);
 				}
-				contig_seqs[name] = seq;
+				contig_is_empty[name] = fields.size() <= 2 || fields[2].empty();
 				contig_lines[name] = line + "\n";
 			} else if (line.rfind("L", 0) == 0) {
 				links.push_back(split_tab(line));
@@ -747,27 +993,35 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
 	}
 
 	unordered_set<string> zero_length_contigs;
-	for (const auto& kv : contig_seqs) {
-		if (kv.second.empty()) {
+	for (const auto& kv : contig_is_empty) {
+		if (kv.second) {
 			zero_length_contigs.insert(kv.first);
 		}
 	}
 
 	unordered_map<string, unordered_set<Neighbor, NeighborHash>> left_neighbors;
 	unordered_map<string, unordered_set<Neighbor, NeighborHash>> right_neighbors;
-	for (const auto& kv : contig_seqs) {
+	for (const auto& kv : contig_is_empty) {
 		left_neighbors[kv.first] = {};
 		right_neighbors[kv.first] = {};
 	}
+
+	//links that are not blunt (could not be made blunt by fancier_overlap_removal) keep their CIGAR, the others are output as 0M
+	unordered_map<WrittenLink, string, WrittenLinkHash> non_blunt_cigars;
 
 	for (const vector<string>& fields : links) {
 		if (fields.size() < 5) {
 			continue;
 		}
-		string from_name = fields[1];
-		string to_name = fields[3];
-		string from_orient = fields[2];
-		string to_orient = fields[4];
+		const string& from_name = fields[1];
+		const string& to_name = fields[3];
+		const string& from_orient = fields[2];
+		const string& to_orient = fields[4];
+		if (fields.size() > 5 && fields[5] != "0M" && fields[5] != "*") {
+			string to_end = (to_orient == "+") ? "-" : "+";
+			non_blunt_cigars[WrittenLink{from_name, from_orient, to_name, to_end}] = fields[5];
+			non_blunt_cigars[WrittenLink{to_name, to_end, from_name, from_orient}] = fields[5];
+		}
 		if (from_orient == "+") {
 			right_neighbors[from_name].insert(Neighbor{to_name, (to_orient == "+") ? "-" : "+"});
 		} else {
@@ -780,32 +1034,38 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
 		}
 	}
 
-	vector<string> zero_contigs_order(zero_length_contigs.begin(), zero_length_contigs.end());
-	for (const string& zero_contig : zero_contigs_order) {
-		vector<Neighbor> lefts(left_neighbors[zero_contig].begin(), left_neighbors[zero_contig].end());
-		vector<Neighbor> rights(right_neighbors[zero_contig].begin(), right_neighbors[zero_contig].end());
-
-		for (const Neighbor& left_neighbor : lefts) {
-			for (const Neighbor& right_neighbor : rights) {
-				if (left_neighbor.name == zero_contig || right_neighbor.name == zero_contig) {
-					continue;
-				}
-
-				if (left_neighbor.orient == "+") {
-					right_neighbors[left_neighbor.name].insert(Neighbor{right_neighbor.name, right_neighbor.orient});
-				} else {
-					left_neighbors[left_neighbor.name].insert(Neighbor{right_neighbor.name, right_neighbor.orient});
-				}
-
-				if (left_neighbor.name != right_neighbor.name || left_neighbor.orient != right_neighbor.orient) {
-					if (right_neighbor.orient == "-") {
-						left_neighbors[right_neighbor.name].insert(Neighbor{left_neighbor.name, left_neighbor.orient});
-					} else {
-						right_neighbors[right_neighbor.name].insert(Neighbor{left_neighbor.name, left_neighbor.orient});
-					}
+	//neighbours of each end of the non-empty contigs, going through any number of zero-length contigs (also through
+	//self-links of zero-length contigs, e.g. a hairpin left at a junction by fancier_overlap_removal)
+	if (!zero_length_contigs.empty()) {
+		auto neighbors_through_zero_length_contigs = [&](const unordered_set<Neighbor, NeighborHash>& direct_neighbors) {
+			unordered_set<Neighbor, NeighborHash> result;
+			unordered_set<Neighbor, NeighborHash> visited_zero_contigs; //zero-length contig and end through which it was entered
+			vector<Neighbor> stack(direct_neighbors.begin(), direct_neighbors.end());
+			while (!stack.empty()) {
+				Neighbor neighbor = stack.back();
+				stack.pop_back();
+				if (zero_length_contigs.find(neighbor.name) == zero_length_contigs.end()) {
+					result.insert(neighbor);
+				} else if (visited_zero_contigs.insert(neighbor).second) {
+					//entered by its left end ("-"): leave by its right end, and conversely
+					const unordered_set<Neighbor, NeighborHash>& next = (neighbor.orient == "-") ? right_neighbors[neighbor.name]
+																								  : left_neighbors[neighbor.name];
+					stack.insert(stack.end(), next.begin(), next.end());
 				}
 			}
+			return result;
+		};
+
+		unordered_map<string, unordered_set<Neighbor, NeighborHash>> new_left_neighbors;
+		unordered_map<string, unordered_set<Neighbor, NeighborHash>> new_right_neighbors;
+		for (const string& name : contig_order) {
+			if (zero_length_contigs.find(name) == zero_length_contigs.end()) {
+				new_left_neighbors[name] = neighbors_through_zero_length_contigs(left_neighbors[name]);
+				new_right_neighbors[name] = neighbors_through_zero_length_contigs(right_neighbors[name]);
+			}
 		}
+		left_neighbors = std::move(new_left_neighbors);
+		right_neighbors = std::move(new_right_neighbors);
 	}
 
 	{
@@ -818,14 +1078,12 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
 				fo << contig_lines[name];
 			}
 		}
-	}
 
-	{
-		ofstream fo(gfa_out, std::ios::app);
-		if (!fo) {
-			throw std::runtime_error("Cannot append to output GFA: " + gfa_out);
-		}
 		unordered_set<WrittenLink, WrittenLinkHash> written_links;
+		auto cigar_of = [&](const WrittenLink& link) -> string {
+			auto it = non_blunt_cigars.find(link);
+			return (it == non_blunt_cigars.end()) ? string("0M") : it->second;
+		};
 
 		for (const string& from_name : contig_order) {
 			if (zero_length_contigs.find(from_name) != zero_length_contigs.end()) {
@@ -839,7 +1097,7 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
 				WrittenLink link_tuple{from_name, "+", to.name, to.orient};
 				if (written_links.find(link_tuple) == written_links.end()) {
 					fo << "L\t" << from_name << "\t+\t" << to.name << "\t"
-					   << ((to.orient == "+") ? "-" : "+") << "\t0M\n";
+					   << ((to.orient == "+") ? "-" : "+") << "\t" << cigar_of(link_tuple) << "\n";
 					written_links.insert(link_tuple);
 					written_links.insert(WrittenLink{to.name, to.orient, from_name, "+"});
 				}
@@ -852,7 +1110,7 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
 				WrittenLink link_tuple{from_name, "-", to.name, to.orient};
 				if (written_links.find(link_tuple) == written_links.end()) {
 					fo << "L\t" << from_name << "\t-\t" << to.name << "\t"
-					   << ((to.orient == "+") ? "-" : "+") << "\t0M\n";
+					   << ((to.orient == "+") ? "-" : "+") << "\t" << cigar_of(link_tuple) << "\n";
 					written_links.insert(link_tuple);
 					written_links.insert(WrittenLink{to.name, to.orient, from_name, "-"});
 				}
@@ -867,6 +1125,8 @@ void remove_contigs_of_length_0(const std::string& gfa_in, const std::string& gf
  * @param input Path to the input GFA file.
  * @param output Path where the processed (bluntified) GFA file will be written.
  * @param int trim_isolated_contigs_length If positive, ends of isolated contigs will be trimmed (the idea being that these kmers are already elsewhere in non-isolated contigs).
+ * Each end loses min(trim_isolated_contigs_length, length/2) bases; isolated contigs that are left with no sequence are dropped
+ * (they have no link, so nothing else changes).
  * @param tmpdir Directory to use for storing temporary files during processing.
  */
 void bluntify(const std::string& input, const std::string& output,
@@ -915,6 +1175,7 @@ void bluntify(const std::string& input, const std::string& output,
         }
         ifstream fi(intermediate_gfa_2);
         string line;
+        int number_of_dropped_isolated_contigs = 0;
         while (getline(fi, line)) {
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
@@ -924,15 +1185,19 @@ void bluntify(const std::string& input, const std::string& output,
                 if (fields.size() < 2) {
                     continue;
                 }
-                string name = fields[1];
-                string seq;
-                if (fields.size() > 2) {
-                    seq = fields[2];
-                }
+                const string& name = fields[1];
                 if (isolated_contigs.find(name) != isolated_contigs.end()) {
+                    if (fields.size() < 3) {
+                        fields.push_back("");
+                    }
+                    string& seq = fields[2];
                     int trim_length = std::min(trim_isolated_contigs_length, static_cast<int>(seq.size()) / 2);
-                    seq = seq.substr(static_cast<size_t>(trim_length), static_cast<size_t>(seq.size() - 2 * trim_length));
-                    fields[2] = seq;
+                    seq = seq.substr(static_cast<size_t>(trim_length), seq.size() - 2 * static_cast<size_t>(trim_length));
+                    if (seq.empty()) {
+                        //fully trimmed (even length <= 2*trim_isolated_contigs_length): never output an empty contig
+                        number_of_dropped_isolated_contigs += 1;
+                        continue;
+                    }
                     fo << join_tab(fields) << "\n";
                 } else {
                     fo << line << "\n";
@@ -940,6 +1205,10 @@ void bluntify(const std::string& input, const std::string& output,
             } else {
                 fo << line << "\n";
             }
+        }
+        if (number_of_dropped_isolated_contigs > 0) {
+            std::cout << "In bluntify, " << number_of_dropped_isolated_contigs
+                      << " short isolated contigs were entirely trimmed and dropped" << std::endl;
         }
 	}
 	else {
@@ -961,14 +1230,30 @@ int bluntify_main(int argc, char** argv) {
 		return 0;
 	}
 
-	bool no_overlaps = false;
+	int trim_isolated_contigs_length = 0;
 	string tmpdir = ".";
 	vector<string> positional;
 
 	for (int i = 1; i < argc; ++i) {
 		string arg = argv[i];
-		if (arg == "-n" || arg == "--no_overlaps") {
-			no_overlaps = true;
+		if (arg == "-t" || arg == "--trim_isolated") {
+			if (i + 1 >= argc) {
+				std::cerr << "Error: " << arg << " requires a value\n";
+				return 1;
+			}
+			try {
+				size_t parsed = 0;
+				trim_isolated_contigs_length = std::stoi(argv[++i], &parsed);
+				if (parsed != string(argv[i]).size() || trim_isolated_contigs_length < 0) {
+					throw std::invalid_argument("negative or not an integer");
+				}
+			} catch (const std::exception&) {
+				std::cerr << "Error: " << arg << " requires a non-negative integer, got " << argv[i] << "\n";
+				return 1;
+			}
+		} else if (arg == "-n" || arg == "--no_overlaps") {
+			//used to be passed (as a bool!) as the trimming length of isolated contigs; now ignored
+			std::cerr << "Warning: " << arg << " is deprecated and ignored, use --trim_isolated LENGTH to trim isolated contigs\n";
 		} else if (arg == "--tmpdir") {
 			if (i + 1 >= argc) {
 				std::cerr << "Error: --tmpdir requires a value\n";
@@ -985,10 +1270,10 @@ int bluntify_main(int argc, char** argv) {
 
 	if (positional.size() != 2) {
 		std::cerr << "Usage: " << argv[0]
-				  << " input output [-n|--no_overlaps] [--tmpdir TMPDIR] [--version]\n";
+				  << " input output [-t|--trim_isolated LENGTH] [--tmpdir TMPDIR] [--version]\n";
 		return 1;
 	}
 
-	bluntify(positional[0], positional[1], no_overlaps, tmpdir);
+	bluntify(positional[0], positional[1], trim_isolated_contigs_length, tmpdir);
 	return 0;
 }

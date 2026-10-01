@@ -12,13 +12,13 @@
 #include <algorithm>
 #include <omp.h> //for efficient parallelization
 #include <set>
+#include <filesystem>
 
 #include "reduce_and_expand.h"
 #include "basic_graph_manipulation.h"
 #include "robin_hood.h"
 #include "assembly.h"
 #include "clipp.h"
-#include "test.h"
 #include "bluntify.h"
 
 using std::cout;
@@ -60,132 +60,75 @@ std::string exec(const char* cmd) {
     return result;
 }
 
-void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_to_flye, string path_minimap, string path_miniasm, string path_minipolish, string path_megahit, string path_fastg2gfa,
-    string &path_convertToGFA, string &path_graphunzip, string path_src){
+//returns true if the command runs and exits with the expected code (output discarded)
+static bool runs(const string& command, int expected_code = 0){
+    return system((command + " > /dev/null 2>&1").c_str()) == expected_code;
+}
 
-        
-    string command_bcalm = path_bcalm + " --help 2> trash.log > trash.log";
-    auto bcalm_ok = system(command_bcalm.c_str());
+void check_dependencies(string assembler, string path_bcalm, string path_hifiasm, string path_spades, string path_minia, string path_raven, string path_megahit, string path_fastg2gfa,
+    string &path_convertToGFA, string &path_graphunzip){
 
-    string command_hifiasm = path_hifiasm + " -h 2> trash.log > trash.log";
-    auto hifiasm_ok = system(command_hifiasm.c_str());
+    bool python3_ok = runs("python3 --version");
 
-    string command_spades = path_spades + " --help 2> trash.log > trash.log";
-    auto spades_ok = system(command_spades.c_str());
-
-    string command_raven = path_raven + " --help 2> trash.log > trash.log";
-    auto raven_ok = system(command_raven.c_str());
-
-    string command_flye = path_to_flye + " --help 2> trash.log > trash.log";
-    auto flye_ok = system(command_flye.c_str());
-
-    string command_minimap = path_minimap + " --version 2> trash.log > trash.log";
-    auto minimap_ok = system(command_minimap.c_str());
-
-    string command_miniasm = path_miniasm + " -V 2> trash.log > trash.log";
-    auto miniasm_ok = system(command_miniasm.c_str());
-
-    string command_minipolish = path_minipolish + " --version 2> trash.log > trash.log";
-    auto minipolish_ok = system(command_minipolish.c_str());
-
-    string command_megahit = path_megahit + " --version 2> trash.log > trash.log";
-    auto megahit_ok = system(command_megahit.c_str());
-
-    string command_fastg2gfa = path_fastg2gfa + " 2> trash.log > trash.log";
-    auto fastg2gfa_ok = system(command_fastg2gfa.c_str());
-
-    string command_python3 = "python3 --version 2> trash.log > trash.log";
-    auto python3_ok = system(command_python3.c_str());
-
-    string command_convertToGFA = path_convertToGFA + " -h 2> trash.log > trash.log";
-    auto convertToGFA_ok = system(command_convertToGFA.c_str());
-    if (convertToGFA_ok != 0) {
+    bool convertToGFA_ok = runs(path_convertToGFA + " -h");
+    if (!convertToGFA_ok) {
         string bad_path = path_convertToGFA;
-        path_convertToGFA = "python3 " + exec("which convertToGFA.py");
-        convertToGFA_ok = system((path_convertToGFA + " -h 2> trash.log > trash.log").c_str());
-        if (convertToGFA_ok != 0 || path_convertToGFA == "python3 ") {
+        string which_convertToGFA = exec("which convertToGFA.py");
+        path_convertToGFA = "python3 " + shell_quote(which_convertToGFA);
+        convertToGFA_ok = which_convertToGFA != "" && runs(path_convertToGFA + " -h");
+        if (!convertToGFA_ok) {
             cerr << "ERROR: convertToGFA.py not found, problem in the installation, error code 321.\n";
             cout << "tried " << endl << bad_path << endl << path_convertToGFA << endl;
             exit(1);
         }
     }
 
-
-    // string command_minia = path_minia + " --help 2> trash.log > trash.log";
-    // auto minia_ok = system(command_minia.c_str());
-    // cout << "trying command line " << command_minia << " " << minia_ok << " " << minia_ok2 << endl;
-
-    int graphunzip_ok = 0;
-    if (assembler == "custom"){
-        auto graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());
-        if (graphunzip_ok != 0){
-            path_graphunzip = "graphunzip";
-            graphunzip_ok = system((path_graphunzip + " --help >trash.log 2>trash.log ").c_str());
-            if (graphunzip_ok != 0){
-                cerr << "ERROR: graphunzip not found, problem in the installation, error code 322.\n";
-                exit(1);
-            }
+    if (assembler == "custom" && !runs(path_graphunzip + " --help")){
+        path_graphunzip = "graphunzip";
+        if (!runs(path_graphunzip + " --help")){
+            cerr << "ERROR: graphunzip not found, problem in the installation, error code 322.\n";
+            exit(1);
         }
     }
 
-    // int gfatools_ok = system("gfatools version 2> trash.log > trash.log");
+    //only check the tools needed by the chosen assembler
+    vector<pair<string, bool>> tools;
+    if (assembler == "custom")
+        tools = {{"bcalm", runs(path_bcalm + " --help")}};
+    else if (assembler == "hifiasm")
+        tools = {{"hifiasm", runs(path_hifiasm + " -h")}};
+    else if (assembler == "spades")
+        tools = {{"spades", runs(path_spades + " --help")}};
+    else if (assembler == "gatb-minia")
+        tools = {{"gatb-minia", runs(path_minia + " --help")}};
+    else if (assembler == "raven")
+        tools = {{"raven", runs(path_raven + " --help")}};
+    else if (assembler == "megahit")
+        tools = {{"megahit", runs(path_megahit + " --version")}, {"fastg2gfa", runs(path_fastg2gfa, 256)}};
 
+    auto row = [](string name, bool ok){
+        name.resize(15, ' ');
+        std::cout << "|    " << name << "|   " << (ok ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    };
     std::cout << "_______________________________" << std::endl;
     std::cout << "|    Dependency     |  Found  |" << std::endl;
     std::cout << "|-------------------|---------|" << std::endl;
-    std::cout << "|    python3        |   " << (python3_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    if (assembler == "custom")
-        std::cout << "|    bcalm          |   " << (bcalm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    else if (assembler == "hifiasm")
-        std::cout << "|    hifiasm        |   " << (hifiasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    else if (assembler == "spades")
-        std::cout << "|    spades         |   " << (spades_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    // else if (assembler == "gatb-minia")
-    //     std::cout << "|    gatb-minia     |   " << (minia_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    else if (assembler == "raven")
-        std::cout << "|    raven          |   " << (raven_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    else if (assembler == "flye")
-        std::cout << "|    flye           |   " << (flye_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    else if (assembler == "miniasm"){
-        std::cout << "|    minimap2       |   " << (minimap_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-        std::cout << "|    miniasm        |   " << (miniasm_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-        std::cout << "|    minipolish     |   " << (minipolish_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
+    row("python3", python3_ok);
+    bool all_ok = python3_ok;
+    for (auto& t : tools){
+        row(t.first, t.second);
+        all_ok = all_ok && t.second;
     }
-    else if (assembler == "megahit"){
-        std::cout << "|    megahit        |   " << (megahit_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-        std::cout << "|    fastg2gfa      |   " << (fastg2gfa_ok == 256 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
-    }
-    // std::cout << "|    gfatools       |   " << (gfatools_ok == 0 ? GREEN_TEXT "Yes" : RED_TEXT "No ") << RESET_TEXT "   |" << std::endl;
     std::cout << "-------------------------------" << std::endl;
 
-
-    if ((bcalm_ok != 0 && assembler == "custom") || 
-        (hifiasm_ok != 0 && assembler == "hifiasm") || 
-        (spades_ok != 0 && assembler == "spades") || 
-        // (minia_ok != 0 && assembler == "gatb-minia") ||
-        (raven_ok != 0 && assembler == "raven") ||
-        (flye_ok != 0 && assembler == "flye") ||
-        ((minimap_ok != 0 || miniasm_ok != 0 || minipolish_ok != 0) && assembler == "miniasm") ||
-        (megahit_ok != 0 && assembler == "megahit" && fastg2gfa_ok != 0) ||
-        (convertToGFA_ok != 0 || graphunzip_ok != 0) ||
-        (python3_ok != 0)){
+    if (!all_ok){
         std::cout << "Error: some dependencies are missing." << std::endl;
         exit(1);
     }
-
 }
 
 int main(int argc, char** argv)
 {
-    // string input_file1 = "out_alice/tmp/bcalm_correction25.unitigs.shaved.merged.gfa";
-    // string output_file1 = "out_alice/tmp/trash.gfa";
-    // string read_file1 = "out_alice/tmp/compressed.fa";
-    // robin_hood::unordered_flat_map<std::string, float> coverages1;
-    // create_corrected_reads_from_unitig_graph(input_file1, 25, read_file1, "trash.fa", true,coverages1, 15);
-
-    // trim_tips_isolated_contigs_and_bubbles("/home/roland-faure/Documents/these/Alice/Adineta/assembly_compressed.gfa", 20, 400, "/home/roland-faure/Documents/these/Alice/Adineta/trash.gfa", true, 9000000);
-    // exit(0);
-
     //use clipp to parse the command line
     bool help = false;
     string input_file, output_folder;
@@ -195,14 +138,8 @@ int main(int argc, char** argv)
     string path_to_spades = "spades.py";
     string path_to_minia = "gatb";
     string path_to_raven = "raven";
-    string path_to_flye = "flye";
-    string path_to_miniasm = "miniasm";
-    string path_to_minimap2 = "minimap2";
-    string path_to_minipolish = "racon";
     string path_to_megahit = "megahit";
     string assembler_parameters = "";
-    string test_ref_gfa = "";
-    bool rescue = false;
     bool contiguity = false;
     bool single_genome= false;
     int min_abundance = 5;
@@ -223,11 +160,11 @@ int main(int argc, char** argv)
         //Compression options
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [101]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
-        clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer and homodimer compression"),
+        clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression"),
 
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2 if single-genome [5]") & clipp::opt_value("m", min_abundance),
-        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,21,31,61,101,191]") & clipp::opt_value("k", kmer_sizes),
+        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [21,31,61,101,191]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
         clipp::option("--contiguity").set(contiguity).doc("Favors contiguity by popping bubbles in the gfa graph [off]"),
 
@@ -239,21 +176,14 @@ int main(int argc, char** argv)
         // clipp::option("--hifiasm_meta").doc("path to hifiasm_meta [hifiasm_meta]") & clipp::opt_value("h", path_to_hifiasm),
         clipp::option("--spades").doc("path to spades [spades.py]") & clipp::opt_value("s", path_to_spades),
         // clipp::option("--raven").doc("path to raven [raven]") & clipp::opt_value("r", path_to_bcalm),
-        // // clipp::option("--flye").doc("path to flye [flye]") & clipp::opt_value("f", path_to_flye), //flye does not work well with compressed reads
         // clipp::option("--gatb-minia").doc("path to gatb-minia [gatb]") & clipp::opt_value("g", path_to_minia),
         // clipp::option("--megahit").doc("path to megahit [megahit]") & clipp::opt_value("m", path_to_megahit),
-        // clipp::option("--miniasm").doc("path to miniasm [miniasm]") & clipp::opt_value("m", path_to_miniasm), //we did not manage to make miniasm work
-        // clipp::option("--minimap2").doc("path to minimap2 [minimap2]") & clipp::opt_value("m", path_to_minimap2),
-        // clipp::option("--minipolish").doc("path to minipolish [minipolish]") & clipp::opt_value("r", path_to_minipolish),
         
         //Other options
         clipp::option("--clean").set(clean).doc("remove the tmp folder at the end [off]"),
-        clipp::option("--test").doc("(developers only) to compare the result against this reference") & clipp::opt_value("t", test_ref_gfa),
         clipp::option("-v", "--version").call([]{ std::cout << "version " << version << "\nLast update: " << date << "\nAuthor: " << author << std::endl; exit(0); }).doc("print version and exit"),
         clipp::option("-h", "--help").set(help).doc("print this help message and exit")
     );
-
-    bool homopolymer_compression = !no_hpc;
 
 
     //ascii art of a cake:
@@ -302,10 +232,7 @@ int main(int argc, char** argv)
             cout << "Help: " << endl;
             cout << clipp::make_man_page(cli, argv[0]);
 
-            string command_bcalm = path_to_bcalm + " --help 2> trash.log > trash.log";
-            auto bcalm_ok = system(command_bcalm.c_str());
-
-            if (bcalm_ok == 0){
+            if (runs(path_to_bcalm + " --help")){
                 exit(0);
             }
             else{
@@ -314,6 +241,8 @@ int main(int argc, char** argv)
             }
         }
     }
+
+    bool homopolymer_compression = !no_hpc; //must be read after parsing the command line
 
     if (order % 2 == 0){
         cerr << "WARNING: order (-l) must be odd, changing l to " << order-1 << "\n";
@@ -349,6 +278,10 @@ int main(int argc, char** argv)
     }
 
     //make sure the output folder ends with a /
+    if (output_folder.empty()){
+        cerr << "ERROR: the output folder (-o) cannot be empty\n";
+        exit(1);
+    }
     if (output_folder[output_folder.size()-1] != '/'){
         output_folder += "/";
     }
@@ -357,48 +290,28 @@ int main(int argc, char** argv)
     //record time now to measure the time of the whole process
     auto start = std::chrono::high_resolution_clock::now();
 
-    //check if the output folder exists
-    string command = "mkdir -p " + output_folder + " 2> trash.log";
-    auto res = system(command.c_str());
-
-    //create the tmp folder
-    command = "mkdir -p " + tmp_folder + " 2> trash.log";
-    res = system(command.c_str());
+    //create the output and tmp folders
+    std::error_code error_creating_folder;
+    std::filesystem::create_directories(tmp_folder, error_creating_folder);
+    if (error_creating_folder){
+        cerr << "ERROR: could not create the output folder " << tmp_folder << ": " << error_creating_folder.message() << "\n";
+        exit(1);
+    }
     
     string path_src = argv[0];
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /aliceasm
     path_src = path_src.substr(0, path_src.find_last_of("/")); //strip the /build
 
-    std::string path_convertToGFA = "python3 " + path_src + "/bcalm/scripts/convertToGFA.py";
-    string path_graphunzip = path_src + "/build/graphunzip";
+    std::string path_convertToGFA = "python3 " + shell_quote(path_src + "/bcalm/scripts/convertToGFA.py");
+    string path_graphunzip = shell_quote(path_src + "/build/graphunzip");
 
     string path_total = argv[0];
-    string path_fastg2gfa = path_total.substr(0, path_total.find_last_of("/"))+ "/fastg2gfa";
+    string path_fastg2gfa = shell_quote(path_total.substr(0, path_total.find_last_of("/"))+ "/fastg2gfa");
 
-    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_flye, path_to_minimap2, path_to_miniasm, path_to_minipolish, path_to_megahit, path_fastg2gfa, path_convertToGFA, path_graphunzip, path_src);
+    check_dependencies(assembler, path_to_bcalm, path_to_hifiasm, path_to_spades, path_to_minia, path_to_raven, path_to_megahit, path_fastg2gfa, path_convertToGFA, path_graphunzip);
 
-    // Check if the input file is gzipped
-    if (input_file.substr(input_file.find_last_of('.') + 1) == "gz") {
-        string unzipped_file = input_file.substr(input_file.find_last_of('/') + 1, input_file.find_last_of('.') - input_file.find_last_of('/') - 1);
-        string command = "gunzip -c " + input_file + " > " + tmp_folder + unzipped_file;
-        auto ok = system(command.c_str());
-        if (ok != 0) {
-            cerr << "ERROR: Failed to unzip the gzipped input file\n";
-            exit(1);
-        }
-        input_file = tmp_folder + unzipped_file;
-    }
-    //if the input file is a fastq file, convert it to fasta
-    if (input_file.substr(input_file.find_last_of('.')+1) == "fastq" || input_file.substr(input_file.find_last_of('.')+1) == "fq"){
-        string fasta_file = input_file.substr(input_file.find_last_of('/') + 1, input_file.find_last_of('.') - input_file.find_last_of('/') - 1) + ".fasta";
-        string command = "sed -n '1~4s/^@/>/p;2~4p' " + input_file + " > " + tmp_folder + fasta_file;
-        auto ok = system(command.c_str());
-        if (ok != 0){
-            cerr << "ERROR: fastq_to_fasta failed\n";
-            exit(1);
-        }
-        input_file = tmp_folder+fasta_file;
-    }
+    //gzipped, FASTQ, multi-line or lowercase inputs are converted to single-line uppercase FASTA
+    input_file = prepare_reads(input_file, tmp_folder);
 
     string compressed_file = tmp_folder+"compressed.fa";
     string sampled_file = tmp_folder+"sampled.fa";
@@ -415,8 +328,9 @@ int main(int argc, char** argv)
 
     cout << "==== Step 2: Assembly of the compressed reads with " + assembler + " ====" << endl;
     string compressed_assembly = tmp_folder+"assembly_compressed.gfa";
+    int assembly_k = kmer_sizes_vector.empty() ? 191 : kmer_sizes_vector.back(); //k of the final compressed graph, bounds the overlaps between contigs
     if (assembler == "custom"){
-        assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip, contiguity);
+        assembly_k = assembly_custom(compressed_file, min_abundance, tmp_folder, num_threads, compressed_assembly, kmer_sizes_vector, single_genome, path_to_bcalm, path_convertToGFA, path_graphunzip, contiguity);
     }
     else if (assembler == "hifiasm"){
         assembly_hifiasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_hifiasm, assembler_parameters);
@@ -430,12 +344,6 @@ int main(int argc, char** argv)
     else if (assembler == "raven"){
         assembly_raven(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_raven, assembler_parameters);
     }
-    else if (assembler == "flye"){
-        assembly_flye(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_flye, assembler_parameters);
-    }
-    else if (assembler == "miniasm"){
-        assembly_miniasm(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_miniasm, path_to_minimap2, path_to_minipolish, assembler_parameters);
-    }
     else if (assembler == "megahit"){
         assembly_megahit(compressed_file, tmp_folder, num_threads, compressed_assembly, path_to_megahit, path_fastg2gfa, assembler_parameters);
     }
@@ -448,7 +356,7 @@ int main(int argc, char** argv)
     //now let's parse the gfa file and decompress it
     time_t now2 = time(0);
     tm *ltm2 = localtime(&now2);
-    cout << " - Listing the kmers needed for the expansion [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    cout << " - Listing the kmers needed for the expansion [" << ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
 
     unordered_map<uint64_t, pair<unsigned long long, unsigned long long>> kmers;
     std::vector<uint64_t> central_kmers_needed;
@@ -458,10 +366,12 @@ int main(int argc, char** argv)
     string full_kmer_file = tmp_folder+"full_kmers.txt";
 
     //list_kmers_needed_for_expansion(compressed_assembly, km, kmers_needed);
-    expand_or_list_kmers_needed_for_expansion("index", compressed_assembly, km, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
+    expand_or_list_kmers_needed_for_expansion("index", compressed_assembly, km, compression, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
 
-    // Sort vectors for thread-safe binary search during parallel processing
-    cout << " - Sorting kmer vectors for efficient lookup [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    // Sort and deduplicate the kmers needed
+    now2 = time(0);
+    ltm2 = localtime(&now2);
+    cout << " - Sorting kmer vectors for efficient lookup [" << ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     std::sort(central_kmers_needed.begin(), central_kmers_needed.end());
     std::sort(full_kmers_needed.begin(), full_kmers_needed.end());
     
@@ -471,38 +381,39 @@ int main(int argc, char** argv)
 
     now2 = time(0);
     ltm2 = localtime(&now2);
-    cout << " - Parsing the reads to map compressed kmers with uncompressed sequences [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    cout << " - Parsing the reads to map compressed kmers with uncompressed sequences [" << ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     go_through_the_reads_again_and_index_interesting_kmers(input_file, compressed_assembly, order, compression, km, central_kmers_needed, full_kmers_needed, kmers, central_kmer_file, full_kmer_file, num_threads, homopolymer_compression);
 
 
     now2 = time(0);
     ltm2 = localtime(&now2);
-    cout << " - Reconstructing the uncompressed assembly [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    cout << " - Reconstructing the uncompressed assembly [" << ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     //expand(compressed_assembly, decompressed_assembly, km, kmer_file, kmers);
-    expand_or_list_kmers_needed_for_expansion("expand", compressed_assembly, km, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
+    expand_or_list_kmers_needed_for_expansion("expand", compressed_assembly, km, compression, central_kmers_needed, full_kmers_needed, central_kmer_file, full_kmer_file, kmers, decompressed_assembly);
 
     string output_file = output_folder + "assembly.gfa";
     now2 = time(0);
     ltm2 = localtime(&now2);
-    cout << " - Computing the exact overlaps between the contigs [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
-    compute_exact_CIGARs(decompressed_assembly, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * 2 * compression, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * 1 * compression);
+    cout << " - Computing the exact overlaps between the contigs [" << ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    long long compressed_length = total_sequence_length(compressed_assembly);
+    double bases_per_compressed_base = compressed_length > 0 ? total_sequence_length(decompressed_assembly) / (double) compressed_length : compression;
+    compute_exact_CIGARs(decompressed_assembly, output_file, assembly_k * 2 * compression, assembly_k * 1 * compression, bases_per_compressed_base, num_threads);
 
     if (single_genome){
         // bluntify the graph for single-genome assemblies
-        bluntify(output_file, output_file, kmer_sizes_vector[kmer_sizes_vector.size() - 1] * compression * 0.8, tmp_folder);
+        bluntify(output_file, output_file, assembly_k * compression * 0.8, tmp_folder);
     }
 
     //convert to fasta
     now2 = time(0);
     ltm2 = localtime(&now2);
-    cout << " - Converting the assembly to fasta [" << 1+ ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
+    cout << " - Converting the assembly to fasta [" << ltm2->tm_mday << "/" << 1 + ltm2->tm_mon << "/" << 1900 + ltm2->tm_year << " " << ltm2->tm_hour << ":" << ltm2->tm_min << ":" << ltm2->tm_sec << "]" << endl;
     gfa_to_fasta(output_file, output_file.substr(0, output_file.find_last_of('.')) + ".fasta");
 
 
     //clean the tmp folder if the user wants
     if (clean){
-        command = "rm -r " + tmp_folder + " 2> trash.log";
-        auto res = system(command.c_str());
+        std::filesystem::remove_all(tmp_folder);
     }
     auto time_end = std::chrono::high_resolution_clock::now();
 
@@ -512,9 +423,6 @@ int main(int argc, char** argv)
     cout << "Assembly: " << std::chrono::duration_cast<std::chrono::seconds>(time_assembled - time_reduced).count() << "s\n";
     cout << "Decompression: " << std::chrono::duration_cast<std::chrono::seconds>(time_end - time_assembled).count() << "s\n";
     cout << "Total time: " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() << "s\n";
-
-    // Remove the trash.log file if it exists
-    std::remove("trash.log");
 
     return 0;
 }

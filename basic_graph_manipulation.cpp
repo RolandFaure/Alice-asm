@@ -12,6 +12,10 @@
 #include <algorithm>
 #include <chrono>
 #include <omp.h>
+#include <memory>
+#include <cmath>
+#include <atomic>
+#include <functional>
 
 using std::cout;
 using std::endl;
@@ -54,202 +58,215 @@ string reverse_complement(string& seq){
     return rc;
 }
 
-void shave(std::string input_file, std::string output_file, int max_length){
-    std::ifstream input(input_file);
-    if (!input.is_open())
-    {
-        std::cout << "Could not open file iicy " << input_file << std::endl;
-        exit(1);
+/**
+ * @brief Read the end of a contig (as it is oriented in a link) directly in the gfa file, without loading the whole contig
+ * 
+ * @param gfa file opened on the gfa
+ * @param seq_location position in the file of the first base of the sequence of the contig, and length of the sequence
+ * @param orientation orientation of the contig in the link
+ * @param suffix true to get the last bases of the oriented contig, false to get the first bases
+ * @param length number of bases wanted (less if the contig is shorter)
+ */
+static string read_oriented_end(ifstream& gfa, const pair<long int, long int>& seq_location, const string& orientation, bool suffix, long int length){
+    length = min(length, seq_location.second);
+    //the suffix of the reverse complement is the reverse complement of the prefix
+    bool read_suffix = (suffix == (orientation == "+"));
+    long int start = read_suffix ? seq_location.first + seq_location.second - length : seq_location.first;
+    string seq (length, 'N');
+    gfa.clear();
+    gfa.seekg(start);
+    gfa.read(&seq[0], length);
+    if (orientation == "-"){
+        seq = reverse_complement(seq);
     }
-
-    std::string line;
-    set<string> good_contigs;
-    unordered_map<string, pair<bool,bool>> linked;
-
-    std::ofstream output(output_file);
-
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            if (linked.find(name1) == linked.end()){
-                linked[name1] = {false, false};
-            }
-            if (linked.find(name2) == linked.end()){
-                linked[name2] = {false, false};
-            }
-            if (orientation1 == "+"){
-                linked[name1].second = true;
-            }
-            else{
-                linked[name1].first = true;
-            }
-
-            if (orientation2 == "+"){
-                linked[name2].first = true;
-            }
-            else{
-                linked[name2].second = true;
-            }
-        }
-    }
-
-    for (auto i: linked){
-        if (i.second.first && i.second.second){
-            good_contigs.insert(i.first);
-        }
-    }
-
-    input.close();
-    input.open(input_file);
-
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            if (sequence.size() > max_length || good_contigs.find(name) != good_contigs.end()){
-                output << line << "\n";
-                good_contigs.insert(name);
-            }
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> dont_care >> name2;
-            // std::cerr << name1 << " " << name2 << "\n";
-            // for (auto i: good_contigs){
-            //     std::cerr << i << ",";
-            // }
-            // std::cerr << "\n";
-            if (good_contigs.find(name1) != good_contigs.end() && good_contigs.find(name2) != good_contigs.end()){
-                output << line << "\n";
-            }
-        }
-        else{
-            output << line << "\n";
-        }
-    }
+    return seq;
 }
 
-void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overlap, int default_overlap){
+/**
+ * @brief Number of bases of the second segment covered by the overlap described by a GFA CIGAR ("*" means 0)
+ */
+int overlap_length_of_CIGAR(const string& cigar){
+    int length = 0;
+    int number = 0;
+    for (char c : cigar){
+        if (c >= '0' && c <= '9'){
+            number = 10*number + (c - '0');
+        }
+        else {
+            if (c == 'M' || c == '=' || c == 'X' || c == 'I'){
+                length += number;
+            }
+            number = 0;
+        }
+    }
+    return length;
+}
+
+long long total_sequence_length(std::string gfa){
+    ifstream input(gfa);
+    string line;
+    long long total = 0;
+    while (std::getline(input, line)){
+        if (line[0] == 'S'){
+            size_t seq_start = line.find('\t', line.find('\t') + 1) + 1;
+            total += std::min(line.find('\t', seq_start), line.size()) - seq_start;
+        }
+    }
+    return total;
+}
+
+/**
+ * @brief Recompute the overlaps of the expanded graph, whose L lines still carry the overlaps of the compressed graph
+ * 
+ * @param max_overlap maximum overlap searched
+ * @param default_overlap overlap used if no overlap is found
+ * @param bases_per_compressed_base average number of bases per compressed base, to estimate the expected overlap
+ */
+void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overlap, int default_overlap, double bases_per_compressed_base, int num_threads){
 
     //go through the graph and for all links, compute the exact CIGAR (that will be only M)
     ifstream input(gfa_in);
     ofstream out(gfa_out);
 
     string line;
-    //first index the position of every contig in the file
-    unordered_map<string, long int> pos_of_contig_seq_in_file;
+    //first index the position and length of the sequence of every contig in the file
+    unordered_map<string, pair<long int, long int>> seq_location;
     long int pos = 0;
     while (std::getline(input, line))
     {
         if (line[0] == 'S')
         {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            pos_of_contig_seq_in_file[name] = pos;
+            size_t name_start = line.find('\t') + 1;
+            size_t seq_start = line.find('\t', name_start) + 1;
+            size_t seq_end = std::min(line.find('\t', seq_start), line.size());
+            string name = line.substr(name_start, seq_start - 1 - name_start);
+            seq_location[name] = {pos + (long int) seq_start, (long int) (seq_end - seq_start)};
         }
         pos += line.size() + 1;
     }
 
     input.close();
     input.open(gfa_in);
-    ifstream input2(gfa_in);
 
-    //now, for each L line, compute the exact CIGAR
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'L')
-        {
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+    //each thread reads the contig ends with its own stream
+    vector<std::unique_ptr<ifstream>> sequence_readers;
+    for (int t = 0 ; t < num_threads ; t++){
+        sequence_readers.emplace_back(new ifstream(gfa_in, std::ios::binary));
+    }
 
-            //get the sequences of the two contigs
-            input2.seekg(pos_of_contig_seq_in_file[name1]);
-            std::getline(input2, line);
-            string seq1, seq2;
-            std::stringstream ss2(line);
-            ss2 >> dont_care >> dont_care >> seq1;
-            input2.seekg(pos_of_contig_seq_in_file[name2]);
-            std::getline(input2, line);
+    //compute the overlap of one L line (returns the line to output, or "" to drop the link)
+    auto compute_link = [&](const string& link_line, ifstream& reader) -> string {
+        string name1;
+        string name2;
+        string orientation1;
+        string orientation2;
+        string dont_care;
+        string compressed_cigar;
+        std::stringstream ss(link_line);
+        ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2 >> compressed_cigar;
 
-            ss2 = std::stringstream(line);
-            ss2 >> dont_care >> dont_care >> seq2;
+        auto it1 = seq_location.find(name1);
+        auto it2 = seq_location.find(name2);
+        if (it1 == seq_location.end() || it2 == seq_location.end()){
+            #pragma omp critical
+            cerr << "WARNING: link between unknown contigs ignored: " << link_line << "\n";
+            return "";
+        }
 
-            if (orientation1 == "-"){
-                seq1 = reverse_complement(seq1);
-            }
-            if (orientation2 == "-"){
-                seq2 = reverse_complement(seq2);
-            }
+        //the overlap spans the (compressed overlap) shared samples: estimate its length in bases
+        int compressed_overlap = overlap_length_of_CIGAR(compressed_cigar);
+        double expected_overlap = compressed_overlap > 0 ? (compressed_overlap-1)*bases_per_compressed_base + 1 : default_overlap;
 
-            int overlap = 30;
-            if (seq1.size() < 30 || seq2.size() < 30){ //can happen if they could not be reconstructed
-                overlap = 0;
-            }
-            else{
-                //look for the smallest overlap >= 30 for which the whole suffix of seq1 equals the prefix of seq2
-                //(checking only a 30bp seed picks wrong overlaps in repeats / low-complexity sequence)
-                //if no exact overlap exists (e.g. an error at the end of a contig), fall back on the smallest overlap
-                //for which the 30bp seed matches
-                string end1 = seq1.substr(seq1.size()-30, 30); 
-                bool found = false;
-                int first_seed_hit = -1;
-                while (overlap <= seq1.size() && overlap <= seq2.size() && overlap <= max_overlap){
-                    if (end1 == seq2.substr(overlap-30, 30)){
-                        if (first_seed_hit == -1){
-                            first_seed_hit = overlap;
-                        }
-                        if (seq1.compare(seq1.size()-overlap, overlap, seq2, 0, overlap) == 0){
-                            found = true;
-                            break;
-                        }
-                    }
-                    overlap++;
-                }
-                if (!found && first_seed_hit != -1){
-                    overlap = first_seed_hit;
-                    found = true;
-                }
-                if (!found){
-                    // cerr << "ERROR: no overlap found between " << name1 << " and " << name2 << "\n";
-                    // exit(1);
-                    overlap = default_overlap;
-                }
-            }
-            // cout << "overlap between " << name1 << " and " << name2 << " is " << overlap << "\n";
-            out << "L\t" << name1 << "\t" << orientation1 << "\t" << name2 << "\t" << orientation2 << "\t" << overlap << "M\n";
+        //get the end of the first contig and the beginning of the second one (only the max_overlap bases that can overlap)
+        const auto& location1 = it1->second;
+        const auto& location2 = it2->second;
+        long int size1 = location1.second;
+        long int size2 = location2.second;
+        string seq1 = read_oriented_end(reader, location1, orientation1, true, max_overlap);
+        string seq2 = read_oriented_end(reader, location2, orientation2, false, max_overlap);
 
+        int overlap = 30;
+        if (size1 < 30 || size2 < 30){ //can happen if they could not be reconstructed
+            overlap = 0;
         }
         else{
+            //among the overlaps >= 30 for which the whole suffix of seq1 equals the prefix of seq2, take the one
+            //closest to the expected overlap (in repeats / low-complexity sequence there can be several, e.g. one per
+            //period of a tandem repeat). If no exact overlap exists (e.g. an error at the end of a contig), fall back
+            //on the overlap closest to the expected one for which the 30bp seed matches
+            string end1 = seq1.substr(seq1.size()-30, 30); 
+            long int max_possible = min((long int) max_overlap, min(size1, size2));
+            auto closer = [&](int candidate, int current){
+                return current == -1 || std::abs(candidate - expected_overlap) < std::abs(current - expected_overlap);
+            };
+            //scan the overlaps from `from` to `to` (included)
+            auto scan = [&](long int from, long int to, int& best_exact, int& best_seed_hit){
+                for (long int o = std::max(30L, from) ; o <= std::min(to, max_possible) ; o++){
+                    if (seq2.compare(o-30, 30, end1) == 0){
+                        if (closer(o, best_seed_hit)){
+                            best_seed_hit = o;
+                        }
+                        if (closer(o, best_exact) && seq1.compare(seq1.size()-o, o, seq2, 0, o) == 0){
+                            best_exact = o;
+                        }
+                    }
+                }
+            };
+            int best_exact = -1;
+            int best_seed_hit = -1;
+            //first look in a window centered on the expected overlap: if an exact overlap is found there, the
+            //closest exact overlap overall is necessarily in the window too
+            long int window = std::max(200L, (long int) (0.15*expected_overlap));
+            scan((long int) expected_overlap - window, (long int) expected_overlap + window, best_exact, best_seed_hit);
+            if (best_exact == -1){
+                best_seed_hit = -1;
+                scan(30, max_possible, best_exact, best_seed_hit);
+            }
+            if (best_exact != -1){
+                overlap = best_exact;
+            }
+            else if (best_seed_hit != -1){
+                overlap = best_seed_hit;
+            }
+            else{
+                overlap = min((long int) default_overlap, min(size1, size2));
+            }
+        }
+        return "L\t" + name1 + "\t" + orientation1 + "\t" + name2 + "\t" + orientation2 + "\t" + std::to_string(overlap) + "M\n";
+    };
+
+    //compute the links by blocks of consecutive L lines, in parallel, and write them in order (the other lines, e.g. the
+    //long S lines, are written directly and never buffered)
+    const size_t BLOCK_SIZE = 100000;
+    vector<string> block;
+    vector<string> results;
+    auto flush_block = [&](){
+        if (block.empty()){
+            return;
+        }
+        results.assign(block.size(), "");
+        #pragma omp parallel for num_threads(num_threads) schedule(dynamic, 64)
+        for (size_t i = 0 ; i < block.size() ; i++){
+            results[i] = compute_link(block[i], *sequence_readers[omp_get_thread_num()]);
+        }
+        for (const string& r : results){
+            out << r;
+        }
+        block.clear();
+    };
+    while (std::getline(input, line)){
+        if (line[0] == 'L'){
+            block.push_back(line);
+            if (block.size() == BLOCK_SIZE){
+                flush_block();
+            }
+        }
+        else{
+            flush_block();
             out << line << "\n";
         }
     }
+    flush_block();
 }
 
 /**
@@ -274,22 +291,176 @@ void sort_GFA(std::string gfa){
     }
     input.close();
 
-    for (auto c: contigs){
+    for (const auto& c: contigs){
         output << c << "\n";
     }
-    for (auto l: links){
+    for (const auto& l: links){
         output << l << "\n";
     }
     output.close();
 
     //move the sorted file to the original file
-    std::string command = "mv " + gfa + ".sorted " + gfa;
-    auto res = system(command.c_str());
+    if (std::rename((gfa + ".sorted").c_str(), gfa.c_str()) != 0){
+        cerr << "ERROR: could not move " << gfa << ".sorted to " << gfa << "\n";
+        exit(1);
+    }
 }
 
 
+/**
+ * @brief Equivalent to (forward ? seq : reverse_complement(seq)).substr(pos, len), without copying the whole sequence
+ */
+static string oriented_substr(const string& seq, bool forward, size_t pos, size_t len = string::npos){
+    if (forward){
+        return seq.substr(pos, len);
+    }
+    if (pos > seq.size()){
+        throw std::out_of_range("oriented_substr");
+    }
+    size_t n = min(len, seq.size() - pos);
+    string piece = seq.substr(seq.size() - pos - n, n);
+    return reverse_complement(piece);
+}
+
+/**
+ * @brief Graph with integer IDs for the contigs, shared by the functions that clean the graph and align reads on it
+ * (instead of each of them building its own maps indexed by contig names)
+ */
+struct LinkedGraph {
+    vector<string> names;
+    unordered_flat_map<string, int> ids;
+    vector<int> length; //0 for contigs only seen in L lines
+    vector<string> sequences; //only if loaded
+    vector<float> depth; //first DP or km tag of the S line
+    vector<bool> has_depth;
+    vector<bool> has_S_line;
+    vector<std::array<vector<pair<int,char>>, 2>> links; //[0]: links of the left end, [1]: right end. Each link is (neighbor, end of the neighbor)
+    vector<int> segments_in_order; //IDs in the order of the S lines
+
+    int id_of(const string& name){
+        auto it = ids.find(name);
+        if (it != ids.end()){
+            return it->second;
+        }
+        int id = names.size();
+        ids[name] = id;
+        names.push_back(name);
+        length.push_back(0);
+        sequences.push_back("");
+        depth.push_back(0);
+        has_depth.push_back(false);
+        has_S_line.push_back(false);
+        links.push_back({});
+        return id;
+    }
+    int find(const string& name) const {
+        auto it = ids.find(name);
+        return it == ids.end() ? -1 : it->second;
+    }
+    int size() const {
+        return names.size();
+    }
+};
+
+static LinkedGraph load_linked_graph(const string& gfa_file, bool load_sequences){
+    LinkedGraph graph;
+    ifstream input(gfa_file);
+    string line;
+    while (std::getline(input, line))
+    {
+        if (line[0] == 'S')
+        {
+            string name;
+            string dont_care;
+            string sequence;
+            std::stringstream ss(line);
+            ss >> dont_care >> name >> sequence;
+            int id = graph.id_of(name);
+            graph.length[id] = sequence.size();
+            graph.has_S_line[id] = true;
+            graph.segments_in_order.push_back(id);
+            //first DP or km tag
+            string tag;
+            while (ss >> tag && tag.size() >= 2){
+                if (tag.substr(0,2) == "DP" || tag.substr(0,2) == "km"){
+                    graph.depth[id] = std::stof(tag.substr(5, tag.size()-5));
+                    graph.has_depth[id] = true;
+                    break;
+                }
+            }
+            if (load_sequences){
+                graph.sequences[id] = std::move(sequence);
+            }
+        }
+        else if (line[0] == 'L'){
+            string name1;
+            string name2;
+            string orientation1;
+            string orientation2;
+            string dont_care;
+            std::stringstream ss(line);
+            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
+            int id1 = graph.id_of(name1);
+            int id2 = graph.id_of(name2);
+
+            //end of each contig involved in the link
+            char end1 = (orientation1 == "+" ? 1 : 0);
+            char end2 = (orientation2 == "+" ? 0 : 1);
+            pair<int,char> neighbor = {id2, end2};
+            auto& links1 = graph.links[id1][end1];
+            if (std::find(links1.begin(), links1.end(), neighbor) == links1.end()){
+                links1.push_back(neighbor);
+            }
+            neighbor = {id1, end1};
+            auto& links2 = graph.links[id2][end2];
+            if (std::find(links2.begin(), links2.end(), neighbor) == links2.end()){
+                links2.push_back(neighbor);
+            }
+        }
+    }
+    return graph;
+}
+
+//contigs must have a DP or km tag
+static void check_depths(const LinkedGraph& graph){
+    for (int id : graph.segments_in_order){
+        if (!graph.has_depth[id]){
+            cerr << "ERROR: no depth found for contig " << graph.names[id] << "\n";
+            exit(1);
+        }
+    }
+}
+
+//links must be between contigs that have an S line
+static void check_links(const LinkedGraph& graph){
+    for (int id = 0 ; id < graph.size() ; id++){
+        if (!graph.has_S_line[id]){
+            cerr << "ERROR: contig not found in linked in pop_bubbles: " << graph.names[id] << "\n";
+            exit(1);
+        }
+    }
+}
+
+//index every 5th kmer of the contigs: kmer -> (contig, position)
+static unordered_flat_map<uint64_t, pair<int,int>> index_kmers_of_contigs(LinkedGraph& graph, int km){
+    unordered_flat_map<uint64_t, pair<int,int>> kmers_to_contigs;
+    for (int contig : graph.segments_in_order){
+        uint64_t hash_foward = -1;
+        size_t pos_end = 0;
+        long pos_begin = -km;
+        while (roll_f(hash_foward, km, graph.sequences[contig], pos_end, pos_begin, false)){
+            if (pos_begin>=0  && pos_begin % 5 == 0){
+                kmers_to_contigs[hash_foward] = make_pair(contig, pos_end-km);
+            }
+        }
+    }
+    return kmers_to_contigs;
+}
+
+static vector<vector<pair<int, bool>>> list_all_paths_from_contig(const LinkedGraph& graph, int start_contig, bool start_orientation, int max_length, int km, int target_contig, bool target_orientation);
+
 struct Path{
-    vector<string> contigs;
+    vector<int> contigs;
     vector<bool> orientations;
     int start_position_on_contig;
     int end_position_on_contig;
@@ -307,76 +478,9 @@ struct Path{
  */
 void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, bool hard_correct, robin_hood::unordered_flat_map<std::string, float>& coverages, int num_threads){
     
-    unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs; //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
-    unordered_flat_map<string, int> length_of_contigs;
-    unordered_flat_map<string, string> contig_sequences; // Store contig sequences in memory
-    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
-
-    ifstream input(unitig_graph);
-    string line;
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            length_of_contigs[name] = sequence.size();
-            contig_sequences[name] = sequence; // Store sequence in memory
-
-            if (linked.find(name) == linked.end()){
-                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
-            }
-
-            uint64_t hash_foward = -1;
-            size_t pos_end = 0;
-            long pos_begin = -km;
-            while (roll_f(hash_foward, km, sequence, pos_end, pos_begin, false)){
-                
-                if (pos_begin>=0  && pos_begin % 5 == 0){
-                    kmers_to_contigs[hash_foward] = make_pair(name, pos_end-km);
-                }
-            }
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            auto neighbor = make_pair(name2, or2);
-            if (orientation1 == "+"){
-                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
-                    linked[name1].second.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
-                    linked[name1].first.push_back(neighbor);
-                }
-            }
-
-            neighbor = make_pair(name1, or1);
-            if (orientation2 == "+"){
-                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
-                    linked[name2].first.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
-                    linked[name2].second.push_back(neighbor);
-                }
-            }
-        }
-    }
-    input.close();
+    LinkedGraph graph = load_linked_graph(unitig_graph, true);
+    unordered_flat_map<uint64_t, pair<int,int>> kmers_to_contigs = index_kmers_of_contigs(graph, km); //in what contig is the kmer and at what position (only unique kmer ofc, meant to work with unitig graph)
+    vector<float> coverage_of_contigs (graph.size(), 0);
 
     // Prepare for parallel processing
     omp_lock_t coverage_lock;
@@ -393,7 +497,7 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
     
     // Read file in chunks
     ifstream input2(reads_file);
-    const int CHUNK_SIZE = 100;
+    const int CHUNK_SIZE = 20000;
     bool done = false;
     
     while (!done) {
@@ -441,7 +545,7 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
             long pos_begin = -km;
             long pos_middle = -(km+1)/2;
             int previous_match_pos = -1;
-            string previous_contig = "";
+            int previous_contig = -1;
             bool previous_orientation = true;
             int previous_match_pos_on_contig = -1;
             bool read_is_single_path = true;
@@ -453,68 +557,65 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
                     bool found_match = false;
                     bool forward_orientation = true;
 
-                    if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){
+                    auto match = kmers_to_contigs.find(kmer);
+                    if (match != kmers_to_contigs.end()){
                         found_match = true;
                         forward_orientation = true;
                     }
-                    else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){
-                        found_match = true;
-                        forward_orientation = false;
-                        kmer = hash_reverse;
+                    else {
+                        match = kmers_to_contigs.find(hash_reverse);
+                        if (match != kmers_to_contigs.end()){
+                            found_match = true;
+                            forward_orientation = false;
+                            kmer = hash_reverse;
+                        }
                     }
 
                     if (found_match){
-                        string contig = kmers_to_contigs[kmer].first;
-                        int pos_in_contig = kmers_to_contigs[kmer].second;
+                        int contig = match->second.first;
+                        int pos_in_contig = match->second.second;
                         
                         if (!forward_orientation){
-                            pos_in_contig = length_of_contigs[contig] - pos_in_contig - km;
+                            pos_in_contig = graph.length[contig] - pos_in_contig - km;
                         }
 
                         // Handle sequence before this match
                         if (previous_match_pos == -1){
                             // First match: add pos_begin bases of contig sequence
-                            string contig_seq = contig_sequences[contig];
-                            if (!forward_orientation) {
-                                contig_seq = reverse_complement(contig_seq);
-                            }
-                            corrected_seq += contig_seq.substr(std::max((long int) 0, pos_in_contig - pos_begin), min(pos_begin, (long int) pos_in_contig));
+                            corrected_seq += oriented_substr(graph.sequences[contig], forward_orientation, std::max((long int) 0, pos_in_contig - pos_begin), min(pos_begin, (long int) pos_in_contig));
                             if (pos_in_contig - pos_begin < 0 && !hard_correct){
                                 corrected_seq = line.substr(0, pos_begin - pos_in_contig) + corrected_seq;
                             }
                             last_corrected_pos = pos_begin;
                         }
-                        else if (contig == previous_contig && forward_orientation == previous_orientation){ //do a special case because that is very frequent
+                        else if (contig == previous_contig && forward_orientation == previous_orientation && pos_in_contig >= previous_match_pos_on_contig){ //do a special case because that is very frequent
                             // Add sequence between previous match and current match on the same contig
-                            string current_seq = contig_sequences[contig];
-                            if (!forward_orientation) {
-                                current_seq = reverse_complement(current_seq);
-                            }
                             // Extract the portion between the two matches
-                            corrected_seq += current_seq.substr(previous_match_pos_on_contig, pos_in_contig - previous_match_pos_on_contig);
+                            corrected_seq += oriented_substr(graph.sequences[contig], forward_orientation, previous_match_pos_on_contig, pos_in_contig - previous_match_pos_on_contig);
                             last_corrected_pos = pos_begin;
                             // Update coverage for this portion
                             omp_set_lock(&coverage_lock);
-                            coverages[contig] += (pos_in_contig - previous_match_pos_on_contig) / (double)length_of_contigs[contig];
+                            coverage_of_contigs[contig] += (pos_in_contig - previous_match_pos_on_contig) / (double)graph.length[contig];
                             omp_unset_lock(&coverage_lock);
                         }
                         else{
                             // Try to bridge from previous match to current match
                             int distance = max((long int) 1,pos_begin - previous_match_pos - pos_in_contig); // is distance is negative, still look the neighboring contig
 
-                            vector<vector<pair<string, bool>>> all_paths;
+                            vector<vector<pair<int, bool>>> all_paths;
                             if (distance > 0){
-                                all_paths = list_all_paths_from_contig(linked, contig, !forward_orientation, distance, length_of_contigs, km);
+                                all_paths = list_all_paths_from_contig(graph, contig, !forward_orientation, distance, km, previous_contig, !previous_orientation);
                             }
                             else{
                                 all_paths = {{{contig, !forward_orientation}}};
                             }
                             
+                            //the path must end on the previous contig, traversed in the orientation in which the read saw it
                             int valid_path_count = 0;
                             int valid_path_index = -1;
                             for (int path_idx = 0; path_idx < all_paths.size(); path_idx++) {
-                                auto node = all_paths[path_idx][all_paths[path_idx].size()-1];
-                                if (node.first == previous_contig) {
+                                const auto& node = all_paths[path_idx][all_paths[path_idx].size()-1];
+                                if (node.first == previous_contig && node.second == !previous_orientation && all_paths[path_idx].size() > 1) {
                                     valid_path_count++;
                                     valid_path_index = path_idx;
                                 }
@@ -526,41 +627,30 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
                                 string correct_seq = "";
 
                                 // First append to the read the end of the contig that was mathched last (previous_contig)
-                                string prev_seq = contig_sequences[previous_contig]; 
-                                if (!previous_orientation){
-                                    prev_seq = reverse_complement(prev_seq);
-                                }
-                                correct_seq += prev_seq.substr(previous_match_pos_on_contig, prev_seq.size()-previous_match_pos_on_contig);
+                                const string& prev_seq = graph.sequences[previous_contig];
+                                correct_seq += oriented_substr(prev_seq, previous_orientation, previous_match_pos_on_contig, prev_seq.size()-previous_match_pos_on_contig);
                                 // Update coverage for the previous contig based on the portion used
                                 omp_set_lock(&coverage_lock);
                                 int length_used = min((long int) prev_seq.size()-previous_match_pos_on_contig, pos_begin-previous_match_pos+km-1);
-                                coverages[previous_contig] += length_used / (double)length_of_contigs[previous_contig];
+                                coverage_of_contigs[previous_contig] += length_used / (double)graph.length[previous_contig];
                                 omp_unset_lock(&coverage_lock);
 
                                 for (int i = bridging_path.size() - 2; i >= 1; i--) {
-                                    string bridge_seq = contig_sequences[bridging_path[i].first];
-                                    if (bridging_path[i].second) {
-                                        bridge_seq = reverse_complement(bridge_seq);
-                                    }
                                     // Skip overlap
-                                    correct_seq += bridge_seq.substr(km-1);
+                                    correct_seq += oriented_substr(graph.sequences[bridging_path[i].first], !bridging_path[i].second, km-1);
                                     
                                     omp_set_lock(&coverage_lock);
-                                    coverages[bridging_path[i].first] += 1;
+                                    coverage_of_contigs[bridging_path[i].first] += 1;
                                     omp_unset_lock(&coverage_lock);
                                 }
 
                                 if (bridging_path.size() > 1){
                                     // Add the beginning of current contig to complete the bridging
-                                    string current_seq = contig_sequences[contig];
-                                    if (!forward_orientation) {
-                                        current_seq = reverse_complement(current_seq);
-                                    }
                                     // Add up to pos_in_contig bases from the current contig
-                                    correct_seq += current_seq.substr(km-1, pos_in_contig);
+                                    correct_seq += oriented_substr(graph.sequences[contig], forward_orientation, km-1, pos_in_contig);
                                     omp_set_lock(&coverage_lock);
                                     int length_used = pos_in_contig;
-                                    coverages[contig] += length_used / (double)length_of_contigs[contig];
+                                    coverage_of_contigs[contig] += length_used / (double)graph.length[contig];
                                     omp_unset_lock(&coverage_lock);
                                 }
                                 correct_seq = correct_seq.substr(0, correct_seq.size()-km+1);
@@ -590,7 +680,7 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
                             }
                         }
 
-                        int length_of_contig_left = length_of_contigs[contig] - pos_in_contig - km;
+                        int length_of_contig_left = graph.length[contig] - pos_in_contig - km;
                         if (length_of_contig_left > 10){
                             pos_to_look_at += min((int)(length_of_contig_left*0.8), (int)(line.size() - pos_begin - km - 5));
                         }
@@ -608,13 +698,9 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
             if (last_corrected_pos < line.size()){
                 // Add the sequence of the contig after the last match if it is long enough. If not, add the remaining read sequence (only if not in hard_correct mode), or add the rest of the contig (if in hard_correct mode)
                 if (previous_match_pos != -1){
-                    string last_seq = contig_sequences[previous_contig];
-                    int remaining_contig_length = length_of_contigs[previous_contig] - previous_match_pos_on_contig;
-                    if (!previous_orientation){
-                        last_seq = reverse_complement(last_seq);
-                    }
+                    int remaining_contig_length = graph.length[previous_contig] - previous_match_pos_on_contig;
                     int remaining_read_length = line.size() - last_corrected_pos;
-                    corrected_seq += last_seq.substr(previous_match_pos_on_contig, min(remaining_contig_length, remaining_read_length));
+                    corrected_seq += oriented_substr(graph.sequences[previous_contig], previous_orientation, previous_match_pos_on_contig, min(remaining_contig_length, remaining_read_length));
                     if (remaining_contig_length < remaining_read_length && !hard_correct){
                         corrected_seq += line.substr(last_corrected_pos + remaining_contig_length);
                     }
@@ -658,6 +744,9 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
     omp_destroy_lock(&count_lock);
     omp_destroy_lock(&output_lock);
 
+    for (int contig = 0 ; contig < graph.size() ; contig++){
+        coverages[graph.names[contig]] = coverage_of_contigs[contig];
+    }
     add_coverages_to_graph(unitig_graph, coverages);
 
     cout << "    -> Number of cleanly corrected/aligned reads: " << nb_reads_single_path << " out of " << nb_reads << endl;
@@ -665,74 +754,9 @@ void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, 
 
 void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, int num_threads){
     
-    unordered_flat_map<uint64_t, pair<string,int>> kmers_to_contigs;
-    unordered_flat_map<string, int> length_of_contigs;
-    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
-
-    ifstream input(unitig_graph);
-    string line;
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            length_of_contigs[name] = sequence.size();
-
-            if (linked.find(name) == linked.end()){
-                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
-            }
-
-            uint64_t hash_foward = -1;
-            size_t pos_end = 0;
-            long pos_begin = -km;
-            while (roll_f(hash_foward, km, sequence, pos_end, pos_begin, false)){
-                
-                if (pos_begin>=0  && pos_begin % 5 == 0){
-                    kmers_to_contigs[hash_foward] = make_pair(name, pos_end-km);
-                }
-            }
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            auto neighbor = make_pair(name2, or2);
-            if (orientation1 == "+"){
-                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
-                    linked[name1].second.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
-                    linked[name1].first.push_back(neighbor);
-                }
-            }
-
-            neighbor = make_pair(name1, or1);
-            if (orientation2 == "+"){
-                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
-                    linked[name2].first.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
-                    linked[name2].second.push_back(neighbor);
-                }
-            }
-        }
-    }
-    input.close();
+    LinkedGraph graph = load_linked_graph(unitig_graph, true);
+    unordered_flat_map<uint64_t, pair<int,int>> kmers_to_contigs = index_kmers_of_contigs(graph, km);
+    vector<float> coverage_of_contigs (graph.size(), 0);
 
     omp_lock_t coverage_lock;
     omp_init_lock(&coverage_lock);
@@ -747,7 +771,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     omp_init_lock(&output_lock);
     
     ifstream input2(reads_file);
-    const int CHUNK_SIZE = 100;
+    const int CHUNK_SIZE = 20000;
     bool done = false;
     
     while (!done) {
@@ -795,16 +819,19 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
             long pos_begin = -km;
             long pos_middle = -(km+1)/2;
             int previous_match = 0;
-            string previous_contig = "";
+            int previous_contig = -1;
+            bool previous_forward = true; //orientation in which the read saw previous_contig
             
             while(roll(hash_foward, hash_reverse, km, line, pos_end, pos_begin, pos_middle, false)){
                 if (pos_begin == pos_to_look_at){
 
                     unsigned long kmer = hash_foward; 
 
-                    if (kmers_to_contigs.find(kmer) != kmers_to_contigs.end()){
-                        string contig = kmers_to_contigs[kmer].first;
-                        int pos_in_contig = kmers_to_contigs[kmer].second;
+                    auto match_fw = kmers_to_contigs.find(kmer);
+                    auto match_rv = match_fw == kmers_to_contigs.end() ? kmers_to_contigs.find(hash_reverse) : kmers_to_contigs.end();
+                    if (match_fw != kmers_to_contigs.end()){
+                        int contig = match_fw->second.first;
+                        int pos_in_contig = match_fw->second.second;
 
                         if (current_path.contigs.size() == 0){
                             current_path.start_position_on_contig = pos_in_contig;
@@ -814,15 +841,15 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                             current_path.end_position_on_contig = pos_in_contig + km;
                         }
                         else{
-                            if (previous_contig != ""){
+                            if (previous_contig != -1){
                                 int distance = pos_to_look_at - previous_match - pos_in_contig;
-                                vector<vector<pair<string, bool>>> all_paths = list_all_paths_from_contig(linked, contig, false, distance, length_of_contigs, km);
+                                vector<vector<pair<int, bool>>> all_paths = list_all_paths_from_contig(graph, contig, false, distance, km, previous_contig, !previous_forward);
                                 
                                 int valid_path_count = 0;
                                 int valid_path_index = -1;
                                 for (int path_idx = 0; path_idx < all_paths.size(); path_idx++) {
-                                    auto node = all_paths[path_idx][all_paths[path_idx].size()-1];
-                                    if (node.first == previous_contig) {
+                                    const auto& node = all_paths[path_idx][all_paths[path_idx].size()-1];
+                                    if (node.first == previous_contig && node.second == !previous_forward) {
                                         valid_path_count++;
                                         valid_path_index = path_idx;
                                     }
@@ -835,7 +862,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                                             current_path.contigs.push_back(path[i].first);
                                             current_path.orientations.push_back(!path[i].second);
                                             omp_set_lock(&coverage_lock);
-                                            coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                            coverage_of_contigs[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)graph.length[path[i].first]);
                                             omp_unset_lock(&coverage_lock);
                                         }
                                     }
@@ -858,38 +885,39 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                             current_path.end_position_on_contig = pos_in_contig + km;
                             
                             omp_set_lock(&coverage_lock);
-                            coverages[contig]+= std::min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
+                            coverage_of_contigs[contig] += std::min(1.0, (line.size()- pos_begin) / (double)graph.length[contig]);
                             omp_unset_lock(&coverage_lock);
                         }
                         
-                        int length_of_contig_left = length_of_contigs[contig] - pos_in_contig - km;
+                        int length_of_contig_left = graph.length[contig] - pos_in_contig - km;
                         if (length_of_contig_left > 10){
                             pos_to_look_at += min((int) (length_of_contig_left*0.8) , (int)(line.size() - pos_begin - km - 5));
                         }
                         previous_match = pos_begin;
                         previous_contig = contig;
+                        previous_forward = true;
                     }
-                    else if (kmers_to_contigs.find(hash_reverse) != kmers_to_contigs.end()){
-                        string contig = kmers_to_contigs[hash_reverse].first;
-                        int pos_in_contig = kmers_to_contigs[hash_reverse].second;
+                    else if (match_rv != kmers_to_contigs.end()){
+                        int contig = match_rv->second.first;
+                        int pos_in_contig = match_rv->second.second;
 
                         if (current_path.contigs.size() == 0){
-                            current_path.start_position_on_contig = length_of_contigs[contig] - pos_in_contig - km;
+                            current_path.start_position_on_contig = graph.length[contig] - pos_in_contig - km;
                         }
                         
                         if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == false){
-                            current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
+                            current_path.end_position_on_contig = graph.length[contig] - pos_in_contig;
                         }
                         else{
-                            if (previous_contig != ""){
-                                int distance = pos_to_look_at - previous_match - (length_of_contigs[contig] - pos_in_contig - km);
-                                vector<vector<pair<string, bool>>> all_paths = list_all_paths_from_contig(linked, contig, true, distance, length_of_contigs, km);
+                            if (previous_contig != -1){
+                                int distance = pos_to_look_at - previous_match - (graph.length[contig] - pos_in_contig - km);
+                                vector<vector<pair<int, bool>>> all_paths = list_all_paths_from_contig(graph, contig, true, distance, km, previous_contig, !previous_forward);
 
                                 int valid_path_count = 0;
                                 int valid_path_index = -1;
                                 for (int path_idx = 0; path_idx < all_paths.size(); path_idx++) {
-                                    auto node = all_paths[path_idx][all_paths[path_idx].size()-1];
-                                    if (node.first == previous_contig) {
+                                    const auto& node = all_paths[path_idx][all_paths[path_idx].size()-1];
+                                    if (node.first == previous_contig && node.second == !previous_forward) {
                                         valid_path_count++;
                                         valid_path_index = path_idx;
                                     }
@@ -902,7 +930,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                                             current_path.contigs.push_back(path[i].first);
                                             current_path.orientations.push_back(!path[i].second);
                                             omp_set_lock(&coverage_lock);
-                                            coverages[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)length_of_contigs[path[i].first]);
+                                            coverage_of_contigs[path[i].first] += min(1.0, (line.size() - pos_begin) / (double)graph.length[path[i].first]);
                                             omp_unset_lock(&coverage_lock);
                                         }
                                     }
@@ -912,20 +940,20 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                                     paths.push_back(current_path);
                                     current_path.contigs.clear();
                                     current_path.orientations.clear();
-                                    current_path.start_position_on_contig = length_of_contigs[contig] - pos_in_contig - km;
-                                    current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
+                                    current_path.start_position_on_contig = graph.length[contig] - pos_in_contig - km;
+                                    current_path.end_position_on_contig = graph.length[contig] - pos_in_contig;
                                 }
                             }
 
                             current_path.contigs.push_back(contig);
                             current_path.orientations.push_back(false);
                             if (current_path.start_position_on_contig == -1) {
-                                current_path.start_position_on_contig = length_of_contigs[contig] - pos_in_contig - km;
+                                current_path.start_position_on_contig = graph.length[contig] - pos_in_contig - km;
                             }
-                            current_path.end_position_on_contig = length_of_contigs[contig] - pos_in_contig;
+                            current_path.end_position_on_contig = graph.length[contig] - pos_in_contig;
                             
                             omp_set_lock(&coverage_lock);
-                            coverages[contig]+= min(1.0, (line.size()- pos_begin) / (double)length_of_contigs[contig]);
+                            coverage_of_contigs[contig] += min(1.0, (line.size()- pos_begin) / (double)graph.length[contig]);
                             omp_unset_lock(&coverage_lock);
                         }
                         
@@ -935,6 +963,7 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                         }
                         previous_match = pos_begin;
                         previous_contig = contig;
+                        previous_forward = false;
                     }
                     pos_to_look_at++;
                 }
@@ -958,13 +987,13 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                     thread_output << name << "_" << idx_of_path << "\t" << line.size() << "\t0\t" << line.size() << "\t+\t";
                     
                     for (int i = 0; i < p.contigs.size(); i++){
-                        thread_output << (p.orientations[i] ? ">" : "<") << p.contigs[i];
+                        thread_output << (p.orientations[i] ? ">" : "<") << graph.names[p.contigs[i]];
                     }
                     thread_output << "\t";
                     
                     int path_length = 0;
                     for (const auto& contig : p.contigs){
-                        path_length += length_of_contigs[contig];
+                        path_length += graph.length[contig];
                     }
                     thread_output << path_length << "\t0\t" << path_length << "\t" << line.size() << "\t" << line.size() << "\t255\n";
                     
@@ -987,6 +1016,9 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
     omp_destroy_lock(&count_lock);
     omp_destroy_lock(&output_lock);
 
+    for (int contig = 0 ; contig < graph.size() ; contig++){
+        coverages[graph.names[contig]] = coverage_of_contigs[contig];
+    }
     add_coverages_to_graph(unitig_graph, coverages);
 
     cout << "    -> Number of cleanly corrected/aligned reads: " << nb_reads_single_path << " out of " << nb_reads << endl;
@@ -996,21 +1028,21 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
 /**
  * @brief Given a starting position on a contig and an orientation, follow the graph and list all possible contigs and paths
  * 
- * @param linked adjacency list representing the graph structure
- * @param start_contig_name name of the starting contig
+ * @param graph
+ * @param start_contig starting contig
  * @param start_orientation true if we start from the right end ('+'), false if from the left end ('-')
  * @param max_length maximum total length of contigs to explore in the paths
- * @param length_of_contigs map from contig name to its length
- * @return vector<vector<pair<string, bool>>> list of paths, each path is a list of (contig_name, orientation)
+ * @param target_contig if not -1, a path stops as soon as it reaches this contig in target_orientation
+ * @return vector<vector<pair<int, bool>>> list of paths, each path is a list of (contig, orientation)
  */
-vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>>& linked, const string& start_contig_name, bool start_orientation, int max_length, unordered_flat_map<string, int>& length_of_contigs, int km){
+static vector<vector<pair<int, bool>>> list_all_paths_from_contig(const LinkedGraph& graph, int start_contig, bool start_orientation, int max_length, int km, int target_contig, bool target_orientation){
     
-    vector<vector<pair<string, bool>>> all_results;
+    vector<vector<pair<int, bool>>> all_results;
     all_results.reserve(50); // Reserve space for expected maximum paths
     
     // Recursive exploration function using push/pop
-    std::function<void(const string&, char, int, vector<pair<string, bool>>&)> explore;
-    explore = [&](const string& current_contig, char current_end, int length_left, vector<pair<string, bool>>& current_path) {
+    std::function<void(int, char, int, vector<pair<int, bool>>&)> explore;
+    explore = [&](int current_contig, char current_end, int length_left, vector<pair<int, bool>>& current_path) {
         
         if (length_left <= 0){
             all_results.push_back(current_path);
@@ -1023,7 +1055,7 @@ vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<stri
         }
         
         // Get neighbors from the appropriate end
-        const vector<pair<string, char>>& neighbors = (current_end == 1) ? linked[current_contig].second : linked[current_contig].first;
+        const vector<pair<int, char>>& neighbors = graph.links[current_contig][current_end == 1 ? 1 : 0];
         
         if (neighbors.size() == 0){
             all_results.push_back(current_path);
@@ -1039,11 +1071,18 @@ vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<stri
             // Push to path
             current_path.push_back({neighbor.first, neighbor_orientation});
             
-            // Continue exploration from the opposite end of the neighbor
-            char next_end = 1 - neighbor.second;
-            int neighbor_length = length_of_contigs[neighbor.first] - km + 1;
-            
-            explore(neighbor.first, next_end, length_left - neighbor_length, current_path);
+            if (target_contig != -1 && neighbor.first == target_contig && neighbor_orientation == target_orientation){
+                //reached the target: do not look further, even if the length budget is not exactly exhausted (indels in the reads)
+                all_results.push_back(current_path);
+            }
+            else{
+                // Continue exploration from the opposite end of the neighbor
+                char next_end = 1 - neighbor.second;
+                //at least 1, so that the exploration ends even in cycles of contigs shorter than k (or of unknown length)
+                int neighbor_length = max(1, graph.length[neighbor.first] - km + 1);
+                
+                explore(neighbor.first, next_end, length_left - neighbor_length, current_path);
+            }
             
             // Pop from path (backtrack)
             current_path.pop_back();
@@ -1056,13 +1095,13 @@ vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<stri
     };
     
     // Start exploration
-    vector<pair<string, bool>> initial_path;
+    vector<pair<int, bool>> initial_path;
     initial_path.reserve(20); // Reserve space for typical path length
-    initial_path.push_back({start_contig_name, start_orientation});
+    initial_path.push_back({start_contig, start_orientation});
     
     char start_end = start_orientation ? 1 : 0; // if orientation is true ('+'), we start from end 1 (right)
     
-    explore(start_contig_name, start_end, max_length, initial_path);
+    explore(start_contig, start_end, max_length, initial_path);
     
     // Return empty if we hit the limit
     if (all_results.size() >= 50){
@@ -1070,35 +1109,6 @@ vector<vector<pair<string, bool>>> list_all_paths_from_contig(unordered_map<stri
     }
     
     return all_results;
-}
-
-
-
-void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder){
-        
-        //convert gfa_in to fasta
-        string tmp_fasta = path_tmp_folder + "tmp_324.fasta";
-        gfa_to_fasta(gfa_in, tmp_fasta);
-
-        //to merge, simply make a unitig graph from bcalm.unitigs.shaved.gfa and then convert it to gfa
-        // cout << "Creating shaved unitig graph\n";
-        string command_unitig_graph = path_to_bcalm + " -in " + tmp_fasta + " -kmer-size "+std::to_string(k)+" -abundance-min 1 -out "+path_tmp_folder+"tmp_324 > "+path_tmp_folder+"bcalm.log 2>&1";
-        auto unitig_graph_ok = system(command_unitig_graph.c_str());
-        // cout << "launching unitig graph\n" << command_unitig_graph << endl;
-        if (unitig_graph_ok != 0){
-            cerr << "ERROR: unitig graph failed in merge_adjacent_contigs_BCALM\n";
-            cout << command_unitig_graph << endl;
-            exit(1);
-        }
-
-        //convert to gfa
-        // cout << "Launching convertToGFA\n";
-        string convert_command2 = path_convertToGFA + " " + path_tmp_folder+ "tmp_324.unitigs.fa " + gfa_out + " " + std::to_string(k) + " > "+path_tmp_folder+"convertToGFA.log 2>&1";
-        auto res = system(convert_command2.c_str());
-
-        //remove tmp files
-        // string remove_tmp_files = "rm "+path_tmp_folder+"tmp_324*";
-        // system(remove_tmp_files.c_str());
 }
 
 void gfa_to_fasta(string gfa, string fasta){   
@@ -1154,36 +1164,60 @@ void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::stri
     }
     out.close();
 
-    //move the sorted file to the original file
-    std::string command = "mv " + gfa + ".tmp " + gfa;
-    auto res = system(command.c_str());
-
+    //move the file with coverages to the original file
+    if (std::rename((gfa + ".tmp").c_str(), gfa.c_str()) != 0){
+        cerr << "ERROR: could not move " << gfa << ".tmp to " << gfa << "\n";
+        exit(1);
+    }
 }
 
-//recursive function that returns true if it can find a path on one side of the contig of the contig of size 4*k without going through a contig with a coverage more than 20x the coverage of the contig
-//three possible outcomes: 0 = nothing overcovered but dead end, 1 = overcovered, 2 = not overcovered path found
+//flags of the memo of pop_and_shave_graph: a path that is not overcovered was found left / right of the contig
+static const uint8_t NOT_OVERCOVERED_LEFT = 1;
+static const uint8_t NOT_OVERCOVERED_RIGHT = 2;
+
 /**
- * @brief 
+ * @brief Recursive exploration of one side of a contig, within length_left bases, looking for a path that does not go
+ * through a contig with a coverage above big_coverage
  * 
  * @param contig current contig
  * @param endOfContig endOfContig we arrive from
- * @param linked 
- * @param coverage 
- * @param length_of_contigs 
+ * @param links links of the graph (see LinkedGraph)
+ * @param coverage coverage of each contig
+ * @param length_of_contigs length of each contig
  * @param k 
  * @param length_left 
- * @param original_coverage 
- * @param not_overcovered set to true if the contig is not overcovered left or right
+ * @param original_coverage coverage of the contig whose neighborhood is explored
+ * @param big_coverage coverage above which a contig is overcovered
+ * @param not_overcovered flags (NOT_OVERCOVERED_LEFT/RIGHT) of the contigs already known not to be overcovered left or right
+ * @param memo results of the states already explored during this exploration
  * @return int 2: not overcovered path found, 1: overcovered, 0: nothing overcovered but dead end
  */
-int explore_neighborhood(string contig, int endOfContig, unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> &linked, unordered_map<string, float>& coverage, unordered_map<string, int>& length_of_contigs, int k, int length_left, double original_coverage, double big_coverage, unordered_map<string, pair<bool, bool>> &not_overcovered){
+static int explore_neighborhood_uncached(int contig, int endOfContig, const vector<std::array<vector<pair<int,char>>, 2>>& links, const vector<float>& coverage, const vector<int>& length_of_contigs, int k, int length_left, double original_coverage, double big_coverage, vector<std::atomic<uint8_t>>& not_overcovered, unordered_flat_map<uint64_t, int8_t>& memo);
+
+/**
+ * @brief Memoized exploration of the neighborhood: within one exploration (fixed original_coverage and big_coverage),
+ * the result only depends on (contig, end, length left), so each state is explored once instead of once per path
+ * leading to it (which is exponential in tangles of short contigs)
+ */
+static int explore_neighborhood(int contig, int endOfContig, const vector<std::array<vector<pair<int,char>>, 2>>& links, const vector<float>& coverage, const vector<int>& length_of_contigs, int k, int length_left, double original_coverage, double big_coverage, vector<std::atomic<uint8_t>>& not_overcovered, unordered_flat_map<uint64_t, int8_t>& memo){
+    uint64_t key = ((uint64_t) contig << 33) | ((uint64_t) (endOfContig & 1) << 32) | (uint32_t) length_left;
+    auto it = memo.find(key);
+    if (it != memo.end()){
+        return it->second;
+    }
+    int result = explore_neighborhood_uncached(contig, endOfContig, links, coverage, length_of_contigs, k, length_left, original_coverage, big_coverage, not_overcovered, memo);
+    memo[key] = result;
+    return result;
+}
+
+static int explore_neighborhood_uncached(int contig, int endOfContig, const vector<std::array<vector<pair<int,char>>, 2>>& links, const vector<float>& coverage, const vector<int>& length_of_contigs, int k, int length_left, double original_coverage, double big_coverage, vector<std::atomic<uint8_t>>& not_overcovered, unordered_flat_map<uint64_t, int8_t>& memo){
     
     if (length_left <= 0){
 
         if (coverage[contig] > big_coverage){
             return 1;
         }
-        else if (endOfContig == 1 && linked[contig].first.size() == 0 || endOfContig == 0 && linked[contig].second.size() == 0){
+        else if (endOfContig == 1 && links[contig][0].size() == 0 || endOfContig == 0 && links[contig][1].size() == 0){
             return 0;
         }
         else{
@@ -1193,24 +1227,25 @@ int explore_neighborhood(string contig, int endOfContig, unordered_map<string, p
 
     bool overcovered_in_neighborhood = false;
     if (endOfContig == 1){ //arrived by the right, go through to the left
-        if (linked[contig].first.size() == 0){
+        if (links[contig][0].size() == 0){
             return 0;
         }
-        for (auto l: linked[contig].first){
+        for (const auto& l: links[contig][0]){
             if (coverage[l.first] > big_coverage){
                 overcovered_in_neighborhood = true;
             }
             else if (l.first != contig) { //the condition is so we don't end up in a loop
 
                 //check if we're encountering an already known not overcovered contig
-                if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].first && l.second == 1 && coverage[l.first] < 2*coverage[contig] && coverage[l.first]*2 > original_coverage){
+                uint8_t known = not_overcovered[l.first];
+                if ((known & NOT_OVERCOVERED_LEFT) && l.second == 1 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
                     return 2;
                 }
-                else if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].second && l.second == 0 && coverage[l.first] < 2*coverage[contig] && coverage[l.first]*2 > original_coverage){
+                else if ((known & NOT_OVERCOVERED_RIGHT) && l.second == 0 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
                     return 2;
                 }
 
-                int res = explore_neighborhood(l.first, l.second, linked, coverage, length_of_contigs, k, length_left - length_of_contigs[l.first] + k - 1, original_coverage, big_coverage, not_overcovered);
+                int res = explore_neighborhood(l.first, l.second, links, coverage, length_of_contigs, k, length_left - max(1, length_of_contigs[l.first] - k + 1), original_coverage, big_coverage, not_overcovered, memo);
                 if (res == 2){
                     return 2;
                 }
@@ -1227,23 +1262,24 @@ int explore_neighborhood(string contig, int endOfContig, unordered_map<string, p
         }
     }
     else if (endOfContig == 0){ //arrived by the left, go through to the right
-        if (linked[contig].second.size() == 0){
+        if (links[contig][1].size() == 0){
             return 0;
         }
-        for (auto l: linked[contig].second){
+        for (const auto& l: links[contig][1]){
             if (coverage[l.first] > big_coverage){
                 overcovered_in_neighborhood = true;
             }
-            else {
+            else if (l.first != contig) { //the condition is so we don't end up in a loop
 
-                if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].first && l.second == 1 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
+                uint8_t known = not_overcovered[l.first];
+                if ((known & NOT_OVERCOVERED_LEFT) && l.second == 1 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
                     return 2;
                 }
-                else if (not_overcovered.find(l.first) != not_overcovered.end() && not_overcovered[l.first].second && l.second == 0 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
+                else if ((known & NOT_OVERCOVERED_RIGHT) && l.second == 0 && coverage[l.first] < 2*original_coverage && coverage[l.first]*2 > original_coverage){
                     return 2;
                 }
 
-                int res = explore_neighborhood(l.first, l.second, linked, coverage, length_of_contigs, k, length_left - length_of_contigs[l.first] + k - 1, original_coverage, big_coverage, not_overcovered);
+                int res = explore_neighborhood(l.first, l.second, links, coverage, length_of_contigs, k, length_left - max(1, length_of_contigs[l.first] - k + 1), original_coverage, big_coverage, not_overcovered, memo);
                 if (res == 2){
                     return 2;
                 }
@@ -1284,151 +1320,81 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
         min_length = std::numeric_limits<int>::max();
     }
 
-    ifstream input(gfa_in);
-    //first go through the gfa and find all the places where an end of contig is connected with two links
-    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
-    unordered_map<string, long int> pos_of_contig_seq_in_file;
-    unordered_map<string, float> coverage;
-    unordered_map<string, int> length_of_contigs;
-    vector<string> list_of_contigs;
-
-    //parse the gfa file
-    string line;
-    long int pos = 0;
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            string depth_string = "  ";
-            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
-                string nds;
-                ss >> nds;
-                depth_string = nds;
-            }
-
-            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
-                cerr << "ERROR: no depth found for contig " << name << "\n";
-                exit(1);
-            }
-            double depth = std::stof(depth_string.substr(5, depth_string.size()-5));
-            depth = std::max(1.0, depth- extra_coverage);
-            coverage[name] = depth;
-            pos_of_contig_seq_in_file[name] = pos;
-            length_of_contigs[name] = sequence.size();
-            list_of_contigs.push_back(name);
-
-            if (linked.find(name) == linked.end()){
-                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
-            }
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            auto neighbor = make_pair(name2, or2);
-            if (orientation1 == "+"){
-                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
-                    linked[name1].second.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
-                    linked[name1].first.push_back(neighbor);
-                }
-            }
-
-            neighbor = make_pair(name1, or1);
-            if (orientation2 == "+"){
-                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
-                    linked[name2].first.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
-                    linked[name2].second.push_back(neighbor);
-                }
-            }
-        }
-        pos += line.size() + 1;
+    LinkedGraph graph = load_linked_graph(gfa_in, false);
+    check_depths(graph);
+    const vector<std::array<vector<pair<int,char>>, 2>>& links = graph.links;
+    const vector<int>& length_of_contigs = graph.length;
+    const vector<int>& list_of_contigs = graph.segments_in_order;
+    vector<float> coverage (graph.size(), 0);
+    for (int contig : list_of_contigs){
+        double depth = graph.depth[contig];
+        coverage[contig] = std::max(1.0, depth - extra_coverage);
     }
-    input.close();
-    input.open(gfa_in);
 
-    unordered_set<string> to_keep; //kept contigs are the one with a coverage above abundance_min and their necessary neighbors for the contiguity
+    //kept contigs are the one with a coverage above abundance_min and their necessary neighbors for the contiguity
+    vector<std::atomic<bool>> to_keep (graph.size());
+    for (auto& k : to_keep){
+        k = false;
+    }
 
     //iterative cleaning of the graph
 
-    unordered_map<string, pair<bool, bool>> not_overcovered; //iteratively mark the contigs that are not overcovered left or right
-    not_overcovered.reserve(linked.size());
-    omp_lock_t lock_contigs_to_keep;
-    omp_init_lock(&lock_contigs_to_keep);
-    omp_lock_t lock_not_overcovered_contigs;
-    omp_init_lock(&lock_not_overcovered_contigs);
+    vector<std::atomic<uint8_t>> not_overcovered (graph.size()); //iteratively mark the contigs that are not overcovered left or right
+    for (auto& n : not_overcovered){
+        n = 0;
+    }
 
     //decide which contig we really want to keep
     #pragma omp parallel for num_threads(num_threads)
     for (int c = 0 ; c < list_of_contigs.size() ; c++){
 
-        string contig = list_of_contigs[c];
+        int contig = list_of_contigs[c];
 
         //check if this is a badly covered bubble
         bool bubble = false;
-        if (linked[contig].first.size() == 1 && linked[contig].second.size() == 1){
+        if (links[contig][0].size() == 1 && links[contig][1].size() == 1){
 
-            string neighbor_left = linked[contig].first[0].first;
-            char end_of_neighbor_left = linked[contig].first[0].second;
-            string neighbor_right = linked[contig].second[0].first;
-            char end_of_neighbor_right = linked[contig].second[0].second;
+            int neighbor_left = links[contig][0][0].first;
+            char end_of_neighbor_left = links[contig][0][0].second;
+            int neighbor_right = links[contig][1][0].first;
+            char end_of_neighbor_right = links[contig][1][0].second;
 
-            string other_neighbor_of_contig_left = "";
-            if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2){
-                for (auto l: linked[neighbor_left].first){
+            int other_neighbor_of_contig_left = -1;
+            if (end_of_neighbor_left == 0 && links[neighbor_left][0].size() == 2){
+                for (const auto& l: links[neighbor_left][0]){
                     if (l.first != contig){
                         other_neighbor_of_contig_left = l.first;
                     }
                 }
             }
-            else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2){
-                for (auto l: linked[neighbor_left].second){
+            else if (end_of_neighbor_left == 1 && links[neighbor_left][1].size() == 2){
+                for (const auto& l: links[neighbor_left][1]){
                     if (l.first != contig){
                         other_neighbor_of_contig_left = l.first;
                     }
                 }
             }
 
-            string other_neighbor_of_contig_right = "";
-            if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2){
-                for (auto l: linked[neighbor_right].first){
+            int other_neighbor_of_contig_right = -1;
+            if (end_of_neighbor_right == 0 && links[neighbor_right][0].size() == 2){
+                for (const auto& l: links[neighbor_right][0]){
                     if (l.first != contig){
                         other_neighbor_of_contig_right = l.first;
                     }
                 }
             }
-            else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2){
-                for (auto l: linked[neighbor_right].second){
+            else if (end_of_neighbor_right == 1 && links[neighbor_right][1].size() == 2){
+                for (const auto& l: links[neighbor_right][1]){
                     if (l.first != contig){
                         other_neighbor_of_contig_right = l.first;
                     }
                 }
             }
 
-            if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
+            if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != -1 && 5*coverage[contig] < coverage[other_neighbor_of_contig_left]){
                 bubble = true;
             }
-            if (single_genome && other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "" && 2*coverage[contig] < coverage[other_neighbor_of_contig_left]){
+            if (single_genome && other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != -1 && 2*coverage[contig] < coverage[other_neighbor_of_contig_left]){
                 bubble = true;
             }
     
@@ -1438,45 +1404,34 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
         {
             //do nothing, and most importantly, do not add the contig to the to_keep set
         }
-        else if (coverage[contig] > abundance_min || length_of_contigs[contig] > min_length){ 
+        else if ((abundance_min != -1 && coverage[contig] > abundance_min) || length_of_contigs[contig] > min_length){ 
             
             int size_of_neighborhood = 7*k;
             // cout << "launching..\n";
             int overcovered_right = 2;
-            if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].second){
+            std::atomic<uint8_t>& not_overcovered_contig = not_overcovered[contig];
+            if (!(not_overcovered_contig & NOT_OVERCOVERED_RIGHT)){
                 double big_coverage = 20*coverage[contig];
                 if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
                     big_coverage = 3*coverage[contig];
                 }
-                overcovered_right = explore_neighborhood(contig, 0, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
+                unordered_flat_map<uint64_t, int8_t> memo;
+                overcovered_right = explore_neighborhood(contig, 0, links, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered, memo);
             }
             if (overcovered_right == 2){
-                omp_set_lock(&lock_not_overcovered_contigs);
-                
-                if (not_overcovered.find(contig) != not_overcovered.end()){
-                    not_overcovered[contig].first = false;
-                    not_overcovered[contig].second = false;
-                }
-                not_overcovered[contig].second = true;
-
-                omp_unset_lock(&lock_not_overcovered_contigs);
+                not_overcovered_contig |= NOT_OVERCOVERED_RIGHT;
             }
             int overcovered_left = 2;
-            if (not_overcovered.find(contig) == not_overcovered.end() || !not_overcovered[contig].first){
+            if (!(not_overcovered_contig & NOT_OVERCOVERED_LEFT)){
                 double big_coverage = 20*coverage[contig];
                 if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
                     big_coverage = 3*coverage[contig];
                 }
-                overcovered_left = explore_neighborhood(contig, 1, linked, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered);
+                unordered_flat_map<uint64_t, int8_t> memo;
+                overcovered_left = explore_neighborhood(contig, 1, links, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered, memo);
             }
             if (overcovered_left == 2){
-                omp_set_lock(&lock_not_overcovered_contigs);
-                if (not_overcovered.find(contig) != not_overcovered.end()){
-                    not_overcovered[contig].first = false;
-                    not_overcovered[contig].second = false;
-                }
-                not_overcovered[contig].first = true;
-                omp_unset_lock(&lock_not_overcovered_contigs);
+                not_overcovered_contig |= NOT_OVERCOVERED_LEFT;
             }
 
             //now decide if the contig is to be kept
@@ -1484,14 +1439,10 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
 
             }
             else if (overcovered_left == 0 && overcovered_right == 0 && length_of_contigs[contig] > min_length){ //if the contig has two dead ends, keep it under conditiosn that it is long enough
-                omp_set_lock(&lock_contigs_to_keep);
-                to_keep.insert(contig);
-                omp_unset_lock(&lock_contigs_to_keep);
+                to_keep[contig] = true;
             }
             else if (overcovered_left == 2 || overcovered_right == 2){ //if the contig is not overcovered on one side, keep it (and it also passed the abundance_min or the min_length threshold)
-                omp_set_lock(&lock_contigs_to_keep);
-                to_keep.insert(contig);
-                omp_unset_lock(&lock_contigs_to_keep);
+                to_keep[contig] = true;
             }
             else if (overcovered_left == 1 && overcovered_right == 0 || overcovered_left == 0 && overcovered_right == 1){ //this means that this is a tip
                 //do nothing, and most importantly, do not add the contig to the to_keep set
@@ -1499,26 +1450,22 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
 
             //if single genome mode is on, delete badly covered dead ends
             if (single_genome) {
-                if (linked[contig].first.size() == 0 && linked[contig].second.size() > 0  ){
+                if (links[contig][0].size() == 0 && links[contig][1].size() > 0  ){
                     float max_neighbor_coverage = 0;
-                    for (auto neighbor : linked[contig].second) {
+                    for (auto neighbor : links[contig][1]) {
                         max_neighbor_coverage = std::max(max_neighbor_coverage, coverage[neighbor.first]);
                     }
-                    if (coverage[contig] * 2 < max_neighbor_coverage && length_of_contigs[contig] < 2*min_length) {
-                        omp_set_lock(&lock_contigs_to_keep);
-                        to_keep.erase(contig);
-                        omp_unset_lock(&lock_contigs_to_keep);
+                    if (coverage[contig] * 2 < max_neighbor_coverage && length_of_contigs[contig] < 2*(long long)min_length) {
+                        to_keep[contig] = false;
                     }
                 }
-                if (linked[contig].first.size() > 0 && linked[contig].second.size() == 0  ){
+                if (links[contig][0].size() > 0 && links[contig][1].size() == 0  ){
                     float max_neighbor_coverage = 0;
-                    for (auto neighbor : linked[contig].first) {
+                    for (auto neighbor : links[contig][0]) {
                         max_neighbor_coverage = std::max(max_neighbor_coverage, coverage[neighbor.first]);
                     }
-                    if (coverage[contig] * 2 < max_neighbor_coverage && length_of_contigs[contig] < 2*min_length) {
-                        omp_set_lock(&lock_contigs_to_keep);
-                        to_keep.erase(contig);
-                        omp_unset_lock(&lock_contigs_to_keep);
+                    if (coverage[contig] * 2 < max_neighbor_coverage && length_of_contigs[contig] < 2*(long long)min_length) {
+                        to_keep[contig] = false;
                     }
                 }
                 
@@ -1534,61 +1481,53 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
         #pragma omp parallel for num_threads(num_threads) reduction(+:number_of_edits)
         for (int c = 0 ; c < list_of_contigs.size() ; c++){
 
-            string contig = list_of_contigs[c];
+            int contig = list_of_contigs[c];
 
-            if (to_keep.find(contig) != to_keep.end()){
+            if (to_keep[contig]){
                 //make sure the contig has at least one neighbor left and right (if not, take the one with the highest coverage) 
                 //this is the only way to keep contigs that are below abundance_min
                 float best_coverage = 0;
-                string best_contig = "";
+                int best_contig = -1;
                 bool at_least_one_neighbor = false;
-                for (auto l: linked[contig].second){
+                for (const auto& l: links[contig][1]){
                     if (coverage[l.first] > best_coverage){
                         best_coverage = coverage[l.first];
                         best_contig = l.first;
                     }
-                    if (to_keep.find(l.first) != to_keep.end()){
+                    if (to_keep[l.first]){
                         at_least_one_neighbor = true;
                     }
                 }
-                if (best_contig != "" && !at_least_one_neighbor){
-                    if (to_keep.find(best_contig) == to_keep.end()){
-                        omp_set_lock(&lock_contigs_to_keep);
-                        to_keep.insert(best_contig);
-                        omp_unset_lock(&lock_contigs_to_keep);
+                if (best_contig != -1 && !at_least_one_neighbor){
+                    if (!to_keep[best_contig].exchange(true)){
                         number_of_edits++;
                     }
                 }
 
                 best_coverage = 0;
-                best_contig = "";
+                best_contig = -1;
                 at_least_one_neighbor = false;
-                for (auto l: linked[contig].first){
+                for (const auto& l: links[contig][0]){
                     if (coverage[l.first] > best_coverage){
                         best_coverage = coverage[l.first];
                         best_contig = l.first;
                     }
-                    if (to_keep.find(l.first) != to_keep.end()){
+                    if (to_keep[l.first]){
                         at_least_one_neighbor = true;
                     }
                 }
-                if (best_contig != "" && !at_least_one_neighbor){
-                    if (to_keep.find(best_contig) == to_keep.end()){
-                        omp_set_lock(&lock_contigs_to_keep);
-                        to_keep.insert(best_contig);
-                        omp_unset_lock(&lock_contigs_to_keep);
+                if (best_contig != -1 && !at_least_one_neighbor){
+                    if (!to_keep[best_contig].exchange(true)){
                         number_of_edits++;
                     }
                 }
             }
         }
     }
-    omp_destroy_lock(&lock_contigs_to_keep);
-    omp_destroy_lock(&lock_not_overcovered_contigs);
 
-    //now wirte the gfa file without the contigs to remove
-    input.close();
-    input.open(gfa_in);
+    //now write the gfa file without the contigs to remove
+    ifstream input(gfa_in);
+    string line;
     ofstream out(gfa_out);
     while (std::getline(input, line))
     {
@@ -1599,8 +1538,9 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
             string sequence;
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
-            if (to_keep.find(name) != to_keep.end()){
-                out << "S\t" << name << "\t" << sequence << "\tLN:i:" << sequence.size() << "\tkm:f:" << coverage[name] << "\n";
+            int id = graph.find(name);
+            if (to_keep[id]){
+                out << "S\t" << name << "\t" << sequence << "\tLN:i:" << sequence.size() << "\tkm:f:" << coverage[id] << "\n";
             }
         }
         else if (line[0] == 'L'){
@@ -1613,7 +1553,7 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
             int i = 0;
             ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
 
-            if (to_keep.find(name1) != to_keep.end() && to_keep.find(name2) != to_keep.end()){
+            if (to_keep[graph.find(name1)] && to_keep[graph.find(name2)]){
                 out << line << "\n";
             }
         }
@@ -1622,305 +1562,28 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
 }
 
 /**
- * @brief Function that takes as input a graph, cleans it for building long contigs to ouptut for next k. The goal is to improve contiguity at next step
+ * @brief At the ends of contigs that have several neighbors, cut the links to the neighbors that look like errors
+ * (much less covered than the other neighbors, or dead ends that look like error tips)
  * 
  * @param gfa_in 
  * @param gfa_out 
- * @param k
- * @param extra_coverage //to retreat to the coverage because it comes from extra contigs added to the reads from previous assembly rounds
- * @param num_threads
+ * @param k k of the graph (lengths are in compressed bases)
  */
-void trim_graph_for_next_k(string gfa_in, string gfa_out,  int k, int extra_coverage, int num_threads){
+void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out, int k){
 
-    ifstream input(gfa_in);
-    //first go through the gfa and find all the places where an end of contig is connected with two links
-    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
-    unordered_map<string, pair<int,int>> number_of_links; //number of links on each side of the contig
-
-    unordered_map<string, long int> pos_of_contig_seq_in_file;
-    unordered_map<string, float> coverage;
-    unordered_map<string, int> length_of_contigs;
-    vector<string> list_of_contigs;
-
-    //parse the gfa file
-    string line;
-    long int pos = 0;
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            string depth_string = "  ";
-            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
-                string nds;
-                ss >> nds;
-                depth_string = nds;
-            }
-
-            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
-                cerr << "ERROR: no depth found for contig " << name << "\n";
-                exit(1);
-            }
-            double depth = std::stof(depth_string.substr(5, depth_string.size()-5));
-            depth = std::max(1.0, depth- extra_coverage);
-            coverage[name] = depth;
-            pos_of_contig_seq_in_file[name] = pos;
-            length_of_contigs[name] = sequence.size();
-            list_of_contigs.push_back(name);
-
-            if (linked.find(name) == linked.end()){
-                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
-                number_of_links[name] = {0, 0};
-            }
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            auto neighbor = make_pair(name2, or2);
-            if (orientation1 == "+"){
-                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
-                    linked[name1].second.push_back(neighbor);
-                    number_of_links[name1].second++;
-                }
-            }
-            else{
-                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
-                    linked[name1].first.push_back(neighbor);
-                    number_of_links[name1].first++;
-                }
-            }
-
-            neighbor = make_pair(name1, or1);
-            if (orientation2 == "+"){
-                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
-                    linked[name2].first.push_back(neighbor);
-                    number_of_links[name2].first++;
-                }
-            }
-            else{
-                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
-                    linked[name2].second.push_back(neighbor);
-                    number_of_links[name2].second++;
-                }
-            }
-        }
-        pos += line.size() + 1;
-    }
-    input.close();
-    input.open(gfa_in);
-
-
-    std::set<pair<pair<string,char>,pair<string,char>>> links_to_erase; //links to erase
-
-    //cleaning of the graph
-
-    omp_lock_t lock_to_erase;
-    omp_init_lock(&lock_to_erase);
-
-    int nb_changes = 11;
-    while (nb_changes > 10){
-        nb_changes = 0;
-
-        //find the tips in parallel
-        #pragma omp parallel for num_threads(num_threads)
-        for (int c = 0 ; c < list_of_contigs.size() ; c++){
-
-            string contig = list_of_contigs[c];
-
-
-            if (number_of_links[contig].first*number_of_links[contig].second == 0 && number_of_links[contig].first + number_of_links[contig].second == 1){
-
-                char end_of_contig = (number_of_links[contig].first == 1 ? 0 : 1);
-                string neighbor = (end_of_contig == 0 ? linked[contig].first[0].first : linked[contig].second[0].first);
-                char end_of_neighbor = (end_of_contig == 0 ? linked[contig].first[0].second : linked[contig].second[0].second);
-                auto& neighbors_of_neighbor = (end_of_neighbor == 0 ? linked[neighbor].first : linked[neighbor].second);
-
-                for (auto l: neighbors_of_neighbor){
-                    if (l.first == contig){
-                        continue;
-                    }
-                    char end_of_neighbor_neighbor = l.second;
-                    int number_of_links_other_side_neighbor_of_neighbor = (end_of_neighbor_neighbor == 0 ? linked[l.first].second.size() : linked[l.first].first.size());
-
-                    if (coverage[l.first] > 2*coverage[contig] || length_of_contigs[contig] < k + 10 || number_of_links_other_side_neighbor_of_neighbor > 0){
-                        omp_set_lock(&lock_to_erase);
-                        links_to_erase.insert(make_pair(make_pair(contig, end_of_contig), make_pair(neighbor, end_of_neighbor)));
-                        links_to_erase.insert(make_pair(make_pair(neighbor, end_of_neighbor), make_pair(contig, end_of_contig)));
-                        if (end_of_contig == 0){
-                            number_of_links[contig].first--;
-                        }
-                        else{
-                            number_of_links[contig].second--;
-                        }
-                        if (end_of_neighbor == 0){
-                            number_of_links[neighbor].first--;
-                        }
-                        else{
-                            number_of_links[neighbor].second--;
-                        }
-                        nb_changes++;
-
-                        omp_unset_lock(&lock_to_erase);
-                    }
-                }
-            }
-        }
-    }
-
-    omp_destroy_lock(&lock_to_erase);
-
-    //now wirte the gfa file without the links to remove
-    input.close();
-    input.open(gfa_in);
-    ofstream out(gfa_out);
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            out << line << "\n";
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            if (links_to_erase.find(make_pair(make_pair(name1, or1), make_pair(name2, or2))) == links_to_erase.end()){
-                out << line << "\n";
-            }
-        }
-    }
-    out.close();
-}
-
-
-/**
- * @brief In small bubbles, take only one side and discard the other
- * 
- * @param gfa_in 
- * @param length_of_longest_read only pop bubbles that are between two contigs that are at least this length and at most this length/2 apart
- * @param gfa_out 
- */
-void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
-
-    //load the graph
-    ifstream input(gfa_in);
-    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
-    unordered_map<string, long int> pos_of_contig_seq_in_file;
-    unordered_map<string, float> coverage;
-    unordered_map<string, int> length_of_contigs;
-
-    string line;
-    long int pos = 0;
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            string depth_string = "  ";
-            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
-                string nds;
-                ss >> nds;
-                depth_string = nds;
-            }
-
-            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
-                cerr << "ERROR: no depth found for contig " << name << "\n";
-                exit(1);
-            }
-            float depth = std::stof(depth_string.substr(5, depth_string.size()-5));
-            coverage[name] = depth;
-            pos_of_contig_seq_in_file[name] = pos;
-            length_of_contigs[name] = sequence.size();
-
-            if (linked.find(name) == linked.end()){
-                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
-            }
-        }
-    }
-    input.close();
-    input.open(gfa_in);
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            if (linked.find(name1) == linked.end() || linked.find(name2) == linked.end()){
-                cerr << "ERROR: contig not found in linked in pop_bubbles: ";
-                cerr << name1 << " " << name2 << "\n";
-                exit(1);
-            }
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            auto neighbor = make_pair(name2, or2);
-            if (orientation1 == "+"){
-                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
-                    linked[name1].second.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
-                    linked[name1].first.push_back(neighbor);
-                }
-            }
-
-            neighbor = make_pair(name1, or1);
-            if (orientation2 == "+"){
-                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
-                    linked[name2].first.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
-                    linked[name2].second.push_back(neighbor);
-                }
-            }
-        }
-        pos += line.size() + 1;
-    }
-    input.close();
+    LinkedGraph graph = load_linked_graph(gfa_in, false);
+    check_depths(graph);
+    check_links(graph);
+    const vector<std::array<vector<pair<int,char>>, 2>>& links = graph.links;
+    const vector<float>& coverage = graph.depth;
+    const vector<int>& length_of_contigs = graph.length;
 
     //now cut the links that are not good for contiguity
 
-    std::set<pair<pair<string,char>,pair<string,char>>> links_to_delete;
-    for (auto c: linked){
-        string contig_name = c.first;
+    std::set<pair<pair<int,char>,pair<int,char>>> links_to_delete;
+    for (int contig_name = 0 ; contig_name < graph.size() ; contig_name++){
         for (char end = 0 ; end < 2 ; end++){
-            vector<pair<string, char>>& neighbors = linked[contig_name].first;
-            if (end == 1){
-                neighbors = linked[contig_name].second;
-            }
+            const vector<pair<int, char>>& neighbors = (end == 1) ? links[contig_name][1] : links[contig_name][0];
             if (neighbors.size() > 1){
                 float max_coverage = 0;
                 bool all_neighbors_are_dead_ends = true;
@@ -1928,7 +1591,7 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
                     if (coverage[neighbor.first] > max_coverage){
                         max_coverage = coverage[neighbor.first];
                     }
-                    if (linked[neighbor.first].first.size() > 0 && linked[neighbor.first].second.size() > 0){
+                    if (links[neighbor.first][0].size() > 0 && links[neighbor.first][1].size() > 0){
                         all_neighbors_are_dead_ends = false;
                     }
                 }
@@ -1940,9 +1603,13 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
                         links_to_delete.insert({neighbor, {contig_name,end}});
                         links_to_delete.insert({{contig_name,end}, neighbor});
                     }
-                    //if the neighbor is a dead end cut it
-                    if (!all_neighbors_are_dead_ends &&
-                            (linked[neighbor.first].first.size() == 0 || linked[neighbor.first].second.size() == 0)){
+                    //if the neighbor is a dead end that looks like an error tip (short and less covered than both the best
+                    //neighbor and the contig), cut it. A long or well-covered dead end is more likely a true contig whose
+                    //other side is disconnected (e.g. a coverage gap at this k)
+                    bool looks_like_error_tip = length_of_contigs[neighbor.first] < 3*k
+                            && coverage[neighbor.first] < 0.5*std::min(max_coverage, coverage[contig_name]);
+                    if (!all_neighbors_are_dead_ends && looks_like_error_tip &&
+                            (links[neighbor.first][0].size() == 0 || links[neighbor.first][1].size() == 0)){
                         links_to_delete.insert({neighbor, {contig_name,end}});
                         links_to_delete.insert({{contig_name,end}, neighbor});
                     }
@@ -1953,7 +1620,8 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
     }
 
     //now write the gfa file without the links to delete
-    input.open(gfa_in);
+    ifstream input(gfa_in);
+    string line;
     ofstream out(gfa_out);
     while (std::getline(input, line))
     {
@@ -1967,7 +1635,7 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
             int i = 0;
             ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
 
-            if (links_to_delete.find({{name1, (orientation1 == "+" ? 1 : 0)}, {name2, (orientation2 == "+" ? 0 : 1)}}) == links_to_delete.end()){
+            if (links_to_delete.find({{graph.find(name1), (orientation1 == "+" ? 1 : 0)}, {graph.find(name2), (orientation2 == "+" ? 0 : 1)}}) == links_to_delete.end()){
                 out << line << "\n";
             }
         }
@@ -1986,186 +1654,99 @@ void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out){
  * @param gfa_out 
  */
 void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out, bool single_genome, bool hard_contiguity){
-    //load the graph
-    ifstream input(gfa_in);
-    unordered_map<string, pair<vector<pair<string, char>>, vector<pair<string,char>>>> linked;
-    unordered_map<string, long int> pos_of_contig_seq_in_file;
-    unordered_map<string, float> coverage;
-    unordered_map<string, int> length_of_contigs;
+    LinkedGraph graph = load_linked_graph(gfa_in, false);
+    check_depths(graph);
+    check_links(graph);
+    const vector<std::array<vector<pair<int,char>>, 2>>& links = graph.links;
+    const vector<float>& coverage = graph.depth;
+    const vector<int>& length_of_contigs = graph.length;
 
-    string line;
-    long int pos = 0;
-    while (std::getline(input, line))
-    {
-        if (line[0] == 'S')
-        {
-            string name;
-            string dont_care;
-            string sequence;
-            std::stringstream ss(line);
-            ss >> dont_care >> name >> sequence;
-            string depth_string = "  ";
-            while (depth_string.size()>= 2 && (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km")){
-                string nds;
-                ss >> nds;
-                depth_string = nds;
-            }
-
-            if (depth_string.substr(0,2) != "DP" && depth_string.substr(0,2) != "km"){
-                cerr << "ERROR: no depth found for contig " << name << "\n";
-                exit(1);
-            }
-            float depth = std::stof(depth_string.substr(5, depth_string.size()-5));
-            coverage[name] = depth;
-            pos_of_contig_seq_in_file[name] = pos;
-            length_of_contigs[name] = sequence.size();
-
-            if (linked.find(name) == linked.end()){
-                linked[name] = {vector<pair<string,char>>(0), vector<pair<string,char>>(0)};
-            }
-        }
-        else if (line[0] == 'L'){
-            string name1;
-            string name2;
-            string orientation1;
-            string orientation2;
-            string dont_care;
-            std::stringstream ss(line);
-            int i = 0;
-            ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
-
-            if (linked.find(name1) == linked.end() || linked.find(name2) == linked.end()){
-                cerr << "ERROR: contig not found in linked in pop_bubbles: ";
-                cerr << name1 << " " << name2 << "\n";
-                exit(1);
-            }
-
-            char or1 = (orientation1 == "+" ? 1 : 0);
-            char or2 = (orientation2 == "+" ? 0 : 1);
-            auto neighbor = make_pair(name2, or2);
-            if (orientation1 == "+"){
-                if (std::find(linked[name1].second.begin(), linked[name1].second.end(), neighbor) == linked[name1].second.end()){
-                    linked[name1].second.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name1].first.begin(), linked[name1].first.end(), neighbor) == linked[name1].first.end()){
-                    linked[name1].first.push_back(neighbor);
-                }
-            }
-
-            neighbor = make_pair(name1, or1);
-            if (orientation2 == "+"){
-                if (std::find(linked[name2].first.begin(), linked[name2].first.end(), neighbor) == linked[name2].first.end()){
-                    linked[name2].first.push_back(neighbor);
-                }
-            }
-            else{
-                if (std::find(linked[name2].second.begin(), linked[name2].second.end(), neighbor) == linked[name2].second.end()){
-                    linked[name2].second.push_back(neighbor);
-                }
-            }
-        }
-        pos += line.size() + 1;
-    }
-    input.close();
-    
     //now trim the tips, isolated contigs and bubbles with a coverage below min_coverage and a length below min_length (bubbles need to have coverage 1)
-    std::set<string> contigs_to_remove;
-    std::set<std::pair<string, string>> links_to_detach; //contigs that look valid but probably reduce contiguity, detach them from the graph
-    for (auto c: linked){
-        string contig_name = c.first;
+    vector<bool> contigs_to_remove (graph.size(), false);
+    //links of contigs that look valid but probably reduce contiguity, to detach from the graph: ((contig, end), (neighbor, end of neighbor))
+    std::set<pair<pair<int,char>, pair<int,char>>> links_to_detach;
+    for (int contig_name = 0 ; contig_name < graph.size() ; contig_name++){
         //remove tip or isolated contig
-        if (linked[contig_name].first.size() == 0 || linked[contig_name].second.size() == 0){
+        if (links[contig_name][0].size() == 0 || links[contig_name][1].size() == 0){
             if (coverage[contig_name] < min_coverage && (length_of_contigs[contig_name] < min_length || coverage[contig_name]==1)){
-                contigs_to_remove.insert(contig_name);
+                contigs_to_remove[contig_name] = true;
             }
             else { //the contig is valid but detaching it may improve the contiguity
-                if (linked[contig_name].first.size() > 0) {
-                    for (auto l : linked[contig_name].first) {
-                        if (coverage[l.first] > 2 * coverage[contig_name]) {
-                            links_to_detach.insert({contig_name, l.first});
-                        }
+                for (const auto& l : links[contig_name][0]) {
+                    if (coverage[l.first] > 2 * coverage[contig_name]) {
+                        links_to_detach.insert({{contig_name, 0}, l});
                     }
                 }
-                if (linked[contig_name].second.size() > 0) {
-                    for (auto l : linked[contig_name].second) {
-                        if (coverage[l.first] > 2 * coverage[contig_name]) {
-                            links_to_detach.insert({contig_name, l.first});
-                        }
+                for (const auto& l : links[contig_name][1]) {
+                    if (coverage[l.first] > 2 * coverage[contig_name]) {
+                        links_to_detach.insert({{contig_name, 1}, l});
                     }
                 }
             }
         }
         //remove bubble
-        if (linked[contig_name].first.size() == 1 && linked[contig_name].second.size() == 1) {
-            string neighbor_left = linked[contig_name].first[0].first;
-            char end_of_neighbor_left = linked[contig_name].first[0].second;
-            string neighbor_right = linked[contig_name].second[0].first;
-            char end_of_neighbor_right = linked[contig_name].second[0].second;
+        if (links[contig_name][0].size() == 1 && links[contig_name][1].size() == 1) {
+            int neighbor_left = links[contig_name][0][0].first;
+            char end_of_neighbor_left = links[contig_name][0][0].second;
+            int neighbor_right = links[contig_name][1][0].first;
+            char end_of_neighbor_right = links[contig_name][1][0].second;
 
-            // Check if this looks like a bubble to remove or detach
-            bool is_simple_bubble = (coverage[contig_name] == 1);
-            
 
             if (coverage[contig_name] == 1 || hard_contiguity) {
-                string other_neighbor_of_contig_left = "";
-                if (end_of_neighbor_left == 0 && linked[neighbor_left].first.size() == 2) {
-                    for (auto l : linked[neighbor_left].first) {
+                int other_neighbor_of_contig_left = -1;
+                if (end_of_neighbor_left == 0 && links[neighbor_left][0].size() == 2) {
+                    for (const auto& l : links[neighbor_left][0]) {
                         if (l.first != contig_name) {
                             other_neighbor_of_contig_left = l.first;
                         }
                     }
-                } else if (end_of_neighbor_left == 1 && linked[neighbor_left].second.size() == 2) {
-                    for (auto l : linked[neighbor_left].second) {
+                } else if (end_of_neighbor_left == 1 && links[neighbor_left][1].size() == 2) {
+                    for (const auto& l : links[neighbor_left][1]) {
                         if (l.first != contig_name) {
                             other_neighbor_of_contig_left = l.first;
                         }
                     }
                 }
 
-                string other_neighbor_of_contig_right = "";
-                if (end_of_neighbor_right == 0 && linked[neighbor_right].first.size() == 2) {
-                    for (auto l : linked[neighbor_right].first) {
+                int other_neighbor_of_contig_right = -1;
+                if (end_of_neighbor_right == 0 && links[neighbor_right][0].size() == 2) {
+                    for (const auto& l : links[neighbor_right][0]) {
                         if (l.first != contig_name) {
                             other_neighbor_of_contig_right = l.first;
                         }
                     }
-                } else if (end_of_neighbor_right == 1 && linked[neighbor_right].second.size() == 2) {
-                    for (auto l : linked[neighbor_right].second) {
+                } else if (end_of_neighbor_right == 1 && links[neighbor_right][1].size() == 2) {
+                    for (const auto& l : links[neighbor_right][1]) {
                         if (l.first != contig_name) {
                             other_neighbor_of_contig_right = l.first;
                         }
                     }
                 }
 
-                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != "") {
+                if (other_neighbor_of_contig_left == other_neighbor_of_contig_right && other_neighbor_of_contig_left != -1) {
                     // This is a real bubble with two paths between same pair of nodes
                     if (coverage[contig_name] < coverage[other_neighbor_of_contig_left] && coverage[contig_name] < min_coverage) {
-                        contigs_to_remove.insert(contig_name);
-                        contigs_to_remove.insert(contig_name);
+                        contigs_to_remove[contig_name] = true;
                     }
                     else if (hard_contiguity && coverage[contig_name]*length_of_contigs[contig_name] < coverage[other_neighbor_of_contig_left]*length_of_contigs[other_neighbor_of_contig_left]){
-                        links_to_detach.insert({contig_name, neighbor_left});
-                        links_to_detach.insert({neighbor_left, contig_name});
-                        links_to_detach.insert({contig_name, neighbor_right});
-                        links_to_detach.insert({neighbor_right, contig_name});
+                        links_to_detach.insert({{contig_name, 0}, links[contig_name][0][0]});
+                        links_to_detach.insert({{contig_name, 1}, links[contig_name][1][0]});
                     }
                 }
             }
         }
         //if contig attached among contigs of higher coverage, detach
-        if (linked[contig_name].first.size() > 0 && linked[contig_name].second.size() > 0) {
+        if (links[contig_name][0].size() > 0 && links[contig_name][1].size() > 0) {
             // Check if all neighbors have significantly higher coverage
             bool all_neighbors_higher_coverage = true;
-            for (auto l : linked[contig_name].first) {
+            for (const auto& l : links[contig_name][0]) {
                 if (coverage[l.first] < 2 * coverage[contig_name]) {
                     all_neighbors_higher_coverage = false;
                     break;
                 }
             }
             if (all_neighbors_higher_coverage) {
-                for (auto l : linked[contig_name].second) {
+                for (const auto& l : links[contig_name][1]) {
                     if (coverage[l.first] < 2 * coverage[contig_name]) {
                         all_neighbors_higher_coverage = false;
                         break;
@@ -2178,13 +1759,13 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
                 bool all_neighbors_have_alternatives = true;
                 
                 // Check left neighbors
-                for (auto l : linked[contig_name].first) {
-                    string neighbor = l.first;
+                for (const auto& l : links[contig_name][0]) {
+                    int neighbor = l.first;
                     char neighbor_end = l.second;
-                    auto& neighbor_links = (neighbor_end == 0) ? linked[neighbor].first : linked[neighbor].second;
+                    auto& neighbor_links = (neighbor_end == 0) ? links[neighbor][0] : links[neighbor][1];
                     
                     bool has_better_alternative = false;
-                    for (auto alt_link : neighbor_links) {
+                    for (const auto& alt_link : neighbor_links) {
                         if (alt_link.first != contig_name && coverage[alt_link.first] >= 2*coverage[contig_name]) {
                             has_better_alternative = true;
                             break;
@@ -2198,13 +1779,13 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
                 
                 // Check right neighbors
                 if (all_neighbors_have_alternatives) {
-                    for (auto l : linked[contig_name].second) {
-                        string neighbor = l.first;
+                    for (const auto& l : links[contig_name][1]) {
+                        int neighbor = l.first;
                         char neighbor_end = l.second;
-                        auto& neighbor_links = (neighbor_end == 0) ? linked[neighbor].first : linked[neighbor].second;
+                        auto& neighbor_links = (neighbor_end == 0) ? links[neighbor][0] : links[neighbor][1];
                         
                         bool has_better_alternative = false;
-                        for (auto alt_link : neighbor_links) {
+                        for (const auto& alt_link : neighbor_links) {
                             if (alt_link.first != contig_name && coverage[alt_link.first] >= 2*coverage[contig_name]) {
                                 has_better_alternative = true;
                                 break;
@@ -2219,11 +1800,11 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
                 
                 if (all_neighbors_have_alternatives) {
                     // Detach all links of the contig
-                    for (auto l : linked[contig_name].first) {
-                        links_to_detach.insert({contig_name, l.first});
+                    for (const auto& l : links[contig_name][0]) {
+                        links_to_detach.insert({{contig_name, 0}, l});
                     }
-                    for (auto l : linked[contig_name].second) {
-                        links_to_detach.insert({contig_name, l.first});
+                    for (const auto& l : links[contig_name][1]) {
+                        links_to_detach.insert({{contig_name, 1}, l});
                     }
                 }
             }
@@ -2231,7 +1812,8 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
     }
 
     //now write the gfa file without the contigs to remove
-    input.open(gfa_in);
+    ifstream input(gfa_in);
+    string line;
     ofstream out(gfa_out);
     while (std::getline(input, line))
     {
@@ -2242,7 +1824,7 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
             string sequence;
             std::stringstream ss(line);
             ss >> dont_care >> name >> sequence;
-            if (contigs_to_remove.find(name) == contigs_to_remove.end()){
+            if (!contigs_to_remove[graph.find(name)]){
                 out << line << "\n";
             }
         }
@@ -2256,10 +1838,12 @@ void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage
             int i = 0;
             ss >> dont_care >> name1 >> orientation1 >> name2 >> orientation2;
 
-            if (contigs_to_remove.find(name1) == contigs_to_remove.end() 
-                && contigs_to_remove.find(name2) == contigs_to_remove.end()
-                && links_to_detach.find({name1, name2}) == links_to_detach.end() 
-                && links_to_detach.find({name2, name1}) == links_to_detach.end()){
+            pair<int,char> end1 = {graph.find(name1), (orientation1 == "+" ? 1 : 0)};
+            pair<int,char> end2 = {graph.find(name2), (orientation2 == "+" ? 0 : 1)};
+            if (!contigs_to_remove[graph.find(name1)]
+                && !contigs_to_remove[graph.find(name2)]
+                && links_to_detach.find({end1, end2}) == links_to_detach.end() 
+                && links_to_detach.find({end2, end1}) == links_to_detach.end()){
                 out << line << "\n";
             }
         }
@@ -2276,9 +1860,11 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
     //in a first pass index all the segments by their name
     ifstream gfa(gfa_file);
     string line;
+    long int next_pos_in_file = 0;
     while (getline(gfa, line)){
+        long int pos_in_file = next_pos_in_file;
+        next_pos_in_file += line.size() + 1;
         if (line[0] == 'S'){
-            long int pos_in_file = (long int) gfa.tellg() - line.size() - 1;
             stringstream ss(line);
             string nothing, name, seq;
             ss >> nothing >> name >> seq;
@@ -2295,12 +1881,12 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
             if (load_in_RAM == false){
                 Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq.size(), coverage);
                 segment_IDs[name] = s.ID;
-                segments.push_back(s);
+                segments.push_back(std::move(s));
             }
             else{
                 Segment s(name, segments.size(), vector<pair<vector<pair<int,int>>, vector<string>>>(2), pos_in_file, seq, seq.size(), coverage);
                 segment_IDs[name] = s.ID;
-                segments.push_back(s);
+                segments.push_back(std::move(s));
             }
         }
     }
@@ -2327,12 +1913,18 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
                 end2 = 1;
             }
 
-            int ID1 = segment_IDs[name1];
-            int ID2 = segment_IDs[name2];
+            auto it1 = segment_IDs.find(name1);
+            auto it2 = segment_IDs.find(name2);
+            if (it1 == segment_IDs.end() || it2 == segment_IDs.end()){
+                cerr << "WARNING: link between unknown segments ignored in " << gfa_file << ": " << line << "\n";
+                continue;
+            }
+            int ID1 = it1->second;
+            int ID2 = it2->second;
 
             //check that the link did not already exist
             bool already_exists = false;
-            for (pair<int,int> link : segments[ID1].links[end1].first){
+            for (const pair<int,int>& link : segments[ID1].links[end1].first){
                 if (link.first == ID2 && link.second == end2){
                     already_exists = true;
                 }
@@ -2361,8 +1953,12 @@ void load_GFA(string gfa_file, vector<Segment> &segments, unordered_map<string, 
  */
 void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_segments, string original_gfa_file, bool rename, int num_threads){
 
-    set<int> already_looked_at_segments; //old IDs of segments that have already been looked at and merged (don't want to merge them twice)
-    unordered_map<pair<int,int>,pair<int,int>> old_ID_to_new_ID; //associates (old_id, old end) with (new_id, new_end)
+    //old IDs of segments that have already been looked at and merged (don't want to merge them twice). Atomic because it is read outside of the critical section
+    vector<std::atomic<bool>> already_looked_at_segments (old_segments.size());
+    for (auto& a : already_looked_at_segments){
+        a = false;
+    }
+    unordered_map<pair<int,int>,pair<int,int>, PairHash> old_ID_to_new_ID; //associates (old_id, old end) with (new_id, new_end)
     int number_of_merged_contigs = 0;
     set<pair<pair<pair<int,int>, pair<int,int>>,string>> links_to_add; //list of links to add, all in old IDs and old ends
     omp_lock_t lock_new_segment; //locks the creating of new segments, including the additions to links_to_add
@@ -2391,9 +1987,9 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         int thread_num = omp_get_thread_num();
 
         auto time_start = std::chrono::high_resolution_clock::now();
-        Segment old_seg = old_segments[seg_idx];
+        Segment& old_seg = old_segments[seg_idx];
 
-        if (already_looked_at_segments.find(old_seg.ID) != already_looked_at_segments.end()){
+        if (already_looked_at_segments[old_seg.ID]){
             continue;
         }
         //check if it has either at least two neighbors left or that its neighbor left has at least two neighbors right
@@ -2444,8 +2040,8 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     seq = reverse_complement(seq);
                 }
                 //trim the sequence if there is a CIGAR
-                int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
-                all_seqs[thread_num].push_back(seq.substr(num_matches, seq.size()-num_matches));
+                size_t num_matches = min((size_t) overlap_length_of_CIGAR(cigar), seq.size());
+                all_seqs[thread_num].push_back(seq.substr(num_matches));
                 all_coverages[thread_num].push_back(old_segments[current_ID].get_coverage());
                 all_lengths[thread_num].push_back(old_segments[current_ID].get_length());
                 all_IDs[thread_num].push_back(current_ID);
@@ -2479,8 +2075,8 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     seq = reverse_complement(seq);
                 }
                 //trim the sequence if there is a CIGAR
-                int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
-                all_seqs[thread_num].push_back(seq.substr(num_matches, seq.size()-num_matches));
+                size_t num_matches = min((size_t) overlap_length_of_CIGAR(cigar), seq.size());
+                all_seqs[thread_num].push_back(seq.substr(num_matches));
                 all_coverages[thread_num].push_back(old_segments[current_ID].get_coverage());
                 all_lengths[thread_num].push_back(old_segments[current_ID].get_length());
                 all_IDs[thread_num].push_back(current_ID);
@@ -2496,12 +2092,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         bool thread_safe = true;
         #pragma omp critical
         {
-            if (already_looked_at_segments.find(old_seg.ID) != already_looked_at_segments.end() || already_looked_at_segments.find(other_end_of_merged_contig_ID) != already_looked_at_segments.end()){
+            if (already_looked_at_segments[old_seg.ID] || already_looked_at_segments[other_end_of_merged_contig_ID]){
                 thread_safe = false;
             }
             else{
                 for (int ID : all_IDs[thread_num]){
-                    already_looked_at_segments.insert(ID);
+                    already_looked_at_segments[ID] = true;
                 }
             }
         }
@@ -2539,12 +2135,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             else if (dead_end_left && !dead_end_right){
                 //create the new contig
                 string new_name = "";
-                for (string name : all_names[thread_num]){
+                for (const string& name : all_names[thread_num]){
                     new_name += name + "_";
                 }
                 new_name = new_name.substr(0, new_name.size()-1);
                 string new_seq = "";
-                for (string seq : all_seqs[thread_num]){
+                for (const string& seq : all_seqs[thread_num]){
                     new_seq += seq;
                 }
                 double new_coverage = 0;
@@ -2564,7 +2160,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     number_of_merged_contigs++;
                 }
 
-                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), (int) new_seq.size(), new_coverage)); //coverage is weighted by the lengths of the original segments
                 new_segments[new_segments.size()-1].seq = new_seq;
                 old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
                 old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
@@ -2586,12 +2182,12 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
             
                 //create the new contig
                 string new_name = "r";
-                for (string name : all_names[thread_num]){
+                for (const string& name : all_names[thread_num]){
                     new_name += name + "_";
                 }
                 new_name = new_name.substr(0, new_name.size()-1);
                 string new_seq = "";
-                for (string seq : all_seqs[thread_num]){
+                for (const string& seq : all_seqs[thread_num]){
                     new_seq += seq;
                 }
                 double new_coverage = 0;
@@ -2611,7 +2207,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     number_of_merged_contigs++;
                 }
 
-                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), (int) new_seq.size(), new_coverage)); //coverage is weighted by the lengths of the original segments
                 new_segments[new_segments.size()-1].seq = new_seq;
                 old_ID_to_new_ID[{old_seg.ID, 1}] = {new_segments.size() - 1, 0};
                 old_ID_to_new_ID[{other_end_of_merged_contig_ID, other_end_of_merged_contig_end}] = {new_segments.size() - 1, 1};
@@ -2640,8 +2236,8 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
     omp_destroy_lock(&lock_new_segment);
 
     //some contigs are left: the ones that were in circular rings... go through them and add them
-    for (Segment old_seg : old_segments){
-        if (already_looked_at_segments.find(old_seg.ID) == already_looked_at_segments.end()){
+    for (Segment& old_seg : old_segments){
+        if (!already_looked_at_segments[old_seg.ID]){
             int current_ID = old_seg.ID;
             int current_end = 1;
             vector<string> all_names = {old_seg.name};
@@ -2653,7 +2249,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                 if (old_segments[current_ID].links[current_end].first[0].first == old_seg.ID){
                     break;
                 }
-                already_looked_at_segments.insert(current_ID);
+                already_looked_at_segments[current_ID] = true;
                 string cigar = old_segments[current_ID].links[current_end].second[0];
                 int tmp_current_end = 1-old_segments[current_ID].links[current_end].first[0].second;
                 current_ID = old_segments[current_ID].links[current_end].first[0].first;
@@ -2665,23 +2261,23 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     seq = reverse_complement(seq);
                 }
                 //trim the sequence if there is a CIGAR
-                int num_matches = std::stoi(cigar.substr(0, cigar.find_first_of("M")));
-                all_seqs.push_back(seq.substr(num_matches, seq.size()-num_matches));
+                size_t num_matches = min((size_t) overlap_length_of_CIGAR(cigar), seq.size());
+                all_seqs.push_back(seq.substr(num_matches));
                 all_coverages.push_back(old_segments[current_ID].get_coverage());
                 all_lengths.push_back(old_segments[current_ID].get_length());
             }
-            if (old_segments[current_ID].links[current_end].first[0].first != old_seg.ID){
+            if (old_segments[current_ID].links[current_end].first.size() != 1 || old_segments[current_ID].links[current_end].first[0].first != old_seg.ID){
                 circular_as_expected = false;
             }
             if (circular_as_expected){
-                already_looked_at_segments.insert(current_ID);
+                already_looked_at_segments[current_ID] = true;
                 string new_name = "";
-                for (string name : all_names){
+                for (const string& name : all_names){
                     new_name += name + "_";
                 }
                 new_name = new_name.substr(0, new_name.size()-1);
                 string new_seq = "";
-                for (string seq : all_seqs){
+                for (const string& seq : all_seqs){
                     new_seq += seq;
                 }
                 double new_coverage = 0;
@@ -2699,7 +2295,7 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
                     name = std::to_string(number_of_merged_contigs);
                     number_of_merged_contigs++;
                 }
-                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), new_length, new_coverage));
+                new_segments.push_back(Segment(name, new_segments.size(), old_seg.get_pos_in_file(), (int) new_seq.size(), new_coverage)); //coverage is weighted by the lengths of the original segments
                 new_segments[new_segments.size()-1].seq = new_seq;
 
                 old_ID_to_new_ID[{old_seg.ID, 0}] = {new_segments.size() - 1, 0};
@@ -2718,22 +2314,26 @@ void merge_adjacent_contigs(vector<Segment> &old_segments, vector<Segment> &new_
         }
     }
 
-    //now add the links in the new segments
-    for (pair<pair<pair<int,int>, pair<int,int>>, string> link : links_to_add){
-        new_segments[old_ID_to_new_ID[link.first.first].first].links[old_ID_to_new_ID[link.first.first].second].first.push_back(old_ID_to_new_ID[link.first.second]);
-        new_segments[old_ID_to_new_ID[link.first.first].first].links[old_ID_to_new_ID[link.first.first].second].second.push_back(link.second);
+    //now add the links in the new segments (skipping the links to segments that were discarded)
+    for (const pair<pair<pair<int,int>, pair<int,int>>, string>& link : links_to_add){
+        auto from = old_ID_to_new_ID.find(link.first.first);
+        auto to = old_ID_to_new_ID.find(link.first.second);
+        if (from == old_ID_to_new_ID.end() || to == old_ID_to_new_ID.end()){
+            continue;
+        }
+        new_segments[from->second.first].links[from->second.second].first.push_back(to->second);
+        new_segments[from->second.first].links[from->second.second].second.push_back(link.second);
     }
 }
 
 void output_graph(string gfa_output, string gfa_input, vector<Segment> &segments){
     ofstream gfa(gfa_output);
-    for (Segment s : segments){
+    for (Segment& s : segments){
         if (s.name != "delete_me"){
             gfa << "S\t" << s.name << "\t" << s.get_seq(gfa_input) << "\tDP:f:" << s.get_coverage() <<  "\n";
         }
     }
-    int nb_segments_outputted = 0;
-    for (Segment s : segments){
+    for (Segment& s : segments){
         for (int end = 0 ; end < 2 ; end++){
             for (int neigh = 0 ; neigh < s.links[end].first.size() ; neigh++){
 

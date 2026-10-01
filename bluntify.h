@@ -3,8 +3,6 @@
 
 #include <string>
 
-std::string reverse_complement(const std::string& seq);
-
 void basic_overlap_removal(const std::string& gfa_in, const std::string& gfa_out);
 void fancier_overlap_removal(const std::string& gfa_in, const std::string& gfa_out,
 							int short_contig_length = 0);

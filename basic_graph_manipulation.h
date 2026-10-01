@@ -2,6 +2,8 @@
 #define BGM_H
 
 #include <string>
+#include <array>
+#include <vector>
 #include <unordered_map>
 #include <fstream>
 #include <sstream>
@@ -9,32 +11,42 @@
 #include "rolling_hash.h"
 
 std::string reverse_complement(std::string& seq);
+
+//quote a file path for a shell command line (paths may contain spaces or shell characters)
+inline std::string shell_quote(const std::string& path){
+    std::string quoted = "'";
+    for (char c : path){
+        if (c == '\''){
+            quoted += "'\\''";
+        }
+        else{
+            quoted += c;
+        }
+    }
+    return quoted + "'";
+}
 void gfa_to_fasta(std::string gfa, std::string fasta);
 void sort_GFA(std::string gfa);
 
-void shave(std::string input_file, std::string output_file, int max_length);
 void pop_and_shave_graph(std::string gfa_in, int abundance_min, int min_length, int k, std::string gfa_out, int extra_coverage, int num_threads, bool single_genome);
-void trim_graph_for_next_k(std::string gfa_in, std::string gfa_out,  int k, int extra_coverage, int num_threads);
-void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out);
+void cut_links_for_contiguity(std::string gfa_in, std::string gfa_out, int k);
 void trim_tips_isolated_contigs_and_bubbles(std::string gfa_in, int min_coverage, int min_length, std::string gfa_out, bool single_genome, bool hard_contiguity);
-void merge_adjacent_contigs_BCALM(std::string gfa_in, std::string gfa_out, int k, std::string path_to_bcalm, std::string path_convertToGFA, std::string path_tmp_folder);
 
 void create_corrected_reads_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, bool hard_correct, robin_hood::unordered_flat_map<std::string, float>& coverages, int num_threads);
 void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string reads_file, std::string output_file, robin_hood::unordered_flat_map<std::string, float>& coverages, int num_threads);
 void add_coverages_to_graph(std::string gfa, robin_hood::unordered_map<std::string, float>& coverages);
 
-void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overlap, int default_overlap);
+void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overlap, int default_overlap, double bases_per_compressed_base, int num_threads);
+long long total_sequence_length(std::string gfa);
+int overlap_length_of_CIGAR(const std::string& cigar);
 
 
-namespace std {
-    template <>
-    class hash<std::pair<int, int>> {
-    public:
-        size_t operator()(const std::pair<int, bool>& pair) const {
-            return std::hash<int>()(pair.first) ^ std::hash<int>()(pair.second);
-        }
-    };
-}
+//hash of a pair of ints (e.g. (ID, end) of a segment)
+struct PairHash {
+    size_t operator()(const std::pair<int, int>& p) const {
+        return std::hash<long long>()(((long long) p.first << 32) ^ (unsigned int) p.second);
+    }
+};
 
 
 class Segment{
@@ -53,7 +65,6 @@ class Segment{
             this->length = length;
             this->coverage = coverage;
             this->original_coverage = coverage;
-            this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
 
@@ -65,7 +76,6 @@ class Segment{
             this->length = length;
             this->coverage = coverage;
             this->original_coverage = coverage;
-            this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
 
@@ -78,13 +88,9 @@ class Segment{
             this->length = length;
             this->coverage = coverage;
             this->original_coverage = coverage;
-            this->haploid = false;
             this->links = std::vector<std::pair<std::vector<std::pair<int,int>>, std::vector<std::string>>>(2);
         }
 
-        bool is_haploid(){return this->haploid;}
-        std::vector<std::pair<int,bool>> get_consensus_left(){return this->consensus_left;}
-        std::vector<std::pair<int,bool>> get_consensus_right(){return this->consensus_right;}
         long int get_pos_in_file(){return this->pos_in_file;}
         double get_coverage(){return this->coverage;}
         double get_original_coverage(){return this->original_coverage;}
@@ -113,8 +119,6 @@ class Segment{
             }
         }
 
-        void add_neighbor(std::vector<std::pair<int,bool>> new_neighbor, bool left);
-
         void decrease_coverage(double coverage_out){
             coverage -= coverage_out;
             if (coverage < 1){
@@ -122,63 +126,14 @@ class Segment{
             }
         }
 
-        void compute_consensuses();
-
-        std::vector<std::vector<std::pair<int,bool>>> get_strong_neighbors_left(int min_coverage);
-        std::vector<std::vector<std::pair<int,bool>>> get_strong_neighbors_right(int min_coverage);
-
-        std::vector<std::vector<std::pair<int,bool>>> get_neighbors_left(){return neighbors_left;}
-        std::vector<std::vector<std::pair<int,bool>>> get_neighbors_right(){return neighbors_right;}
-
-        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> > get_neighbors_left_with_strengths(){return neighbors_left_with_strengths;}
-        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> > get_neighbors_right_with_strengths(){return neighbors_right_with_strengths;}
-
-        bool operator!=(const Segment& other) const {
-            return !(*this == other);
-        }
-
-        bool operator==(const Segment& other) const {
-            return name == other.name &&
-                   ID == other.ID &&
-                   links == other.links &&
-                   pos_in_file == other.pos_in_file &&
-                   seq == other.seq &&
-                   length == other.length &&
-                   coverage == other.coverage &&
-                   original_coverage == other.original_coverage &&
-                   haploid == other.haploid &&
-                   consensus_left == other.consensus_left &&
-                   consensus_right == other.consensus_right &&
-                   neighbors_left_with_strengths == other.neighbors_left_with_strengths &&
-                   neighbors_right_with_strengths == other.neighbors_right_with_strengths &&
-                   neighbors_left == other.neighbors_left &&
-                   neighbors_right == other.neighbors_right;
-        }
-
-        //the hash of the segment is the hash of the name
-        size_t hash() const{
-            return std::hash<std::string>{}(name);
-        }
-
         std::string seq;
 
 
     private:
-        //consensus sequences of contigs left and right
-        std::vector<std::pair<int,bool>> consensus_left;
-        std::vector<std::pair<int,bool>> consensus_right;
-
-        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>>> neighbors_left_with_strengths; //first pair is the path, second pair is the number of reads supporting and disagreeing with the path
-        std::vector<std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>>> neighbors_right_with_strengths; //first pair is the path, second pair is the number of reads supporting and disagreeing with the path
-
-        std::vector<std::vector<std::pair<int,bool>>> neighbors_left; //each path is a std::vector of std::pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
-        std::vector<std::vector<std::pair<int,bool>>> neighbors_right; //each path is a std::vector of std::pairs (ID, orientation) of the contigs in the path and a strength (number of reads)
-
         long int pos_in_file;
         double coverage;
         double original_coverage; //same thing as coverage but cannot be decreased
         int length;
-        bool haploid;
 
 };
 
@@ -186,7 +141,6 @@ void load_GFA(std::string gfa_file, std::vector<Segment> &segments, robin_hood::
 void merge_adjacent_contigs(std::vector<Segment> &old_segments, std::vector<Segment> &new_segments, std::string original_gfa_file, bool rename, int num_threads);
 void output_graph(std::string gfa_output, std::string gfa_input, std::vector<Segment> &segments);
 
-std::vector<std::vector<std::pair<std::string, bool>>> list_all_paths_from_contig(robin_hood::unordered_map<std::string, std::pair<std::vector<std::pair<std::string, char>>, std::vector<std::pair<std::string,char>>>>& linked, const std::string& start_contig_name, bool start_orientation, int max_length, robin_hood::unordered_flat_map<std::string, int>& length_of_contigs, int km);
 
 
 

@@ -36,17 +36,11 @@ int main(int argc, char** argv)
 {
 
     //use clipp to parse the command line
-    bool help = false;
     string input_file, output_file;
-    string assembler = "custom";
-    bool rescue = false;
-    bool contiguity = false;
-    int min_abundance = 5;
     int order = 101;
     int compression = 20;
     int num_threads = 1;
     bool no_hpc = false;
-    bool clean = false;
     auto cli = (
         //input/output option
         clipp::required("-s", "--seq").doc("input file (fasta/q)") & clipp::opt_value("r",input_file),
@@ -59,17 +53,14 @@ int main(int argc, char** argv)
         clipp::option("-l", "--order").doc("order of MSR compression (odd) [101]") & clipp::opt_value("o", order),
         clipp::option("-c", "--compression").doc("compression factor [20]") & clipp::opt_value("c", compression),
         clipp::option("-H", "--no-hpc").set(no_hpc).doc("turn off homopolymer compression")
-
-
     );
-
-    bool homopolymer_compression = !no_hpc;
 
     if(!clipp::parse(argc, argv, cli)) {
         cout << "Could not parse the arguments" << endl;
         cout << clipp::make_man_page(cli, argv[0]);
         exit(1);
     }
+    bool homopolymer_compression = !no_hpc; //must be read after parsing the command line
 
     if (order % 2 == 0){
         cerr << "WARNING: order (-l) must be odd because of lousy software engineering, changing l to " << order-1 << "\n";
@@ -79,11 +70,11 @@ int main(int argc, char** argv)
     
     string compressed_file = output_file;
 
-    int km = 31; //size of the kmer used to do the expansion. Must be >21
+    //gzipped, FASTQ, multi-line or lowercase inputs are converted to single-line FASTA next to the output file
+    string output_folder = output_file.find_last_of('/') == string::npos ? "" : output_file.substr(0, output_file.find_last_of('/')+1);
+    input_file = prepare_reads(input_file, output_folder);
 
-    auto time_start = std::chrono::high_resolution_clock::now();
     reduce(input_file, compressed_file, order, compression, num_threads, homopolymer_compression);
-    auto time_reduced = std::chrono::high_resolution_clock::now();
 
     return 0;
 }
