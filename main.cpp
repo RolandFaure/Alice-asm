@@ -39,7 +39,7 @@ using std::set;
 #define RESET_TEXT "\033[0m"
 
 string version = "0.8.0";
-string date = "2026-03-13";
+string date = "2026-10-01";
 string author = "Roland Faure";
 
 //small function to exaceute a shell command and catch the result
