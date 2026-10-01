@@ -227,7 +227,7 @@ int main(int argc, char** argv)
 
         //Assembly options for the custom assembler
         clipp::option("-m", "--min-abundance").doc("minimum abundance of kmer to consider solid - RECOMMENDED to set to coverage/2 if single-genome [5]") & clipp::opt_value("m", min_abundance),
-        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,21,31]") & clipp::opt_value("k", kmer_sizes),
+        clipp::option("-k", "--kmer-sizes").doc("comma-separated increasing sizes of k for assembly, must go at least to 31 [17,21,31,61,101,191]") & clipp::opt_value("k", kmer_sizes),
         clipp::option("--single-genome").set(single_genome).doc("Switch on if assembling a single genome"),
         clipp::option("--contiguity").set(contiguity).doc("Favors contiguity by popping bubbles in the gfa graph [off]"),
 

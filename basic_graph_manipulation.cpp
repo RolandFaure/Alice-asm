@@ -213,12 +213,30 @@ void compute_exact_CIGARs(std::string gfa_in, std::string gfa_out, int max_overl
                 overlap = 0;
             }
             else{
+                //look for the smallest overlap >= 30 for which the whole suffix of seq1 equals the prefix of seq2
+                //(checking only a 30bp seed picks wrong overlaps in repeats / low-complexity sequence)
+                //if no exact overlap exists (e.g. an error at the end of a contig), fall back on the smallest overlap
+                //for which the 30bp seed matches
                 string end1 = seq1.substr(seq1.size()-30, 30); 
-                while (overlap < seq1.size() && overlap < seq2.size() && overlap < max_overlap && end1 != seq2.substr(overlap-30, 30) ){
+                bool found = false;
+                int first_seed_hit = -1;
+                while (overlap <= seq1.size() && overlap <= seq2.size() && overlap <= max_overlap){
+                    if (end1 == seq2.substr(overlap-30, 30)){
+                        if (first_seed_hit == -1){
+                            first_seed_hit = overlap;
+                        }
+                        if (seq1.compare(seq1.size()-overlap, overlap, seq2, 0, overlap) == 0){
+                            found = true;
+                            break;
+                        }
+                    }
                     overlap++;
-                    // cout << "overlapping " << end1 << " and " << seq2.substr(overlap-30, 30) << "\n";
                 }
-                if (overlap == seq1.size() || overlap == seq2.size() || overlap == max_overlap){
+                if (!found && first_seed_hit != -1){
+                    overlap = first_seed_hit;
+                    found = true;
+                }
+                if (!found){
                     // cerr << "ERROR: no overlap found between " << name1 << " and " << name2 << "\n";
                     // exit(1);
                     overlap = default_overlap;
