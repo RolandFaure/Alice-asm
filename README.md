@@ -34,14 +34,15 @@ make
      |_|  |_| |_|\___| /_/    \_\_|_|\___\___| /_/    \_\___/___/\___|_| |_| |_|_.__/|_|\___|_|       :__:     `___/  
 
 Command line: ./build/aliceasm --help 
-Alice Assembler version 0.6.41
-Last update: 2025-07-09
+Alice Assembler version 0.8.1
+Last update: 2026-10-02
 Author: Roland Faure
 
 Help: 
 SYNOPSIS
         ./build/aliceasm -r [<r>] -o [<o>] [-t [<t>]] [-l [<o>]] [-c [<c>]] [-H] [-m [<m>]] [-k
-                         [<k>]] [--single-genome] [--bcalm [<b>]] [--clean] [--test [<t>]] [-v] [-h]
+                         [<k>]] [--single-genome] [--contiguity] [-a [<a>]] [--bcalm [<b>]]
+                         [--spades [<s>]] [--clean] [-v] [-h]
 
 OPTIONS
         -r, --reads input file (fasta/q)
@@ -64,12 +65,19 @@ OPTIONS
 
         -k, --kmer-sizes
                     comma-separated increasing sizes of k for assembly, must go at least to 31
-                    [17,31]
+                    [21,31,61,101,191]
 
         --single-genome
                     Switch on if assembling a single genome
 
+        --contiguity
+                    Favors contiguity by popping bubbles in the gfa graph [off]
+
+        -a, --assembler
+                    assembler to use {custom, spades} [custom]
+
         --bcalm     path to bcalm [bcalm]
+        --spades    path to spades [spades.py]
         --clean     remove the tmp folder at the end [off]
         -v, --version
                     print version and exit
@@ -94,6 +102,8 @@ If you want to make sure the assembly was successful, the assembly I obtained is
 ## Can I use Alice for both genomic and metagenomic use cases ?
 
 Yes! If you are trying to assemble a single genome, it is recommended to use flag --single-genome and set -m to expected-coverage/2 in order to simplify the output graph.
+
+If you favor contiguity over the representation of strain-level variants, use --contiguity: the less covered branch of the bubbles of the final graph is detached, which yields longer contigs but contigs that may mix closely related strains.
 
 ## Citation
 Please cite the preprint: [https://www.biorxiv.org/content/10.1101/2025.09.29.679204v1](https://www.biorxiv.org/content/10.1101/2025.09.29.679204v1)
