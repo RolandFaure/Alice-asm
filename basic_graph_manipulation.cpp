@@ -837,7 +837,9 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                             current_path.start_position_on_contig = pos_in_contig;
                         }
                         
-                        if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == true){
+                        //same contig, moving forward on it: the read is still on it. If the position moved backward, the read went around a loop (e.g. a circular contig)
+                        if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == true
+                            && pos_in_contig + km >= current_path.end_position_on_contig){
                             current_path.end_position_on_contig = pos_in_contig + km;
                         }
                         else{
@@ -905,7 +907,8 @@ void create_gaf_from_unitig_graph(std::string unitig_graph, int km, std::string 
                             current_path.start_position_on_contig = graph.length[contig] - pos_in_contig - km;
                         }
                         
-                        if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == false){
+                        if (current_path.contigs.size() > 0 && current_path.contigs[current_path.contigs.size()-1] == contig && current_path.orientations[current_path.orientations.size()-1] == false
+                            && graph.length[contig] - pos_in_contig >= current_path.end_position_on_contig){
                             current_path.end_position_on_contig = graph.length[contig] - pos_in_contig;
                         }
                         else{
@@ -1407,14 +1410,22 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
         else if ((abundance_min != -1 && coverage[contig] > abundance_min) || length_of_contigs[contig] > min_length){ 
             
             int size_of_neighborhood = 7*k;
+            //coverage above which a neighbor makes this contig look like an error. The better covered the contig, the more
+            //overwhelming the neighbor must be: well-covered contigs squeezed between copies of a high-copy repeat are real
+            double big_coverage = 200*coverage[contig];
+            if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
+                big_coverage = 3*coverage[contig];
+            }
+            else if (coverage[contig] <= 10){
+                big_coverage = 20*coverage[contig];
+            }
+            else if (coverage[contig] <= 20){
+                big_coverage = 50*coverage[contig];
+            }
             // cout << "launching..\n";
             int overcovered_right = 2;
             std::atomic<uint8_t>& not_overcovered_contig = not_overcovered[contig];
             if (!(not_overcovered_contig & NOT_OVERCOVERED_RIGHT)){
-                double big_coverage = 20*coverage[contig];
-                if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
-                    big_coverage = 3*coverage[contig];
-                }
                 unordered_flat_map<uint64_t, int8_t> memo;
                 overcovered_right = explore_neighborhood(contig, 0, links, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered, memo);
             }
@@ -1423,10 +1434,6 @@ void pop_and_shave_graph(string gfa_in, int abundance_min, int min_length, int k
             }
             int overcovered_left = 2;
             if (!(not_overcovered_contig & NOT_OVERCOVERED_LEFT)){
-                double big_coverage = 20*coverage[contig];
-                if (coverage[contig] < 5){ //not very solid, don't make such a fuss about deleting it
-                    big_coverage = 3*coverage[contig];
-                }
                 unordered_flat_map<uint64_t, int8_t> memo;
                 overcovered_left = explore_neighborhood(contig, 1, links, coverage, length_of_contigs, k, size_of_neighborhood, coverage[contig], big_coverage, not_overcovered, memo);
             }

@@ -881,8 +881,8 @@ void create_haploid_contigs(vector<Segment> &old_segments, vector<Segment> &new_
  */
 class UnrepresentedPathsAdder{
 public:
-    UnrepresentedPathsAdder(vector<Segment> &old_segments, vector<Segment> &new_segments, unordered_map<int, std::vector<int>>& old_ID_to_new_IDs, int min_coverage, const ReadPathsInfo& paths)
-        : old_segments(old_segments), new_segments(new_segments), old_ID_to_new_IDs(old_ID_to_new_IDs), min_coverage(min_coverage){
+    UnrepresentedPathsAdder(vector<Segment> &old_segments, vector<Segment> &new_segments, unordered_map<int, std::vector<int>>& old_ID_to_new_IDs, const ReadPathsInfo& paths)
+        : old_segments(old_segments), new_segments(new_segments), old_ID_to_new_IDs(old_ID_to_new_IDs){
         for (size_t s_idx = 0 ; s_idx < old_segments.size() ; s_idx++){ //we are not going to create new versions of haploid contigs
             Segment& s = old_segments[s_idx];
             if (paths.is_haploid(s_idx)){
@@ -893,16 +893,9 @@ public:
 
     //convert an unrepresented path in a list of links that must be there in the final graph
     void add(const vector<pair<int,bool>>& path){
-        //compute the coverage of the path
-        double coverage = old_segments[path[0].first].get_coverage();
-        for (const pair<int,bool>& contig : path){
-            coverage = std::min(coverage, old_segments[contig.first].get_coverage());
-        }
-        //if the coverage is too low, we don't add the path
-        if (coverage < min_coverage){
-            return;
-        }
-
+        //no coverage filter here: the path is a strong neighbor, so it is already supported by >= min_coverage reads. The
+        //remaining coverage of the segments (after create_haploid_contigs decreased it) must not be used: the bridges often
+        //overdraw the coverage of repeats, which would discard well-supported paths and leave dead ends
         for (int contig = 0 ; contig < path.size() - 1 ; contig++){
 
             int old_ID1 = path[contig].first;
@@ -928,6 +921,7 @@ public:
             if (old_IDs_to_new_non_haploid_IDs.find(old_ID1) == old_IDs_to_new_non_haploid_IDs.end()){
                 new_segments.push_back(Segment(old_segments[old_ID1].name + "_" + std::to_string(old_ID_to_new_IDs[old_ID1].size()) , new_segments.size(), old_segments[old_ID1].get_pos_in_file(), old_segments[old_ID1].get_length(), old_segments[old_ID1].get_coverage()));
                 old_IDs_to_new_non_haploid_IDs[old_ID1] = new_segments.size() - 1;
+                created_copies.push_back({(int) new_segments.size() - 1, old_ID1});
                 if (old_ID_to_new_IDs.find(old_ID1) == old_ID_to_new_IDs.end()){
                     old_ID_to_new_IDs[old_ID1] = {(int) new_segments.size() - 1};
                 }
@@ -939,6 +933,7 @@ public:
             if (old_IDs_to_new_non_haploid_IDs.find(old_ID2) == old_IDs_to_new_non_haploid_IDs.end()){
                 new_segments.push_back(Segment(old_segments[old_ID2].name + "_" + std::to_string(old_ID_to_new_IDs[old_ID2].size()) , new_segments.size(), old_segments[old_ID2].get_pos_in_file(), old_segments[old_ID2].get_length(), old_segments[old_ID2].get_coverage()));
                 old_IDs_to_new_non_haploid_IDs[old_ID2] = new_segments.size() - 1;
+                created_copies.push_back({(int) new_segments.size() - 1, old_ID2});
                 if (old_ID_to_new_IDs.find(old_ID2) == old_ID_to_new_IDs.end()){
                     old_ID_to_new_IDs[old_ID2] = {(int) new_segments.size() - 1};
                 }
@@ -973,16 +968,44 @@ public:
             new_segments[link.first.second.first].links[link.first.second.second].first.push_back({link.first.first.first, link.first.first.second});
             new_segments[link.first.second.first].links[link.first.second.second].second.push_back(link.second);
         }
+
+        //a path often stops inside the last contig it creates (the reads end there), leaving the far end of the new copy
+        //without any link although the original contig always continues there: link that end to all the copies of the
+        //original neighbors, rather than creating a dead end the reads do not support
+        for (const pair<int,int>& copy : created_copies){
+            int new_ID = copy.first;
+            int old_ID = copy.second;
+            for (int end = 0 ; end < 2 ; end++){
+                if (new_segments[new_ID].links[end].first.size() > 0){
+                    continue;
+                }
+                for (int n = 0 ; n < old_segments[old_ID].links[end].first.size() ; n++){
+                    int old_neighbor = old_segments[old_ID].links[end].first[n].first;
+                    int end_of_neighbor = old_segments[old_ID].links[end].first[n].second;
+                    string cigar = old_segments[old_ID].links[end].second[n];
+                    auto copies_of_neighbor = old_ID_to_new_IDs.find(old_neighbor);
+                    if (copies_of_neighbor == old_ID_to_new_IDs.end()){
+                        continue;
+                    }
+                    for (int new_neighbor : copies_of_neighbor->second){
+                        new_segments[new_ID].links[end].first.push_back({new_neighbor, end_of_neighbor});
+                        new_segments[new_ID].links[end].second.push_back(cigar);
+                        new_segments[new_neighbor].links[end_of_neighbor].first.push_back({new_ID, end});
+                        new_segments[new_neighbor].links[end_of_neighbor].second.push_back(cigar);
+                    }
+                }
+            }
+        }
     }
 
 private:
     vector<Segment> &old_segments;
     vector<Segment> &new_segments;
     unordered_map<int, std::vector<int>>& old_ID_to_new_IDs;
-    int min_coverage;
     unordered_map<int, int> old_IDs_to_new_non_haploid_IDs; //associates old IDs to new IDs for the contig we are going to create
     set<pair<pair<pair<int,int>, pair<int,int>>,string>> links_to_add;
     robin_hood::unordered_flat_set<uint64_t> processed_links;
+    vector<pair<int,int>> created_copies; //(new ID, old ID) of the contigs created here
 };
 
 /**
@@ -1333,7 +1356,7 @@ int main(int argc, char *argv[])
     create_haploid_contigs(segments, unzipped_segments, old_ID_to_new_IDs, already_built_bridges, min_coverage, contiguity, paths);
 
     {
-        UnrepresentedPathsAdder unrepresented_paths(segments, unzipped_segments, old_ID_to_new_IDs, min_coverage, paths);
+        UnrepresentedPathsAdder unrepresented_paths(segments, unzipped_segments, old_ID_to_new_IDs, paths);
         list_non_represented_paths(segments, already_built_bridges, min_coverage, paths, unrepresented_paths);
         unrepresented_paths.finish();
     }
