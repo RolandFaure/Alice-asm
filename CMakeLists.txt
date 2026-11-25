@@ -15,11 +15,6 @@ target_compile_options (aliceasm PRIVATE -O3)
 target_compile_options (aliceasm PRIVATE -march=x86-64)
 target_link_libraries(aliceasm PRIVATE z m)
 
-# Link filesystem library (required for GCC < 9)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
-    target_link_libraries(aliceasm PRIVATE stdc++fs)
-endif()
-
 file(GLOB SOURCE "reduce_standalone.cpp" "reduce_and_expand.cpp" "rolling_hash.cpp" "basic_graph_manipulation.cpp")
 add_executable(reduce ${SOURCE})
 target_compile_options (reduce PRIVATE -fopenmp)
@@ -28,11 +23,6 @@ target_compile_options (reduce PRIVATE -std=c++17)
 target_compile_options (reduce PRIVATE -O3)
 target_compile_options (reduce PRIVATE -march=x86-64)
 target_link_libraries(reduce PRIVATE z m)
-
-# Link filesystem library (required for GCC < 9)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
-    target_link_libraries(reduce PRIVATE stdc++fs)
-endif()
 
 # file (GLOB SOURCE_FASTG2GFA "fastg2gfa.c")
 # add_executable(fastg2gfa ${SOURCE_FASTG2GFA})
@@ -57,6 +47,13 @@ target_compile_options (bluntify PRIVATE -std=c++17)
 target_compile_options (bluntify PRIVATE -O3)
 target_compile_options (bluntify PRIVATE -march=x86-64)
 target_link_libraries(bluntify PRIVATE z m)
+
+# With GCC 8, std::filesystem is in a separate library (stdc++fs); it is part of libstdc++ from GCC 9.1
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.1")
+    foreach(target aliceasm reduce graphunzip bluntify)
+        target_link_libraries(${target} PRIVATE stdc++fs)
+    endforeach()
+endif()
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

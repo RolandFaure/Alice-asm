@@ -13,7 +13,13 @@ The recommended way to install Alice is through conda
 conda install -c bioconda aliceasm
 ```
 
-To download and compile the Alice assembler from source
+To download and compile the Alice assembler from source, you need:
+- a C++17 compiler with `<filesystem>` support: GCC ≥ 8 or a recent Clang;
+- CMake ≥ 3.8;
+- zlib (development headers, e.g. `zlib1g-dev` on Debian/Ubuntu or `zlib-devel` on Fedora/CentOS);
+- OpenMP (shipped with GCC);
+- [BCALM 2](https://github.com/GATB/bcalm) in your `PATH` at run time (or given with `--bcalm`).
+
 ```
 git clone https://github.com/RolandFaure/Alice-asm.git
 cd Alice-asm
